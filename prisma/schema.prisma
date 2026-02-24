@@ -1,0 +1,461 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["app", "audit", "auth", "cache", "master"]
+}
+
+model SyncJob {
+  id               String    @id @default(uuid()) @db.Uuid
+  type             String
+  status           JobStatus
+  totalRecords     Int?
+  processedRecords Int       @default(0)
+  lastProcessedKey String?
+  errorMessage     String?
+  startedAt        DateTime  @default(now()) @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+
+  @@map("sync_jobs")
+  @@schema("audit")
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  action    String
+  entity    String?
+  entityId  String?
+  details   Json?
+  ipAddress String?  @map("ip_address") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entityId])
+  @@index([entity, entityId, createdAt])
+  @@map("audit_events")
+  @@schema("audit")
+}
+
+model UserRole {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(50)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  users       User[]
+
+  @@map("user_roles")
+  @@schema("auth")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(255)
+  password     String
+  firstName    String?   @map("first_name") @db.VarChar(100)
+  lastName     String?   @map("last_name") @db.VarChar(100)
+  roleId       String    @map("role_id") @db.Uuid
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+  refreshToken String?   @map("refresh_token")
+  role         UserRole  @relation(fields: [roleId], references: [id])
+
+  @@index([roleId])
+  @@map("users")
+  @@schema("auth")
+}
+
+model Destination {
+  id           Int           @id
+  name         String        @db.VarChar(255)
+  countryCode  String?       @map("country_code") @db.VarChar(10)
+  region       String?       @db.VarChar(255)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  lastSyncedAt DateTime?     @map("last_synced_at")
+  metadata     Json?
+  parentId     Int?          @map("parent_id")
+  parent       Destination?  @relation("DestinationHierarchy", fields: [parentId], references: [id])
+  children     Destination[] @relation("DestinationHierarchy")
+
+  @@index([name])
+  @@index([parentId])
+  @@map("destinations")
+  @@schema("master")
+}
+
+model Currency {
+  code      String   @id @db.VarChar(10)
+  name      String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("currencies")
+  @@schema("master")
+}
+
+model Nationality {
+  code      String   @id @db.VarChar(10)
+  name      String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("nationalities")
+  @@schema("master")
+}
+
+model Language {
+  code      String   @id @db.VarChar(10)
+  name      String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("languages")
+  @@schema("master")
+}
+
+model Hotel {
+  hotelCode        String    @id @map("hotel_code") @db.VarChar(255)
+  name             String    @db.VarChar(255)
+  masterHotelId    Int?      @map("master_hotel_id")
+  hotelDetailsUrl  String?   @map("hotel_details_url")
+  destinationId    Int?      @map("destination_id")
+  starRating       Decimal?  @map("star_rating") @db.Decimal(2, 1)
+  /** Physical room count from WBE static data. Used for Step 3.2 inventory overlap check. NULL = unknown. */
+  totalRooms       Int?      @map("total_rooms")
+  category         String?   @db.VarChar(50)
+  giataCode        String?   @map("giata_code") @db.VarChar(50)
+  address          String?
+  addressCity      String?   @map("address_city") @db.VarChar(255)
+  addressCountry   String?   @map("address_country") @db.VarChar(10)
+  latitude         Decimal?  @db.Decimal(10, 7)
+  longitude        Decimal?  @db.Decimal(10, 7)
+  propertyType     Int?      @map("property_type")
+  supplierCode     String?   @map("supplier_code") @db.VarChar(50)
+  metadata         Json?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  lastSyncedAt     DateTime? @map("last_synced_at")
+  detailsFetchedAt DateTime? @map("details_fetched_at")
+
+  @@index([destinationId, name])
+  @@index([destinationId])
+  @@index([supplierCode])
+  @@index([name])
+  @@map("hotels")
+  @@schema("master")
+}
+
+model Facility {
+  id        Int      @id
+  name      String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([name])
+  @@map("facilities")
+  @@schema("master")
+}
+
+model HotelFacility {
+  id         String   @id @default(uuid()) @db.Uuid
+  hotelCode  String   @map("hotel_code") @db.VarChar(255)
+  facilityId Int      @map("facility_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([hotelCode])
+  @@index([facilityId])
+  @@index([hotelCode, facilityId])
+  @@map("hotel_facilities")
+  @@schema("master")
+}
+
+model HotelImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  hotelCode    String   @map("hotel_code") @db.VarChar(64)
+  imageKey     String   @map("image_key")
+  displayOrder Int      @default(0) @map("display_order")
+  caption      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([hotelCode])
+  @@index([hotelCode, displayOrder])
+  @@map("hotel_images")
+  @@schema("master")
+}
+
+model HotelFacilityGroup {
+  id         String   @id @default(uuid()) @db.Uuid
+  hotelCode  String   @map("hotel_code") @db.VarChar(64)
+  groupType  String   @map("group_type") @db.VarChar(20)
+  category   String?  @db.VarChar(255)
+  facilities Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([hotelCode])
+  @@index([groupType])
+  @@map("hotel_facility_groups")
+  @@schema("master")
+}
+
+model BookingRequest {
+  id                     String                     @id @default(uuid()) @db.Uuid
+  rawPayload             Json                       @map("raw_payload")
+  externalRequestId      String?                    @map("external_request_id") @db.VarChar(255)
+  source                 String?                    @db.VarChar(100)
+  sourceIp               String?                    @map("source_ip") @db.VarChar(50)
+  budget                 Decimal?                   @db.Decimal(12, 2)
+  companyName            String?                    @map("company_name") @db.VarChar(255)
+  contactName            String?                    @map("contact_name") @db.VarChar(255)
+  contactEmail           String?                    @map("contact_email") @db.VarChar(255)
+  contactPhone           String?                    @map("contact_phone") @db.VarChar(50)
+  currencyCode           String?                    @map("currency_code") @db.VarChar(10)
+  destinationName        String?                    @map("destination_name") @db.VarChar(255)
+  destinationId          Int                        @map("destination_id")
+  checkinDate            DateTime                   @map("checkin_date") @db.Date
+  nights                 Int
+  rooms                  Json?
+  nationalityCode        String?                    @map("nationality_code") @db.VarChar(10)
+  processed              Boolean                    @default(false)
+  processedAt            DateTime?                  @map("processed_at")
+  specialRequirements    String?                    @map("special_requirements")
+  createdAt              DateTime                   @default(now()) @map("created_at")
+  updatedAt              DateTime?                  @updatedAt @map("updated_at")
+  status                 BookingRequestStatus       @default(pending)
+  referenceNumber        Int                        @unique @default(autoincrement()) @map("reference_number")
+  checkoutDate           DateTime?                  @map("checkout_date") @db.Date
+  starRating             Decimal?                   @map("star_rating") @db.Decimal(2, 1)
+  budgetRange            String?                    @map("budget_range") @db.VarChar(100)
+  groupType              String?                    @map("group_type") @db.VarChar(100)
+  groupSize              Int?                       @map("group_size")
+  breakfastPreference    String?                    @map("breakfast_preference") @db.VarChar(10)
+  hotelLocation          String?                    @map("hotel_location") @db.VarChar(50)
+  firstName              String?                    @map("first_name") @db.VarChar(100)
+  lastName               String?                    @map("last_name") @db.VarChar(100)
+  guestListFileKey       String?                    @map("guest_list_file_key")
+  customerNotes          String?                    @map("customer_notes")
+  termsAndConditions     String?                    @map("terms_and_conditions")
+  cancellationConditions String?                    @map("cancellation_conditions")
+  attachments            BookingRequestAttachment[]
+  proposals              Proposal[]
+
+  @@index([destinationId])
+  @@index([status])
+  @@index([nationalityCode])
+  @@index([createdAt])
+  @@index([referenceNumber])
+  @@index([companyName])
+  @@map("booking_requests")
+  @@schema("app")
+}
+
+model BookingRequestAttachment {
+  id               String         @id @default(uuid()) @db.Uuid
+  bookingRequestId String         @map("booking_request_id") @db.Uuid
+  fileKey          String         @map("file_key")
+  originalName     String         @map("original_name") @db.VarChar(500)
+  mimeType         String?        @map("mime_type") @db.VarChar(100)
+  size             Int?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  bookingRequest   BookingRequest @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+
+  @@index([bookingRequestId])
+  @@map("booking_request_attachments")
+  @@schema("app")
+}
+
+model Proposal {
+  id             String            @id @default(uuid()) @db.Uuid
+  requestId      String?           @map("request_id") @db.Uuid
+  totalBuy       Decimal?          @map("total_buy") @db.Decimal(12, 2)
+  totalSell      Decimal?          @map("total_sell") @db.Decimal(12, 2)
+  markupSettings Json?             @map("markup_settings")
+  notes          String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime?         @updatedAt @map("updated_at")
+  lockedAt       DateTime?         @map("locked_at")
+  lockedBy       String?           @map("locked_by") @db.Uuid
+  sentAt         DateTime?         @map("sent_at")
+  sentBy         String?           @map("sent_by") @db.Uuid
+  sentToEmail    String?           @map("sent_to_email") @db.VarChar(255)
+  status         ProposalStatus    @default(draft)
+  hotels         ProposalHotel[]
+  services       ProposalService[]
+  bookingRequest BookingRequest?   @relation(fields: [requestId], references: [id])
+
+  @@index([requestId])
+  @@index([status])
+  @@index([sentAt])
+  @@index([lockedAt])
+  @@map("proposals")
+  @@schema("app")
+}
+
+model ProposalHotel {
+  id                   String    @id @default(uuid()) @db.Uuid
+  proposalId           String    @map("proposal_id") @db.Uuid
+  hotelCode            String    @map("hotel_code") @db.VarChar(255)
+  hotelName            String?   @map("hotel_name") @db.VarChar(500)
+  tid                  String?   @db.VarChar(255)
+  totalPrice           Decimal   @map("total_price") @db.Decimal(12, 2)
+  currency             String    @db.VarChar(10)
+  freeCancellation     Boolean?  @map("free_cancellation")
+  cancelDeadline       DateTime? @map("cancel_deadline") @db.Timestamptz(6)
+  supplierCode         String?   @map("supplier_code") @db.VarChar(50)
+  rooms                Json?
+  latitude             Decimal?  @db.Decimal(10, 7)
+  longitude            Decimal?  @db.Decimal(10, 7)
+  optionDetailsId      String?   @map("option_details_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at")
+  deletedAt            DateTime? @map("deleted_at")
+  optionDetailsFetched Boolean   @default(false) @map("option_details_fetched")
+  proposal             Proposal  @relation(fields: [proposalId], references: [id])
+
+  @@index([proposalId])
+  @@index([hotelCode])
+  @@index([tid])
+  @@index([optionDetailsId])
+  @@index([proposalId, deletedAt])
+  @@map("proposal_hotels")
+  @@schema("app")
+}
+
+model ProposalService {
+  id          String    @id @default(uuid()) @db.Uuid
+  proposalId  String    @map("proposal_id") @db.Uuid
+  serviceName String?   @map("service_name") @db.VarChar(255)
+  dateFrom    DateTime? @map("date_from") @db.Date
+  dateTo      DateTime? @map("date_to") @db.Date
+  buyPrice    Decimal?  @map("buy_price") @db.Decimal(12, 2)
+  sellPrice   Decimal?  @map("sell_price") @db.Decimal(12, 2)
+  currency    String?   @map("currency") @db.VarChar(10)
+  quantity    Int?
+  days        Int?
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  proposal    Proposal  @relation(fields: [proposalId], references: [id])
+
+  @@index([proposalId])
+  @@map("proposal_services")
+  @@schema("app")
+}
+
+model Notification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type       String   @db.VarChar(100)
+  title      String   @db.VarChar(255)
+  message    String
+  entityId   String?  @map("entity_id") @db.Uuid
+  entityType String?  @map("entity_type") @db.VarChar(100)
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityId])
+  @@index([read, createdAt], map: "notifications_read_created_idx")
+  @@map("notifications")
+  @@schema("app")
+}
+
+model HotelOptionDetail {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tid                String    @unique @db.VarChar(255)
+  hotelCode          String?   @map("hotel_code") @db.VarChar(255)
+  data               Json
+  fetchedAt          DateTime  @default(now()) @map("fetched_at")
+  expiresAt          DateTime? @map("expires_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  nonRefundable      Boolean?  @map("non_refundable")
+  cxlOptionDate      DateTime? @map("cxl_option_date")
+  cxlConditions      Json?     @map("cxl_conditions")
+  cxlComment         String?   @map("cxl_comment")
+  cxlRemarks         Json?     @map("cxl_remarks")
+  daypricesTotal     Decimal?  @map("dayprices_total") @db.Decimal(12, 2)
+  daypricesCurrency  String?   @map("dayprices_currency") @db.VarChar(10)
+  mealType           String?   @map("meal_type") @db.VarChar(10)
+  mealName           String?   @map("meal_name") @db.VarChar(255)
+  providerPrice      Decimal?  @map("provider_price") @db.Decimal(12, 2)
+  providerCurrency   String?   @map("provider_currency") @db.VarChar(10)
+  supplierCode       String?   @map("supplier_code") @db.VarChar(50)
+  essentialInfo      String?   @map("essential_info")
+  priceComment       String?   @map("price_comment")
+  supplements        Json?
+  optionalExtras     Json?     @map("optional_extras")
+  specialOffers      Json?     @map("special_offers")
+  rooms              Json?
+  success            Boolean?
+  versionDescription String?   @map("version_description") @db.VarChar(100)
+
+  @@index([hotelCode])
+  @@index([fetchedAt])
+  @@index([expiresAt])
+  @@index([daypricesTotal])
+  @@map("hotel_option_details")
+  @@schema("cache")
+}
+
+enum JobStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+
+  @@schema("audit")
+}
+
+enum BookingRequestStatus {
+  pending
+  draft
+  processing
+  completed
+  cancelled
+  ai_generated
+
+  @@schema("app")
+}
+
+enum ProposalStatus {
+  draft
+  sent
+  approved
+  declined
+
+  @@schema("app")
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+model Setting {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  SettingCategory
+  key       String           @db.VarChar(100)
+  value     String?
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("settings")
+  @@schema("app")
+}
+
+enum SettingCategory {
+  general
+  email
+  company
+  policies
+
+  @@schema("app")
+}
+
+model SupplierLimit {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierCode  String   @unique @map("supplier_code") @db.VarChar(50)
+  providerName  String   @map("provider_name") @db.VarChar(255)
+  accCode       String?  @map("acc_code") @db.VarChar(50)
+  maxRooms      Int      @default(9) @map("max_rooms")
+  groupsAllowed Boolean  @default(true) @map("groups_allowed")
+  notes         String?
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([supplierCode])
+  @@map("supplier_limits")
+  @@schema("app")
+}

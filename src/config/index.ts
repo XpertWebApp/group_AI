@@ -1,0 +1,40 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+
+// Fail fast: validate required env vars at import time
+const REQUIRED_ENV_VARS = [
+    'JWT_SECRET',
+    'JWT_REFRESH_SECRET',
+    'DATABASE_URL',
+] as const;
+
+const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+}
+
+const config = {
+    env: process.env.NODE_ENV || 'development',
+    port: parseInt(process.env.PORT || '4000', 10),
+    corsOrigin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000',
+    jwt: {
+        secret: process.env.JWT_SECRET as string,
+        refreshSecret: process.env.JWT_REFRESH_SECRET as string,
+        accessExpiration: process.env.JWT_ACCESS_EXPIRES || '15m',
+        refreshExpiration: process.env.JWT_REFRESH_EXPIRES || '30d',
+    },
+    wbe: {
+        apiKey: process.env.WBE_API_KEY,
+        baseUrl: process.env.WBE_BASE_URL,
+        searchUrl: process.env.WBE_SEARCH_URL || process.env.WBE_BASE_URL,
+        contentUrl: process.env.WBE_CONTENT_URL || 'https://uatcontent.wbeapi.com',
+        username: process.env.WBE_USERNAME,
+        password: process.env.WBE_PASSWORD,
+        acceptLanguage: process.env.WBE_ACCEPT_LANGUAGE || 'en',
+    },
+    logLevel: process.env.LOG_LEVEL || 'info',
+};
+
+export default config;

@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env
+*.env
+*.env.local
+*.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+
+# Prisma
+/src/generated/prisma/
+
+# IDE and OS
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+
+# Documentation & diagrams (keep README.md only)
+*.md
+!README.md
+*.mmd
+*.dbml
+*.pdf
+*.docx
+*.txt
+
+# Public files (docs, images, Figma assets)
+src/publicfiles/
