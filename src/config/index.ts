@@ -15,6 +15,8 @@ const config = {
     wbe: {
         apiKey: process.env.WBE_API_KEY,
         baseUrl: process.env.WBE_BASE_URL,
+        username: process.env.WBE_USERNAME,
+        password: process.env.WBE_PASSWORD,
     },
     logLevel: process.env.LOG_LEVEL || 'info',
 };

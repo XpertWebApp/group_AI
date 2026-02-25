@@ -3,37 +3,88 @@ import staticDataRepository from '../repositories/staticData.repository';
 import logger from '../utils/logger';
 
 export class StaticDataService {
-    async syncDestinations() {
-        logger.info('Starting destination sync...');
-        const destinations = await wbeClientService.getDestinations();
+    constructor() {
+        this.syncDestinations = this.syncDestinations.bind(this);
+        this.syncHotelsList = this.syncHotelsList.bind(this);
+        this.syncHotelDetails = this.syncHotelDetails.bind(this);
+        this.fullSync = this.fullSync.bind(this);
+    }
 
-        // Sort to handle parents before children if hierarchical
-        // Assuming API returns flat list or handles it.
-        for (const dest of destinations) {
-            await staticDataRepository.upsertDestination({
-                id: dest.DestinationId,
-                name: dest.Name,
-                parentId: dest.ParentDestinationId || null,
-                lastSyncedAt: new Date(),
-            });
+    private async syncDestinationRecursive(dest: any, parentId: number | null) {
+        const destId = dest.DestinationId || dest.id || dest.Id;
+        const destName = dest.Name || dest.name || `Destination ${destId}`;
+
+        if (destId === undefined) {
+            console.log('Skipping recursive destination with undefined ID:', JSON.stringify(dest));
+            return;
         }
-        logger.info(`Synced ${destinations.length} destinations`);
+
+        if (!dest.Name && !dest.name) {
+            logger.warn({ msg: 'Destination missing name, using fallback', destId, dest });
+        }
+
+        await staticDataRepository.upsertDestination({
+            id: destId,
+            name: destName,
+            parentId: parentId,
+            lastSyncedAt: new Date(),
+        });
+
+        if (dest.Children && Array.isArray(dest.Children) && dest.Children.length > 0) {
+            for (const child of dest.Children) {
+                await this.syncDestinationRecursive(child, destId);
+            }
+        }
+    }
+
+    async syncDestinations() {
+        console.log('--- syncDestinations() called ---');
+        logger.info('Starting destination sync...--------------');
+        const countries = await wbeClientService.getDestinations();
+
+        console.log(`Fetched ${countries.length} country/destination groups.`);
+
+        for (const country of countries) {
+            if (country.Destinations && Array.isArray(country.Destinations)) {
+                for (const dest of country.Destinations) {
+                    await this.syncDestinationRecursive(dest, null);
+                }
+            } else {
+                // Handle cases where the top level might be a destination directly
+                const destId = country.DestinationId || country.id || country.Id;
+                if (destId) {
+                    await this.syncDestinationRecursive(country, null);
+                }
+            }
+        }
+        logger.info(`Synced destinations from ${countries.length} groups`);
     }
 
     async syncHotelsList() {
         logger.info('Starting hotels list sync...');
         const hotels = await wbeClientService.getHotels();
 
+        console.log(`Fetched ${hotels.length} hotels in summary list.`);
+        if (hotels.length > 0) {
+            console.log('Sample hotel list object:', JSON.stringify(hotels[0], null, 2));
+        }
+
         for (const h of hotels) {
+            const hotelCode = h.HotelCode || h.hotelCode;
+            if (!hotelCode) {
+                console.log('Skipping hotel with missing HotelCode:', JSON.stringify(h));
+                continue;
+            }
+
             await staticDataRepository.upsertHotel({
-                hotelCode: h.HotelCode,
-                name: h.Name,
-                masterHotelId: h.MasterHotelId,
-                hotelDetailsUrl: h.HotelDetailsUrl,
-                destinationId: h.DestinationId,
-                starRating: h.StarRating,
-                category: h.Category,
-                giataCode: h.GiataId,
+                hotelCode: hotelCode,
+                name: h.Name || h.name,
+                masterHotelId: h.MasterHotelId || h.id || h.id_master,
+                hotelDetailsUrl: h.HotelDetailsUrl || h.detailsUrl,
+                destinationId: h.DestinationId || h.destination_id,
+                starRating: h.StarRating || h.stars,
+                category: h.Category || h.category,
+                giataCode: h.GiataId ? String(h.GiataId) : h.giata ? String(h.giata) : null,
                 lastSyncedAt: new Date(),
             });
         }
@@ -51,15 +102,19 @@ export class StaticDataService {
             try {
                 const details = await wbeClientService.getHotelDetails(h.hotelDetailsUrl);
 
+                if (hotels.indexOf(h) === 0) {
+                    console.log('Sample hotel details object:', JSON.stringify(details, null, 2));
+                }
+
                 // Update hotel with detailed fields
                 await staticDataRepository.upsertHotel({
                     hotelCode: h.hotelCode,
-                    name: details.Name,
-                    address: details.Address,
-                    addressCity: details.AddressCity,
-                    addressCountry: details.AddressCountry,
-                    latitude: details.Latitude,
-                    longitude: details.Longitude,
+                    name: details.Name || details.name,
+                    address: details.Address || details.address,
+                    addressCity: details.AddressCity || details.addressCity,
+                    addressCountry: details.AddressCountry || details.addressCountry,
+                    latitude: details.Latitude || details.latitude,
+                    longitude: details.Longitude || details.longitude,
                     metadata: details,
                     detailsFetchedAt: new Date(),
                     lastSyncedAt: new Date(),
@@ -71,9 +126,9 @@ export class StaticDataService {
                         const img = details.Images[i];
                         await staticDataRepository.upsertHotelImage({
                             hotelCode: h.hotelCode,
-                            imageKey: img.ImageKey || img.Id,
+                            imageKey: img.ImageKey || img.Id || img.id,
                             displayOrder: i,
-                            caption: img.Caption,
+                            caption: img.Caption || img.caption,
                         });
                     }
                 }
@@ -82,13 +137,16 @@ export class StaticDataService {
                 if (details.MasterFacilities) {
                     await staticDataRepository.clearHotelFacilities(h.hotelCode);
                     for (const f of details.MasterFacilities) {
+                        const fId = f.FacilityId || f.id || f.Id;
+                        if (fId === undefined) continue;
+
                         await staticDataRepository.upsertFacility({
-                            id: f.FacilityId,
-                            name: f.Name,
+                            id: fId,
+                            name: f.Name || f.name,
                         });
                         await staticDataRepository.createHotelFacility({
                             hotelCode: h.hotelCode,
-                            facilityId: f.FacilityId,
+                            facilityId: fId,
                         });
                     }
                 }
@@ -101,6 +159,7 @@ export class StaticDataService {
     }
 
     async fullSync() {
+        console.log("-----------------1---------------")
         try {
             await this.syncDestinations();
             await this.syncHotelsList();

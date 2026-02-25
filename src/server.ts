@@ -12,6 +12,7 @@ const startServer = async () => {
 
         const server = app.listen(config.port, '0.0.0.0', () => {
             logger.info(`Server is running on port ${config.port} in ${config.env} mode`);
+            console.log(`Server listening on http://0.0.0.0:${config.port}`);
         });
 
         const gracefulShutdown = async () => {

@@ -18,6 +18,10 @@ export class WbeClientService {
                     ...params,
                     apiKey: this.apiKey,
                 },
+                auth: {
+                    username: (config.wbe as any).username,
+                    password: (config.wbe as any).password,
+                },
             });
             return response.data;
         } catch (error: any) {
@@ -32,6 +36,10 @@ export class WbeClientService {
                 params: {
                     tid,
                     apiKey: this.apiKey,
+                },
+                auth: {
+                    username: (config.wbe as any).username,
+                    password: (config.wbe as any).password,
                 },
             });
             return response.data;
@@ -48,6 +56,10 @@ export class WbeClientService {
                     sessionId,
                     apiKey: this.apiKey,
                 },
+                auth: {
+                    username: (config.wbe as any).username,
+                    password: (config.wbe as any).password,
+                },
             });
             return response.data;
         } catch (error: any) {
@@ -61,6 +73,10 @@ export class WbeClientService {
         try {
             const response = await axios.get(`${this.baseUrl}/api/Hotel/destinations`, {
                 params: { apiKey: this.apiKey },
+                auth: {
+                    username: (config.wbe as any).username,
+                    password: (config.wbe as any).password,
+                },
             });
             return response.data;
         } catch (error: any) {
@@ -73,6 +89,10 @@ export class WbeClientService {
         try {
             const response = await axios.get(`${this.baseUrl}/api/hotel/Hotels`, {
                 params: { apiKey: this.apiKey },
+                auth: {
+                    username: (config.wbe as any).username,
+                    password: (config.wbe as any).password,
+                },
             });
             return response.data;
         } catch (error: any) {
@@ -85,6 +105,10 @@ export class WbeClientService {
         try {
             const response = await axios.get(url, {
                 params: { apiKey: this.apiKey },
+                auth: {
+                    username: (config.wbe as any).username,
+                    password: (config.wbe as any).password,
+                },
             });
             return response.data;
         } catch (error: any) {
