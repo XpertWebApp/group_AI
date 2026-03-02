@@ -1,0 +1,520 @@
+Important global constraints (must be enforced):
+
+Do NOT use Redis, BullMQ, or any background job/queue system. All operations are synchronous or handled via simple HTTP/DB transactions. Long-running tasks should be simplified to synchronous calls or flagged as TODO for later (e.g., PDF generation / email sending).
+
+Use Express (or similar) + TypeScript + Prisma (schema already provided). Use Zod for DTO validation.
+
+Keep code transactional where multiple changes must be atomic (use Prisma transactions).
+
+No external storage (S3) or email implementation yet — only prepare hooks / return placeholders (URL fields null or TODO). Email sending and file storage will be completed in a later milestone.
+
+Goal (one-sentence)
+
+Implement the manual BookingRequest → Proposal → ProposalHotel / ProposalService flow, exposing REST APIs that match the Figma flow for creating a group request, building a proposal (add hotels/services), saving as draft, and approving & sending (status change + placeholder for email/pdf).
+
+High-level flow (matching Figma)
+
+User creates a BookingRequest (Trip Details + Rooms + Customer fields).
+
+User creates a Proposal tied to the BookingRequest (draft).
+
+User adds hotels (ProposalHotel) and services (ProposalService) to the proposal.
+
+User saves proposal as draft, previews PDF (placeholder), or approves & sends (status change & hook).
+
+Support remove/undo hotel (soft-delete or delete + recalc totals).
+
+Keep logs/audit events for all key actions.
+
+API Surface (recommended, minimal)
+
+Implement the following endpoints (CRUD + actions). Each action must validate inputs and respond with appropriate HTTP status codes and JSON payloads.
+
+POST /api/requests
+
+Create BookingRequest. Returns 201 with request object { id, ... }.
+
+GET /api/requests/:id
+
+Get BookingRequest with proposals. Returns 200.
+
+PATCH /api/requests/:id
+
+Update BookingRequest (trip/customer/rooms). Returns 200.
+
+POST /api/requests/:requestId/proposals
+
+Create Proposal (status draft). Returns 201 with proposal object.
+
+GET /api/proposals/:id
+
+Get Proposal (includes hotels, services, totals). Returns 200.
+
+PATCH /api/proposals/:id
+
+Update proposal metadata (notes, markupSettings). Return 200.
+
+POST /api/proposals/:id/hotels
+
+Add hotel to a proposal. Returns 201 and newly created ProposalHotel.
+
+DELETE /api/proposals/:id/hotels/:hotelId
+
+Remove hotel from proposal. Returns 200.
+
+POST /api/proposals/:id/services
+
+Add service to proposal. Returns 201.
+
+POST /api/proposals/:id/actions/save-draft
+
+Persist draft (set status = draft). Returns 200.
+
+POST /api/proposals/:id/actions/send
+
+Approve & send: set status = sent (or approved), set sentAt (column to add). Return 200. Should return an object { sent: true, sendPlaceholder: true } because email is not implemented.
+
+POST /api/proposals/:id/actions/preview-pdf
+
+Return a placeholder preview response (e.g., { previewUrl: null, note: "PDF generation pending" }). No background worker.
+
+GET /api/hotels/search?q=... (optional helper)
+
+Search hotels by name, destination, starRating, amenity filter. Returns a list.
+
+Request payloads (examples)
+Create BookingRequest (POST /api/requests)
+{
+  "source": "ui",                  // optional: "ui" | "api" etc.
+  "companyName": "TechCorp International",
+  "contactName": "John Vestergaard",
+  "contactEmail": "john@company.com",
+  "contactPhone": "+1234567890",
+  "currencyCode": "EUR",
+  "destinationId": 123,
+  "destinationName": "Barcelona, Spain",
+  "checkinDate": "2026-03-15",
+  "nights": 10,
+  "rooms": {
+     "single": 6,
+     "double": 10,
+     "twin": 5,
+     "triple": 0,
+     "quadruple": 0,
+     "suites": 0,
+     "extraRoomsNote": "I need 2 6-bedrooms"
+  },
+  "nationalityCode": "DK",
+  "budget": 100000,
+  "specialRequirements": "Wheelchair access, Food allergies",
+  "status": "pending"
+}
+Create Proposal (POST /api/requests/:requestId/proposals)
+{
+  "notes": "Initial draft offer",
+  "markupSettings": { "globalMarkupPercent": 20 }
+}
+Add Hotel to Proposal (POST /api/proposals/:proposalId/hotels)
+{
+  "hotelCode": "BDC-4782",
+  "tid": "TID_123",
+  "rooms": {
+    "deluxe_double": { "net": 250.00, "sell": 300.00, "qty": 20, "nights": 5 }
+  },
+  "currency": "EUR",
+  "totalPrice": 30000,
+  "freeCancellation": true,
+  "cancelDeadline": "2026-03-01T00:00:00Z",
+  "supplierCode": "SUP_001",
+  "optionDetailsId": "uuid-option-details"   // optional; useful if using cache
+}
+Add Service to Proposal (POST /api/proposals/:proposalId/services)
+{
+  "serviceName": "Airport Transfer",
+  "dateFrom": "2026-03-15",
+  "dateTo": "2026-03-25",
+  "buyPrice": 1000,
+  "sellPrice": 1200,
+  "quantity": 2,
+  "days": 1,
+  "notes": "Return transfer included"
+}
+Approve & Send (POST /api/proposals/:id/actions/send)
+{
+  "sendToEmail": "client@company.com"   // optional; just stored/validated; actual email not sent
+}
+
+Validation & DTOs (Zod) — Provide exact Zod definitions to implement
+
+Add a src/validation/* file with the following Zod schemas. Use these on incoming requests and return 400 with detailed validation errors if they fail.
+
+// src/validation/requestSchemas.ts
+import { z } from "zod";
+
+// Rooms object in BookingRequest
+export const RoomsSchema = z.object({
+  single: z.number().int().min(0).default(0),
+  double: z.number().int().min(0).default(0),
+  twin: z.number().int().min(0).default(0),
+  triple: z.number().int().min(0).default(0),
+  quadruple: z.number().int().min(0).default(0),
+  suites: z.number().int().min(0).default(0),
+  extraRoomsNote: z.string().trim().max(2000).nullable().optional(),
+});
+
+// Create BookingRequest
+export const CreateBookingRequestSchema = z.object({
+  source: z.string().optional(),
+  companyName: z.string().min(1),
+  contactName: z.string().min(1),
+  contactEmail: z.string().email(),
+  contactPhone: z.string().min(5),
+  currencyCode: z.string().min(2).max(10),
+  destinationId: z.number().int(),
+  destinationName: z.string().min(1),
+  checkinDate: z.string().refine((d) => !isNaN(Date.parse(d)), { message: "Invalid date" }),
+  nights: z.number().int().min(1),
+  rooms: RoomsSchema,
+  nationalityCode: z.string().min(1).max(10).optional(),
+  budget: z.number().positive().optional(),
+  specialRequirements: z.string().max(5000).nullable().optional(),
+  status: z.enum(["pending", "draft"]).optional(),
+});
+
+// Create Proposal
+export const CreateProposalSchema = z.object({
+  notes: z.string().max(5000).optional(),
+  markupSettings: z.record(z.any()).optional(), // more strict structure can be added
+});
+
+// Add Proposal Hotel
+export const AddProposalHotelSchema = z.object({
+  hotelCode: z.string().min(1),
+  tid: z.string().optional(),
+  rooms: z.record(z.object({
+    net: z.number().nonnegative(),
+    sell: z.number().nonnegative(),
+    qty: z.number().int().nonnegative(),
+    nights: z.number().int().nonnegative()
+  })).optional(),
+  currency: z.string().min(2).max(10),
+  totalPrice: z.number().nonnegative(),
+  freeCancellation: z.boolean().optional(),
+  cancelDeadline: z.string().optional().nullable().refine((v) => !v || !isNaN(Date.parse(v)), { message: "Invalid date" }),
+  supplierCode: z.string().optional(),
+  optionDetailsId: z.string().optional()
+});
+
+// Add Proposal Service
+export const AddProposalServiceSchema = z.object({
+  serviceName: z.string().min(1),
+  dateFrom: z.string().optional().nullable().refine((v) => !v || !isNaN(Date.parse(v))),
+  dateTo: z.string().optional().nullable().refine((v) => !v || !isNaN(Date.parse(v))),
+  buyPrice: z.number().nonnegative().optional(),
+  sellPrice: z.number().nonnegative().optional(),
+  quantity: z.number().int().nonnegative().optional(),
+  days: z.number().int().nonnegative().optional(),
+  notes: z.string().max(2000).optional()
+});
+
+CreateBookingRequest (implementation notes)
+
+Validate with CreateBookingRequestSchema.
+
+Use prisma.bookingRequest.create({ data: { ... }}). Save the original payload in rawPayload.
+
+Save rooms as JSONB in booking_requests.rooms.
+
+Return 201 with the created object (mask internal fields like rawPayload if desired).
+
+Add indexes: destinationId, status, createdAt — your Prisma schema already includes them.
+
+Create Proposal (implementation notes)
+
+Validate CreateProposalSchema.
+
+Ensure requestId exists (404 if not).
+
+Create Proposal row with status = 'draft'. Initialize totalBuy/totalSell to 0.
+
+Return 201 with the proposal record (include bookingRequest minimal data if helpful).
+
+Add Hotel to Proposal (details)
+
+Validate with AddProposalHotelSchema.
+
+Check the proposal exists and status allows modification (e.g., not sent or declined).
+
+Use a single Prisma transaction to:
+
+Create proposal_hotels record with provided fields (rooms saved as JSON).
+
+Recalculate totalBuy and totalSell by aggregating proposal_hotels + proposal_services for that proposal and update proposal.totalBuy/totalSell.
+
+If optionDetailsId provided, store it in proposal_hotels.optionDetailsId (helps later for caching).
+
+Respond 201 with the created ProposalHotel and updated Proposal totals.
+
+Important: If hotel tid or option details are needed but not in cache, simply store the provided tid and mark optionDetailsId null — do not call an external service synchronously. Leave a TODO to later fetch if required.
+
+Add Service to Proposal (details)
+
+Validate using AddProposalServiceSchema.
+
+In a transaction:
+
+Create proposal_services record.
+
+Recalculate totals (aggregate proposal_services buyPrice/sellPrice plus proposal_hotels.totalPrice).
+
+Update proposal.totalBuy/totalSell.
+
+Respond 201 with the created service and updated totals.
+
+Approve & Send (no background workers)
+
+Validate request and ensure proposal status draft (or pending).
+
+Update proposal fields: status = 'sent', add sentAt timestamp (add sentAt column to Prisma model), add sentBy if desired (user id).
+
+Create an Audit Event describing the send action (see Audit / Logging below).
+
+Because email and PDF storage are not implemented:
+
+Return 200 and set proposal.sendPlaceholder = true (or return { sent: true, emailSent: false, previewUrl: null }).
+
+Persist a sendIntent in the proposal (e.g., proposal.notes or a dedicated column) describing sendToEmail for future use.
+
+Mapping Figma fields -> DB columns (explicit)
+
+Trip Details screen:
+
+Destination -> booking_requests.destinationId (int) and booking_requests.destinationName (string).
+
+Check-in date -> booking_requests.checkinDate (Date).
+
+Nights -> booking_requests.nights (int).
+
+Hotel Category / Budget range -> booking_requests.budget (Decimal) or inside rooms JSON (if multi-attribute).
+
+Group Type / Group Size -> put inside rooms JSON or add group_type/group_size columns if frequently filtered.
+
+Room & Accommodations:
+
+Room counts -> booking_requests.rooms JSON: keys for single/double/twin/triple/quadruple/suites and any extraRoomsNote.
+
+Breakfast preference / Hotel location preference -> add preferences or include in booking_requests.specialRequirements (or a new JSON column preferences).
+
+Customer Details:
+
+Company Name -> booking_requests.companyName.
+
+Contact Person -> booking_requests.contactName.
+
+Email -> booking_requests.contactEmail.
+
+Phone -> booking_requests.contactPhone.
+
+Guest list uploaded file -> Add table booking_request_attachments or booking_request_files with fields: id, bookingRequestId, fileKey, fileName, mimeType, size, createdAt.
+
+For now, accept file metadata and store locally in DB as placeholder; actual file upload saved later.
+
+Policies:
+
+Terms & cancellation text -> store on Proposal.notes (or booking_requests.policies if shared across proposals).
+
+Cancellation conditions -> same as policies (free text).
+
+Offer flow:
+
+Proposal hotels -> proposal_hotels table: hotelCode, tid, rooms JSON, totalPrice, currency, freeCancellation, cancelDeadline.
+
+Service items -> proposal_services table: serviceName, buyPrice, sellPrice, quantity, days, dateFrom, dateTo.
+
+Totals -> proposals.totalBuy, proposals.totalSell. (Calculate by aggregating proposal_hotels.totalPrice + proposal_services.*sellPrice or buyPrice as per business logic.)
+
+Markup application -> store in proposals.markupSettings JSON. Apply markups when computing totalSell from totalBuy. Keep logic simple: if markupSettings.globalMarkupPercent present, totalSell = totalBuy * (1 + percent/100).
+
+Database / schema suggestions (small additions to your current Prisma)
+
+Add (or plan to add) these columns/tables to support the flow:
+
+proposal.sentAt (DateTime?) — set when send action occurs.
+
+booking_request_attachments table:
+
+model BookingRequestAttachment {
+  id String @id @default(uuid()) @db.Uuid
+  bookingRequestId String @map("booking_request_id") @db.Uuid
+  fileKey String // placeholder for future S3 key or local path
+  originalName String
+  mimeType String?
+  size Int?
+  createdAt DateTime @default(now())
+}
+
+proposal.lockedBy (String?) and proposal.lockedAt (DateTime?) — optional optimistic locking to handle edit sessions. (See Concurrency section below.)
+
+audit_events table to store audit logs (see Audit / Logging).
+
+Concurrency, locking & multi-user editing (no Redis!)
+
+Because Redis/queues are disallowed in this milestone, use only DB-level techniques and simple locks:
+
+Optimistic Edit Lock:
+
+Add proposal.lockedBy (userId) and proposal.lockedAt (timestamp).
+
+When a user opens the Proposal for editing, client should call POST /api/proposals/:id/actions/lock which sets lockedBy to the user and lockedAt = now() if lockedBy is null or lockedAt older than a configured timeout (e.g., 15 minutes).
+
+To release, call POST /api/proposals/:id/actions/unlock or release automatically on save/send.
+
+Lock enforcement should be advisory: when attempting to modify a locked proposal by another user, return 409 Conflict with the lock owner info.
+
+Transactions:
+
+Use Prisma transactions (prisma.$transaction) for sequences: add hotel -> recalc totals -> update proposal totals. This prevents partial writes.
+
+Row-level concurrency:
+
+Where available, use optimistic concurrency via an updatedAt timestamp: require clients to provide If-Unmodified-Since or expectedUpdatedAt in updates to detect stale edits. If mismatch, return 409 Conflict.
+
+Audit / Logging
+
+Create a small audit_events table and write a helper to log these events.
+
+Suggested schema:
+
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  action    String   // e.g., "create_request", "create_proposal", "add_hotel", "send_proposal"
+  entity    String?  // e.g., "booking_request", "proposal", "proposal_hotel"
+  entityId  String?  // primary key of the entity
+  details   Json?    @db.JsonB
+  createdAt DateTime @default(now())
+}
+
+Log events for:
+
+BookingRequest creation/update (include user id).
+
+Proposal create/update.
+
+Add/Remove hotel or service.
+
+Save as draft.
+
+Approve & Send.
+
+Lock/Unlock events.
+
+OptionDetails / Cache (optional)
+
+Your Prisma already has cache.HotelOptionDetail model. It is optional for this milestone. If used:
+
+When adding a hotel with tid or optionDetailsId, read HotelOptionDetail by tid or optionDetailsId.
+
+If not found, do not perform external fetch (no background worker). Instead return a friendly response: create the ProposalHotel record but set optionDetailsFetched = false (we can add a boolean flag) and record in audit_event that option details were missing. External fetching will be implemented later.
+
+Store cache entries when/if the UI provides them (e.g., from user selection).
+
+Security & validation notes
+
+Authentication:
+
+Require auth for all endpoints. Use existing auth middleware.
+
+Use role-checking: only users with appropriate roles (e.g., agent, admin) can create/send proposals.
+
+Authorization:
+
+Ensure users can only modify BookingRequests/Proposals they created or have access to (tenant scoping).
+
+Check ownership before PATCH, DELETE, send.
+
+Input validation:
+
+Use Zod DTOs — return 400 with zod error details on invalid payload.
+
+Data limits:
+
+Limit size of free-text fields (notes, specialRequirements) to reasonable sizes.
+
+Protect rawPayload from enormous inputs—truncate or reject if payload > 1MB.
+
+Decimal/money:
+
+Use a consistent decimal type (Prisma Decimal) to persist buy/sell/total values; use decimal.js or Prisma Decimal in application code for arithmetic to avoid float precision issues.
+
+Rate limiting:
+
+Apply rate limiting middleware for heavy endpoints (add hotel) to prevent abuse.
+
+Error handling:
+
+Centralize error handling and return JSON errors with code, message, and optional details.
+
+Next steps & recommended priority order (implementation roadmap)
+
+Implement BookingRequest creation endpoint + validation + DB write. Add booking_request_attachments table scaffold.
+
+Implement createProposal endpoint (draft) and simple get endpoints for requests and proposals.
+
+Implement add hotel and add service endpoints with Prisma transactions and totals recalculation.
+
+Implement optimistic lock/unlock endpoints and enforcement (409 on conflict).
+
+Implement save-draft action endpoint and persist status = 'draft'.
+
+Implement approve & send endpoint (status change + audit log + response placeholder for email/pdf).
+
+Add audit_events logging helper and integrate on key actions.
+
+Add GET /hotels/search helper for UI; make it simple and use DB indices (name, destinationId, starRating).
+
+Add unit/integration tests for the created endpoints (focus on create, add hotel, totals recalc, send).
+
+Later: implement PDF gen and email once S3 and an email provider are available.
+
+Misc suggestions from Figma specifics (UI-driven)
+
+Provide endpoints the UI needs:
+
+GET /api/requests/:id/summary returning preformatted data the UI uses on the "Request Summary" screen (trip details, room breakdown, top-level totals).
+
+GET /api/proposals/:id/hotels returning hotels with rooms JSON parsed for display.
+
+POST /api/proposals/:id/hotels/:hotelId/adjust-pricing to update a hotel's net/markup/sell values (guard this with permission checks).
+
+For "Remove hotel" flow: return current totals after removal so the UI can show immediate recalc.
+
+File upload (guest list): return metadata and store a fileKey placeholder. UI should present a pending/uploaded state.
+
+Error handling patterns (recommendation)
+
+Use consistent error object:
+
+{ "error": { "code": "validation_error", "message": "Validation failed", "details": [ ... ] } }
+
+For concurrency lock errors:
+
+HTTP 409 with { error: { code: "proposal_locked", owner: { id, name }, lockedAt } }
+
+Deliverables expected from the implementer (checklist to return)
+
+Express routes + controllers implementing all endpoints above.
+
+Zod DTOs and request validation middleware.
+
+Prisma queries using transactions for adding hotels/services and updating totals.
+
+Auditing helper and audit_events table migration.
+
+Lock/unlock logic (DB fields + endpoints).
+
+OpenAPI/Swagger minimal docs describing each endpoint (request/response).
+
+Tests: unit tests for validation & integration test for createRequest -> createProposal -> addHotel -> send.
+
+A README describing how to run locally and how to test the flows (curl examples).

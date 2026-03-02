@@ -1,0 +1,23 @@
+import { Request, Response, NextFunction } from 'express';
+import hotelService from '../services/hotel.service';
+import { sendResponse } from '../utils/response';
+
+export class HotelController {
+    async search(req: Request, res: Response, next: NextFunction) {
+        try {
+            const query = (req as any).validated?.query ?? req.query;
+            const result = await hotelService.searchHotels({
+                q: query.q as string | undefined,
+                destinationId: query.destinationId as number | undefined,
+                starRating: query.starRating as number | undefined,
+                limit: query.limit as number | undefined,
+                offset: query.offset as number | undefined,
+            });
+            return sendResponse(res, 200, result, 'Hotels retrieved');
+        } catch (error) {
+            next(error);
+        }
+    }
+}
+
+export default new HotelController();
