@@ -2,6 +2,7 @@ import app from './app';
 import config from './config';
 import logger from './utils/logger';
 import { PrismaClient } from '@prisma/client';
+import './services/cron.service'; // Initialize cron jobs
 
 const prisma = new PrismaClient();
 
