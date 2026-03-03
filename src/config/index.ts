@@ -6,6 +6,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 const config = {
     env: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '4000', 10),
+    corsOrigin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000',
     jwt: {
         secret: process.env.JWT_SECRET,
         refreshSecret: process.env.JWT_REFRESH_SECRET,

@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import config from './config';
 import { errorMiddleware } from './middlewares/error.middleware';
 import routes from './routes/index';
 
@@ -10,7 +11,12 @@ const app: Application = express();
 
 // Security Middlewares
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin: config.corsOrigin,
+    credentials: true,
+  })
+);
 
 // Body Parser Middlewares
 app.use(express.json());
