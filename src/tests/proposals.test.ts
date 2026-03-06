@@ -105,7 +105,7 @@ jest.mock('@prisma/client', () => {
     return {
         PrismaClient: jest.fn(() => mPrismaClient),
         ProposalStatus: { draft: 'draft', sent: 'sent', approved: 'approved', declined: 'declined' },
-        BookingRequestStatus: { pending: 'pending', draft: 'draft', processing: 'processing', completed: 'completed', cancelled: 'cancelled' },
+        BookingRequestStatus: { pending: 'pending', draft: 'draft', processing: 'processing', ai_generated: 'ai_generated', completed: 'completed', cancelled: 'cancelled' },
         Prisma: { JsonNull: null },
     };
 });
@@ -139,7 +139,8 @@ describe('Integration: BookingRequest → Proposal → Hotel → Send', () => {
                 .set(authHeader())
                 .send({
                     companyName: 'TechCorp',
-                    contactName: 'John',
+                    firstName: 'John',
+                    lastName: 'Doe',
                     contactEmail: 'john@company.com',
                     contactPhone: '+1234567890',
                     currencyCode: 'EUR',

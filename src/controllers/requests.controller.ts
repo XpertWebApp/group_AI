@@ -6,7 +6,17 @@ import { sendResponse } from '../utils/response';
 export class RequestsController {
     async list(req: Request, res: Response, next: NextFunction) {
         try {
-            const result = await requestsService.getAllRequests();
+            const q = (req as any).validated?.query ?? req.query;
+            const result = await requestsService.getAllRequests({
+                page: q.page ? Number(q.page) : 1,
+                limit: q.limit ? Math.min(Number(q.limit), 100) : 20,
+                search: q.search as string | undefined,
+                status: q.status as any,
+                dateFrom: q.dateFrom as string | undefined,
+                dateTo: q.dateTo as string | undefined,
+                sortBy: (q.sortBy as any) ?? 'createdAt',
+                sortOrder: (q.sortOrder as any) ?? 'desc',
+            });
             return sendResponse(res, 200, result, 'Requests retrieved');
         } catch (error) {
             next(error);

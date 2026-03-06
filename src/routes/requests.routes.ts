@@ -1,11 +1,16 @@
 import { Router } from 'express';
 import requestsController from '../controllers/requests.controller';
+import hotelSearchController from '../controllers/hotelSearch.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
     CreateBookingRequestSchema,
     UpdateBookingRequestSchema,
     CreateProposalSchema,
+    WbeHotelSearchSchema,
+    OptionDetailsRequestSchema,
+    PriceCalculationSchema,
+    ListRequestsQuerySchema,
 } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
 
@@ -17,7 +22,15 @@ const createLimiter = rateLimit({
     message: { error: { code: 'rate_limited', message: 'Too many requests, try again later' } },
 });
 
-// Booking Request CRUD
+// Rate limiter for WBE search calls (expensive external API)
+const searchLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 min
+    max: 10,
+    message: { error: { code: 'rate_limited', message: 'Too many search requests, try again later' } },
+});
+
+// ── Booking Request CRUD ───────────────────────────────────────────────────
+
 router.post(
     '/',
     authMiddleware,
@@ -26,7 +39,7 @@ router.post(
     requestsController.create,
 );
 
-router.get('/', authMiddleware, requestsController.list);
+router.get('/', authMiddleware, validate(ListRequestsQuerySchema, 'query'), requestsController.list);
 
 router.get('/:id', authMiddleware, requestsController.get);
 
@@ -39,7 +52,48 @@ router.patch(
     requestsController.update,
 );
 
-// Create Proposal on a Request
+// ── Hotel Search Flow (Create Request → Search → Option Details) ───────────
+
+/**
+ * POST /requests/:id/hotel-search
+ * Triggers the WBE hotel search for a booking request.
+ * Returns filtered, capacity-validated, and ranked hotel options with supplier splits.
+ * Steps 1-5 from the SETT Phase 1 guide.
+ */
+router.post(
+    '/:id/hotel-search',
+    authMiddleware,
+    searchLimiter,
+    validate(WbeHotelSearchSchema, 'body'),
+    hotelSearchController.search,
+);
+
+/**
+ * POST /requests/:id/hotel-search/option-details
+ * Fetches exact per-night pricing and cancellation policy (OptionDetailsV2) for selected TIDs.
+ * Step 6 from the SETT Phase 1 guide. Results are cached in HotelOptionDetail.
+ */
+router.post(
+    '/:id/hotel-search/option-details',
+    authMiddleware,
+    validate(OptionDetailsRequestSchema, 'body'),
+    hotelSearchController.optionDetails,
+);
+
+/**
+ * POST /requests/:id/hotel-search/calculate-price
+ * Calculates the recommended customer sell price (highest mid-range + markup + psychology).
+ * Step 7 from the SETT Phase 1 guide.
+ */
+router.post(
+    '/:id/hotel-search/calculate-price',
+    authMiddleware,
+    validate(PriceCalculationSchema, 'body'),
+    hotelSearchController.calculatePrice,
+);
+
+// ── Create Proposal on a Request ───────────────────────────────────────────
+
 router.post(
     '/:requestId/proposals',
     authMiddleware,

@@ -217,6 +217,7 @@ enum BookingRequestStatus {
   pending
   draft
   processing
+  ai_generated
   completed
   cancelled
 
@@ -233,36 +234,62 @@ enum ProposalStatus {
 }
 
 model BookingRequest {
-  id                  String                     @id @default(uuid()) @db.Uuid
-  rawPayload          Json                       @map("raw_payload") @db.JsonB
-  externalRequestId   String?                    @map("external_request_id") @db.VarChar(255)
-  source              String?                    @db.VarChar(100)
-  sourceIp            String?                    @map("source_ip") @db.VarChar(50)
-  budget              Decimal?                   @db.Decimal(12, 2)
-  companyName         String?                    @map("company_name") @db.VarChar(255)
-  contactName         String?                    @map("contact_name") @db.VarChar(255)
-  contactEmail        String?                    @map("contact_email") @db.VarChar(255)
-  contactPhone        String?                    @map("contact_phone") @db.VarChar(50)
-  currencyCode        String?                    @map("currency_code") @db.VarChar(10)
-  destinationName     String?                    @map("destination_name") @db.VarChar(255)
-  destinationId       Int                        @map("destination_id")
-  checkinDate         DateTime                   @map("checkin_date") @db.Date
-  nights              Int
-  rooms               Json?                      @db.JsonB
-  nationalityCode     String?                    @map("nationality_code") @db.VarChar(10)
-  processed           Boolean                    @default(false)
-  processedAt         DateTime?                  @map("processed_at")
-  specialRequirements String?                    @map("special_requirements") @db.Text
-  status              BookingRequestStatus       @default(pending)
-  createdAt           DateTime                   @default(now()) @map("created_at")
-  updatedAt           DateTime?                  @updatedAt @map("updated_at")
-  proposals           Proposal[]
-  attachments         BookingRequestAttachment[]
+  id                    String                     @id @default(uuid()) @db.Uuid
+  referenceNumber       Int                        @unique @default(autoincrement()) @map("reference_number")
+  rawPayload            Json                       @map("raw_payload") @db.JsonB
+  externalRequestId     String?                    @map("external_request_id") @db.VarChar(255)
+  source                String?                    @db.VarChar(100)
+  sourceIp              String?                    @map("source_ip") @db.VarChar(50)
+
+  // ── Step 1: Trip Details ──────────────────────────────────────────────────
+  destinationId         Int                        @map("destination_id")
+  destinationName       String?                    @map("destination_name") @db.VarChar(255)
+  checkinDate           DateTime                   @map("checkin_date") @db.Date
+  checkoutDate          DateTime?                  @map("checkout_date") @db.Date
+  nights                Int
+  starRating            Decimal?                   @map("star_rating") @db.Decimal(2, 1)
+  budgetRange           String?                    @map("budget_range") @db.VarChar(100)
+  budget                Decimal?                   @db.Decimal(12, 2)
+  groupType             String?                    @map("group_type") @db.VarChar(100)
+  groupSize             Int?                       @map("group_size")
+  currencyCode          String?                    @map("currency_code") @db.VarChar(10)
+  nationalityCode       String?                    @map("nationality_code") @db.VarChar(10)
+
+  // ── Step 2: Room & Accommodations ─────────────────────────────────────────
+  rooms                 Json?                      @db.JsonB
+  breakfastPreference   String?                    @map("breakfast_preference") @db.VarChar(10)
+  hotelLocation         String?                    @map("hotel_location") @db.VarChar(50)
+  specialRequirements   String?                    @map("special_requirements") @db.Text
+
+  // ── Step 3: Customer Details ──────────────────────────────────────────────
+  companyName           String?                    @map("company_name") @db.VarChar(255)
+  firstName             String?                    @map("first_name") @db.VarChar(100)
+  lastName              String?                    @map("last_name") @db.VarChar(100)
+  contactName           String?                    @map("contact_name") @db.VarChar(255)
+  contactEmail          String?                    @map("contact_email") @db.VarChar(255)
+  contactPhone          String?                    @map("contact_phone") @db.VarChar(50)
+  guestListFileKey      String?                    @map("guest_list_file_key") @db.Text
+  customerNotes         String?                    @map("customer_notes") @db.Text
+
+  // ── Step 4: Policies ──────────────────────────────────────────────────────
+  termsAndConditions    String?                    @map("terms_and_conditions") @db.Text
+  cancellationConditions String?                   @map("cancellation_conditions") @db.Text
+
+  // ── System ────────────────────────────────────────────────────────────────
+  processed             Boolean                    @default(false)
+  processedAt           DateTime?                  @map("processed_at")
+  status                BookingRequestStatus       @default(pending)
+  createdAt             DateTime                   @default(now()) @map("created_at")
+  updatedAt             DateTime?                  @updatedAt @map("updated_at")
+  proposals             Proposal[]
+  attachments           BookingRequestAttachment[]
 
   @@index([destinationId])
   @@index([status])
   @@index([nationalityCode])
   @@index([createdAt])
+  @@index([referenceNumber])
+  @@index([companyName])
   @@map("booking_requests")
   @@schema("app")
 }
@@ -352,6 +379,22 @@ model ProposalService {
 
   @@index([proposalId])
   @@map("proposal_services")
+  @@schema("app")
+}
+
+model Notification {
+  id          String   @id @default(uuid()) @db.Uuid
+  type        String   @db.VarChar(100) // e.g. "new_offer_ready"
+  title       String   @db.VarChar(255)
+  message     String   @db.Text
+  entityId    String?  @map("entity_id") @db.Uuid // bookingRequestId or proposalId
+  entityType  String?  @map("entity_type") @db.VarChar(100)
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityId])
+  @@index([read, createdAt])
+  @@map("notifications")
   @@schema("app")
 }
 

@@ -8,13 +8,16 @@ import {
     AddProposalHotelSchema,
     AddProposalServiceSchema,
     SendProposalSchema,
+    UpdateBookingRequestSchema,
+    ListRequestsQuerySchema,
 } from '../validation/requestSchemas';
 
 describe('Zod Validation Schemas', () => {
     describe('CreateBookingRequestSchema', () => {
         const valid = {
             companyName: 'TechCorp',
-            contactName: 'John',
+            firstName: 'John',
+            lastName: 'Doe',
             contactEmail: 'john@company.com',
             contactPhone: '+1234567890',
             currencyCode: 'EUR',
@@ -89,6 +92,26 @@ describe('Zod Validation Schemas', () => {
         });
         it('accepts with notes and markupSettings', () => {
             expect(CreateProposalSchema.safeParse({ notes: 'hi', markupSettings: { globalMarkupPercent: 20 } }).success).toBe(true);
+        });
+    });
+
+    describe('UpdateBookingRequestSchema', () => {
+        it('accepts ai_generated as status', () => {
+            expect(UpdateBookingRequestSchema.safeParse({ status: 'ai_generated' }).success).toBe(true);
+        });
+
+        it('rejects unknown status value', () => {
+            expect(UpdateBookingRequestSchema.safeParse({ status: 'unknown_status' }).success).toBe(false);
+        });
+    });
+
+    describe('ListRequestsQuerySchema', () => {
+        it('accepts ai_generated as status filter', () => {
+            expect(ListRequestsQuerySchema.safeParse({ status: 'ai_generated' }).success).toBe(true);
+        });
+
+        it('rejects unknown status filter', () => {
+            expect(ListRequestsQuerySchema.safeParse({ status: 'unknown_status' }).success).toBe(false);
         });
     });
 
