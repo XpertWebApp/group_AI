@@ -10,6 +10,8 @@ export interface HotelCodeRow {
     destinationId: number | null;
     addressCity: string | null;
     addressCountry: string | null;
+    /** Primary image key (displayOrder=0) from HotelImage table, if available. */
+    primaryImageKey?: string | null;
 }
 
 export class HotelSearchRepository {
@@ -59,24 +61,42 @@ export class HotelSearchRepository {
 
     /**
      * Returns a map of hotelCode → hotel info for enriching search results.
+     * Includes the primary image key (displayOrder=0) from HotelImage if available.
      */
     async getHotelsByCode(hotelCodes: string[]): Promise<Map<string, HotelCodeRow>> {
         if (hotelCodes.length === 0) return new Map();
 
-        const hotels = await prisma.hotel.findMany({
-            where: { hotelCode: { in: hotelCodes } },
-            select: {
-                hotelCode: true,
-                name: true,
-                starRating: true,
-                destinationId: true,
-                addressCity: true,
-                addressCountry: true,
-            },
-        });
+        const [hotels, images] = await Promise.all([
+            prisma.hotel.findMany({
+                where: { hotelCode: { in: hotelCodes } },
+                select: {
+                    hotelCode: true,
+                    name: true,
+                    starRating: true,
+                    destinationId: true,
+                    addressCity: true,
+                    addressCountry: true,
+                },
+            }),
+            prisma.hotelImage.findMany({
+                where: {
+                    hotelCode: { in: hotelCodes },
+                    displayOrder: 0,
+                },
+                select: { hotelCode: true, imageKey: true },
+            }),
+        ]);
+
+        const imageMap = new Map<string, string>();
+        for (const img of images) imageMap.set(img.hotelCode, img.imageKey);
 
         const map = new Map<string, HotelCodeRow>();
-        for (const h of hotels) map.set(h.hotelCode, h);
+        for (const h of hotels) {
+            map.set(h.hotelCode, {
+                ...h,
+                primaryImageKey: imageMap.get(h.hotelCode) ?? null,
+            });
+        }
         return map;
     }
 

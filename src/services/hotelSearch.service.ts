@@ -1,25 +1,4 @@
-/**
- * Hotel Search Orchestration Service
- *
- * Implements the full Create Request flow from the SETT Phase 1 guide:
- *   Step 1: Resolve hotel codes from DB (destination + star rating ±1)
- *   Step 2: Search WBE with only 3 rooms (Oliver's Rule — never search actual count)
- *   Step 3: Filter by free cancellation + meal type + OnRequest
- *   Step 4: Validate capacity per-hotel (supplier limits)
- *   Step 5: Select mid-range prices (skip bottom & top 20%)
- *   Step 6: Build supplier split plan (internal only)
- *   Step 7: Fetch & cache option details (OptionDetailsV2)
- *
- * Milestone 3 fixes:
- *   - Bug 1: WBE search response uses Data[] not Hotels[]
- *   - Bug 2: Cancellation deadline field is ClxDeadline (not CxlDeadline)
- *   - Bug 3: OptionDetailsV2 response nests under Data.CxlPolicy / Data.DayPrices
- *   - Bug 5: UpdatedOptionsNeeded per-option polling (Option B — poll & refresh)
- *   - Fix:   Request body uses Waitseconds (confirmed from live API call)
- *   - Added: OnRequest filter (exclude on-request options for groups)
- *   - Added: ProviderCurrency, MealName, room descriptions capture
- *   - Added: bestOption summary per hotel for frontend consumption
- */
+
 
 import requestRepository from '../repositories/request.repository';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
@@ -730,7 +709,18 @@ export class HotelSearchService {
                 field<number>(wbeHotel, 'StarRating', 'starRating', 'Stars') ??
                 (dbHotel?.starRating ? Number(dbHotel.starRating) : null);
 
-            const imageUrl = field<string>(wbeHotel, 'ImageUrl', 'imageUrl', 'Image') ?? null;
+            // WBE search response doesn't include image URLs.
+            // Use the primary imageKey from the HotelImage DB table and expose it as a
+            // proxy URL via the SETT server image endpoint.
+            // NOTE: DB stores imageKey in URL-encoded form (e.g. %2B instead of +).
+            // Decode first to normalise, then re-encode once — prevents double-encoding.
+            const rawImageKey = dbHotel?.primaryImageKey ?? null;
+            let imageUrl: string | null = null;
+            if (rawImageKey) {
+                let decodedKey = rawImageKey;
+                try { decodedKey = decodeURIComponent(rawImageKey); } catch { /* malformed — use as-is */ }
+                imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
+            }
             const address = field<string>(wbeHotel, 'Address', 'address', 'Location') ?? null;
 
             // Build bestOption — cheapest mid-range option (for frontend card + option-details call)

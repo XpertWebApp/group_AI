@@ -7,9 +7,12 @@ export class WbeClientService {
     private readonly baseUrl: string;
     private readonly acceptLanguage: string;
 
+    private readonly searchUrl: string;
+
     constructor() {
         this.apiKey = config.wbe.apiKey || '';
         this.baseUrl = config.wbe.baseUrl || '';
+        this.searchUrl = (config.wbe as any).searchUrl || this.baseUrl;
         this.acceptLanguage = (config.wbe as any).acceptLanguage || 'en';
     }
 
@@ -171,13 +174,42 @@ export class WbeClientService {
     }
 
     /**
+     * Fetch a hotel image by imageKey. Returns the raw image buffer + content-type.
+     * Tries staticuat first (UAT environment), falls back to production wbeapi.com.
+     */
+    async getHotelImage(imageKey: string): Promise<{ data: Buffer; contentType: string } | null> {
+        const urls = [
+            `${this.baseUrl}/api/Hotel/Image?imageKey=${encodeURIComponent(imageKey)}&apiKey=${this.apiKey}`,
+            `https://wbeapi.com/api/Hotel/Image?imageKey=${encodeURIComponent(imageKey)}&apiKey=${this.apiKey}`,
+        ];
+
+        for (const url of urls) {
+            try {
+                const response = await axios.get(url, {
+                    auth: this.getAuth(),
+                    headers: { ...this.getDefaultHeaders(), Accept: 'image/*' },
+                    responseType: 'arraybuffer',
+                    timeout: 8000,
+                });
+                if (response.status === 200 && response.data?.byteLength > 0) {
+                    const contentType = response.headers['content-type'] ?? 'image/jpeg';
+                    return { data: Buffer.from(response.data), contentType };
+                }
+            } catch {
+                // try next URL
+            }
+        }
+        return null;
+    }
+
+    /**
      * Matches docs: POST /hotel/SearchAndGetByHotelsV2?apiKey=...
      * Body contains HotelIds, CheckInDate, Nights, CurrencyCode, NationalityCode, WaitSeconds, Rooms.
      */
     async searchAndGetByHotelsV2(body: any) {
         try {
             const response = await axios.post(
-                `${this.baseUrl}/hotel/SearchAndGetByHotelsV2`,
+                `${this.searchUrl}/hotel/SearchAndGetByHotelsV2`,
                 body,
                 {
                     params: { apiKey: this.apiKey },
@@ -190,7 +222,7 @@ export class WbeClientService {
             // fallback to legacy path if server only supports /api/Hotel/...
             if (error.response?.status === 404) {
                 const response = await axios.post(
-                    `${this.baseUrl}/api/Hotel/SearchAndGetByHotelsV2`,
+                    `${this.searchUrl}/api/Hotel/SearchAndGetByHotelsV2`,
                     body,
                     {
                         params: { apiKey: this.apiKey },
@@ -212,7 +244,7 @@ export class WbeClientService {
     async optionDetailsV2(body: any) {
         try {
             const response = await axios.post(
-                `${this.baseUrl}/hotel/optionDetailsV2`,
+                `${this.searchUrl}/hotel/optionDetailsV2`,
                 body,
                 {
                     params: { apiKey: this.apiKey },
@@ -224,7 +256,7 @@ export class WbeClientService {
         } catch (error: any) {
             if (error.response?.status === 404) {
                 const response = await axios.post(
-                    `${this.baseUrl}/api/Hotel/OptionDetailsV2`,
+                    `${this.searchUrl}/api/Hotel/OptionDetailsV2`,
                     body,
                     {
                         params: { apiKey: this.apiKey },
@@ -246,7 +278,7 @@ export class WbeClientService {
     async getUpdatedOptionsV2(body: any) {
         try {
             const response = await axios.post(
-                `${this.baseUrl}/hotel/GetUpdatedOptions`,
+                `${this.searchUrl}/hotel/GetUpdatedOptions`,
                 body,
                 {
                     params: { apiKey: this.apiKey },
@@ -258,7 +290,7 @@ export class WbeClientService {
         } catch (error: any) {
             if (error.response?.status === 404) {
                 const response = await axios.post(
-                    `${this.baseUrl}/api/Hotel/GetUpdatedOptions`,
+                    `${this.searchUrl}/api/Hotel/GetUpdatedOptions`,
                     body,
                     {
                         params: { apiKey: this.apiKey },
