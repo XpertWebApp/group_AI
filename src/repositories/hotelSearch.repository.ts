@@ -10,6 +10,8 @@ export interface HotelCodeRow {
     destinationId: number | null;
     addressCity: string | null;
     addressCountry: string | null;
+    /** Physical room count from WBE static data. Used for Step 3.2 inventory overlap check. */
+    totalRooms?: number | null;
     /** Primary image key (displayOrder=0) from HotelImage table, if available. */
     primaryImageKey?: string | null;
 }
@@ -24,22 +26,20 @@ export class HotelSearchRepository {
         starRatings: number[],
         limit = 200,
     ): Promise<HotelCodeRow[]> {
+        const select = {
+            hotelCode: true,
+            name: true,
+            starRating: true,
+            destinationId: true,
+            addressCity: true,
+            addressCountry: true,
+            totalRooms: true,
+        };
+
         if (starRatings.length === 0) {
-            return prisma.hotel.findMany({
-                where: { destinationId },
-                select: {
-                    hotelCode: true,
-                    name: true,
-                    starRating: true,
-                    destinationId: true,
-                    addressCity: true,
-                    addressCountry: true,
-                },
-                take: limit,
-            });
+            return prisma.hotel.findMany({ where: { destinationId }, select, take: limit });
         }
 
-        // Build OR clause for each star rating (allow 0.5 tolerance)
         return prisma.hotel.findMany({
             where: {
                 destinationId,
@@ -47,14 +47,7 @@ export class HotelSearchRepository {
                     { starRating: { gte: new Decimal(star - 0.49), lte: new Decimal(star + 0.49) } },
                 ]),
             },
-            select: {
-                hotelCode: true,
-                name: true,
-                starRating: true,
-                destinationId: true,
-                addressCity: true,
-                addressCountry: true,
-            },
+            select,
             take: limit,
         });
     }
@@ -76,6 +69,7 @@ export class HotelSearchRepository {
                     destinationId: true,
                     addressCity: true,
                     addressCountry: true,
+                    totalRooms: true,
                 },
             }),
             prisma.hotelImage.findMany({

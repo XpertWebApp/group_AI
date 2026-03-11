@@ -8,11 +8,13 @@ export class WbeClientService {
     private readonly acceptLanguage: string;
 
     private readonly searchUrl: string;
+    private readonly contentUrl: string;
 
     constructor() {
         this.apiKey = config.wbe.apiKey || '';
         this.baseUrl = config.wbe.baseUrl || '';
         this.searchUrl = (config.wbe as any).searchUrl || this.baseUrl;
+        this.contentUrl = (config.wbe as any).contentUrl || 'https://uatcontent.wbeapi.com';
         this.acceptLanguage = (config.wbe as any).acceptLanguage || 'en';
     }
 
@@ -174,16 +176,33 @@ export class WbeClientService {
     }
 
     /**
-     * Fetch a hotel image by imageKey. Returns the raw image buffer + content-type.
-     * Tries staticuat first (UAT environment), falls back to production wbeapi.com.
+     * Fetch a hotel image by imageKey token.
+     * Primary: WBE content CDN (uatcontent.wbeapi.com/Image/getimage?pic=...)
+     * Fallback: legacy WBE Image API endpoints (staticuat / production).
      */
     async getHotelImage(imageKey: string): Promise<{ data: Buffer; contentType: string } | null> {
-        const urls = [
+        // Primary — WBE content CDN (no auth required, publicly accessible)
+        try {
+            const response = await axios.get(`${this.contentUrl}/Image/getimage`, {
+                params: { pic: imageKey },
+                responseType: 'arraybuffer',
+                timeout: 10000,
+            });
+            if (response.status === 200 && response.data?.byteLength > 0) {
+                const contentType = response.headers['content-type'] ?? 'image/jpeg';
+                return { data: Buffer.from(response.data), contentType };
+            }
+        } catch (err: any) {
+            logger.warn({ msg: 'WBE content CDN image fetch failed, trying legacy endpoints', error: err.message });
+        }
+
+        // Fallback — legacy WBE Image API (may not work in UAT)
+        const legacyUrls = [
             `${this.baseUrl}/api/Hotel/Image?imageKey=${encodeURIComponent(imageKey)}&apiKey=${this.apiKey}`,
             `https://wbeapi.com/api/Hotel/Image?imageKey=${encodeURIComponent(imageKey)}&apiKey=${this.apiKey}`,
         ];
 
-        for (const url of urls) {
+        for (const url of legacyUrls) {
             try {
                 const response = await axios.get(url, {
                     auth: this.getAuth(),

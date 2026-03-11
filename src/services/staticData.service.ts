@@ -248,6 +248,8 @@ export class StaticDataService {
                         hotelDetailsUrl: h.HotelDetailsUrl || h.detailsUrl,
                         destinationId: h.DestinationId || h.destination_id,
                         starRating: h.StarRating || h.stars,
+                        // TotalRooms / NumberOfRooms — used for Step 3.2 inventory overlap check
+                        totalRooms: h.TotalRooms ?? h.totalRooms ?? h.NumberOfRooms ?? h.numberOfRooms ?? null,
                         category: h.Category || h.category,
                         propertyType: h.PropertyType ?? h.propertyType ?? null,
                         giataCode: h.GiataId ? String(h.GiataId) : h.giata ? String(h.giata) : null,
@@ -356,6 +358,12 @@ export class StaticDataService {
                     consecutive403 = 0; // Reset on success
 
                     // Update hotel with detailed fields
+                    // TotalRooms from HotelDetailsV4 is used for Step 3.2 inventory overlap check.
+                    const totalRoomsFromDetails =
+                        details.TotalRooms ?? details.totalRooms ??
+                        details.NumberOfRooms ?? details.numberOfRooms ??
+                        null;
+
                     await staticDataRepository.updateHotel(h.hotelCode, {
                         name: details.Name || details.name,
                         address: details.Address || details.address,
@@ -363,6 +371,7 @@ export class StaticDataService {
                         addressCountry: details.AddressCountry || details.addressCountry,
                         latitude: details.Latitude || details.latitude,
                         longitude: details.Longitude || details.longitude,
+                        ...(totalRoomsFromDetails !== null && { totalRooms: totalRoomsFromDetails }),
                         metadata: details,
                         detailsFetchedAt: new Date(),
                         lastSyncedAt: new Date(),

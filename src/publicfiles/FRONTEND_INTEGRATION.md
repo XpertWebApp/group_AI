@@ -1,16 +1,13 @@
 # SETT Backend — Frontend Integration Reference
 
-## Base URL
-
-```
-http://localhost:3000/api/v1
-```
+> Last updated: Milestone 3 — AI Offer Generation Engine
+> Backend base URL (development): `http://localhost:4000/api/v1`
 
 ---
 
 ## Global Response Envelope
 
-Every response (success or error) follows this shape:
+Every endpoint returns the same wrapper:
 
 ```json
 {
@@ -26,8 +23,8 @@ On error:
 {
   "success": false,
   "data": null,
-  "message": "Something went wrong",
-  "error": "ERROR_CODE"
+  "message": "contactEmail: Invalid email",
+  "error": { "code": "validation_error", "message": "..." }
 }
 ```
 
@@ -39,10 +36,10 @@ On error:
 
 ```
 POST /auth/login
+Content-Type: application/json
 ```
 
 **Body:**
-
 ```json
 {
   "email": "admin@sett.com",
@@ -51,7 +48,6 @@ POST /auth/login
 ```
 
 **Response `data`:**
-
 ```json
 {
   "accessToken": "eyJ...",
@@ -70,15 +66,12 @@ POST /auth/login
 
 ```
 POST /auth/refresh
+Content-Type: application/json
 ```
 
-**Body:**
+**Body:** `{ "refreshToken": "eyJ..." }`
 
-```json
-{ "refreshToken": "eyJ..." }
-```
-
-**Response `data`:** same shape as login.
+Response: same shape as login.
 
 ---
 
@@ -89,19 +82,51 @@ POST /auth/logout
 Authorization: Bearer <accessToken>
 ```
 
-**Response `data`:** `null`
-
 ---
 
 ### Using the Token
 
-Include the access token on every protected request:
-
+Include on every protected request:
 ```
 Authorization: Bearer <accessToken>
 ```
 
-When you get a `401` response, call `/auth/refresh` and retry. If refresh also fails, redirect to login.
+When you receive a `401`, call `/auth/refresh` and retry with the new token. If refresh also fails, redirect to login.
+
+---
+
+## ⚠️ Critical: Destination ID Lookup (MUST do this before creating a request)
+
+> **Bug that caused 0 hotel results:** The destination ID in a booking request must come from the database — do NOT hardcode a number. The search API (`/hotel-search`) looks up hotels by `destinationId`. If the ID is wrong or doesn't exist, zero hotels are returned.
+
+### Search Destinations (type-ahead)
+
+```
+GET /destinations/search?q=Barcelona&limit=10
+Authorization: Bearer <token>
+```
+
+| Param   | Default | Notes                       |
+|---------|---------|-----------------------------|
+| `q`     | —       | Min 2 characters            |
+| `limit` | 10      | Max 50                      |
+
+**Response `data`:**
+```json
+[
+  { "id": 4503, "name": "Barcelona",         "countryCode": "ES", "region": null },
+  { "id": 4502, "name": "Barcelona",         "countryCode": "VE", "region": null },
+  { "id": 695088, "name": "Barcelona Airports", "countryCode": "ES", "region": null }
+]
+```
+
+Results are sorted: exact-start matches first, then shortest name first (most specific city at top).
+
+**UI pattern:**
+1. User types in the destination field → debounce 300ms → call `/destinations/search?q=<input>`
+2. Show dropdown of results, each showing `name (countryCode)` e.g. "Barcelona (ES)"
+3. When user selects one, store both `id` and `name` in form state
+4. Submit `destinationId: 4503` and `destinationName: "Barcelona"` in the request body
 
 ---
 
@@ -115,110 +140,94 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
-**Body** (all 4 steps merged into one payload):
-
+**Body:**
 ```json
 {
-  // Step 1 - Trip Details (required)
-  "destinationId": 123,
-  "destinationName": "Barcelona, Spain",
+  "destinationId": 4503,
+  "destinationName": "Barcelona",
   "checkinDate": "2026-06-10",
-  "checkoutDate": "2026-06-15",   // OR provide "nights" below
-  "nights": 5,                    // optional if checkoutDate given; derived automatically
-  "starRating": 4,                // 1-5, optional
-  "budgetRange": "mid",           // optional free text
-  "budget": 5000,                 // optional number
-  "groupType": "corporate",       // optional
-  "groupSize": 30,                // optional int
+  "checkoutDate": "2026-06-15",
+  "nights": 5,
+  "starRating": 4,
+  "budgetRange": "€200-300/night",
+  "budget": 15000,
+  "groupType": "corporate",
+  "groupSize": 30,
   "currencyCode": "EUR",
   "nationalityCode": "GB",
 
-  // Step 2 - Room & Accommodations
   "rooms": {
-    "single": 0,
+    "single": 5,
     "double": 10,
-    "twin": 5,
+    "twin": 0,
     "triple": 0,
     "quadruple": 0,
     "suites": 0,
-    "extraRoomsNote": "2 accessible rooms required"
+    "extraRoomsNote": "2 accessible rooms needed"
   },
-  "breakfastPreference": "BB",          // "BB" | "RO"
-  "hotelLocation": "central",           // "central" | "outside_city_center"
-  "specialRequirements": "Wheelchair accessible rooms needed",
+  "breakfastPreference": "BB",
+  "hotelLocation": "central",
+  "specialRequirements": "Ground floor rooms if possible",
 
-  // Step 3 - Customer Details (required)
   "companyName": "TechCorp Ltd",
   "firstName": "John",
   "lastName": "Doe",
   "contactEmail": "john.doe@techcorp.com",
   "contactPhone": "+441234567890",
-  "guestListFileKey": "uploads/guestlist-abc123.xlsx",  // optional
-  "customerNotes": "VIP group, needs priority check-in",
+  "guestListFileKey": "uploads/guestlist.xlsx",
+  "customerNotes": "VIP group, priority check-in",
 
-  // Step 4 - Policies (optional)
-  "termsAndConditions": "Standard T&C text...",
-  "cancellationConditions": "Free cancellation until 30 days prior"
+  "termsAndConditions": "...",
+  "cancellationConditions": "..."
 }
 ```
 
-**Validation rules:**
-- `destinationId`, `destinationName`, `checkinDate`, `companyName`, `firstName`, `lastName`, `contactEmail`, `contactPhone` are **required**
-- Must provide either `checkoutDate` OR `nights` (checkout must be after checkin)
-- `contactEmail` must be a valid email
-- `contactPhone` minimum 5 characters
-- `breakfastPreference`: only `"BB"` or `"RO"`
-- `hotelLocation`: only `"central"` or `"outside_city_center"`
+**Required fields:** `destinationId`, `destinationName`, `checkinDate`, `companyName`, `firstName`, `lastName`, `contactEmail`, `contactPhone`, plus either `checkoutDate` or `nights`.
 
-**Response `data`:**
+**Enums:**
+- `breakfastPreference`: `"BB"` (breakfast) | `"RO"` (room only)
+- `hotelLocation`: `"central"` | `"outside_city_center"`
 
+**Response `201`:**
 ```json
 {
   "id": "uuid",
   "referenceNumber": 2458,
   "status": "pending",
   "companyName": "TechCorp Ltd",
-  "firstName": "John",
-  "lastName": "Doe",
   "contactName": "John Doe",
-  "contactEmail": "john.doe@techcorp.com",
-  "contactPhone": "+441234567890",
-  "destinationId": 123,
-  "destinationName": "Barcelona, Spain",
+  "destinationId": 4503,
+  "destinationName": "Barcelona",
   "checkinDate": "2026-06-10T00:00:00.000Z",
-  "checkoutDate": "2026-06-15T00:00:00.000Z",
   "nights": 5,
-  "rooms": { "double": 10, "twin": 5 },
-  "currencyCode": "EUR",
-  "createdAt": "2026-03-05T12:00:00.000Z",
-  "updatedAt": "2026-03-05T12:00:00.000Z"
+  "rooms": { "single": 5, "double": 10 },
+  "createdAt": "2026-03-05T12:00:00.000Z"
 }
 ```
 
+Save the `id` — it is needed for all subsequent hotel search and proposal steps.
+
 ---
 
-### List Requests (paginated)
+### List Requests
 
 ```
-GET /requests?page=1&limit=20&search=techcorp&status=pending
+GET /requests?page=1&limit=20&search=techcorp&status=ai_generated
 Authorization: Bearer <token>
 ```
 
-**Query parameters:**
-
-| Param       | Type   | Default    | Notes                                                   |
-|-------------|--------|------------|---------------------------------------------------------|
-| `page`      | int    | 1          |                                                         |
-| `limit`     | int    | 20         | max 100                                                 |
-| `search`    | string | —          | Searches: companyName, destinationName, email, firstName, lastName, #referenceNumber |
-| `status`    | string | —          | `pending` \| `draft` \| `processing` \| `completed` \| `cancelled` |
-| `dateFrom`  | date   | —          | ISO date string, filters by createdAt                  |
-| `dateTo`    | date   | —          | ISO date string                                        |
-| `sortBy`    | string | createdAt  | `createdAt` \| `checkinDate` \| `referenceNumber`      |
-| `sortOrder` | string | desc       | `asc` \| `desc`                                        |
+| Param       | Type   | Default     | Notes                                                                                     |
+|-------------|--------|-------------|-------------------------------------------------------------------------------------------|
+| `page`      | int    | 1           |                                                                                           |
+| `limit`     | int    | 20          | max 100                                                                                   |
+| `search`    | string | —           | Searches company name, destination, email, first/last name, `#referenceNumber`            |
+| `status`    | string | —           | `pending` \| `draft` \| `processing` \| `ai_generated` \| `completed` \| `cancelled`     |
+| `dateFrom`  | date   | —           | ISO date string, filters by createdAt                                                     |
+| `dateTo`    | date   | —           | ISO date string                                                                           |
+| `sortBy`    | string | `createdAt` | `createdAt` \| `checkinDate` \| `referenceNumber`                                         |
+| `sortOrder` | string | `desc`      | `asc` \| `desc`                                                                           |
 
 **Response `data`:**
-
 ```json
 {
   "data": [
@@ -228,10 +237,10 @@ Authorization: Bearer <token>
       "companyName": "TechCorp Ltd",
       "firstName": "John",
       "lastName": "Doe",
-      "destinationName": "Barcelona, Spain",
+      "destinationName": "Barcelona",
       "checkinDate": "2026-06-10T00:00:00.000Z",
       "nights": 5,
-      "status": "pending",
+      "status": "ai_generated",
       "currencyCode": "EUR",
       "createdAt": "2026-03-05T12:00:00.000Z",
       "proposals": [
@@ -250,25 +259,14 @@ Authorization: Bearer <token>
 
 ---
 
-### Get Request (full detail)
+### Get Request Detail
 
 ```
 GET /requests/:id
 Authorization: Bearer <token>
 ```
 
-Returns the full request object with all fields.
-
----
-
-### Get Request Summary
-
-```
-GET /requests/:id/summary
-Authorization: Bearer <token>
-```
-
-Returns a lighter summary shape.
+Returns the full request object with all fields including rooms, policies, proposals.
 
 ---
 
@@ -280,15 +278,15 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
-**Body:** Same fields as create, all optional. Only send what changed.
+Same fields as create, all optional. Only send what changed.
 
 ---
 
 ## Hotel Search Flow
 
-This is the core search pipeline. Call these after creating a request.
+Call these endpoints **after** a booking request exists. The `requestId` from the create step is required.
 
-### Step 1 — Trigger Search
+### Step 1 — Run Hotel Search
 
 ```
 POST /requests/:id/hotel-search
@@ -296,48 +294,109 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
-**Body (all optional):**
+> This call takes **30–45 seconds**. Show a loading spinner.
 
+**Body (all optional — defaults are shown):**
 ```json
 {
-  "mealType": "BB",                   // "BB" | "RO" | "HB" | "FB" | "AI"
-  "includeAlternativeStars": true,    // also search ±1 star. Default: true
-  "waitSeconds": 35,                  // WBE polling timeout. Default: 35, max: 60
+  "mealType": "BB",
+  "includeAlternativeStars": true,
+  "waitSeconds": 35,
   "currencyCode": "EUR",
-  "nationalityCode": "GB"
+  "nationalityCode": "HU"
 }
 ```
 
-**Response `data`:** Array of hotel options ranked by mid-range price:
+| Field                   | Default        | Notes                                              |
+|-------------------------|----------------|----------------------------------------------------|
+| `mealType`              | from request   | `"BB"` \| `"RO"` \| `"HB"` \| `"FB"` \| `"AI"`  |
+| `includeAlternativeStars` | `true`       | Also return hotels at ±1 star rating               |
+| `waitSeconds`           | `35`           | Range 5–60. Don't go below 30 for best results     |
+| `currencyCode`          | from request   |                                                    |
+| `nationalityCode`       | from request   |                                                    |
 
+**Response `data`:**
 ```json
-[
-  {
-    "hotelCode": "BDC-4782",
-    "hotelName": "Hotel Arts Barcelona",
-    "starRating": 5,
-    "tid": "TID-abc123",
-    "sessionId": "WBE-SESSION-xyz",
-    "supplierCode": "HPG",
-    "currency": "EUR",
-    "buyingPrice": 28500,
-    "rooms": {
-      "double": { "net": 250, "sell": 310, "qty": 3, "nights": 5 }
-    },
-    "freeCancellation": true,
-    "cancelDeadline": "2026-06-01T00:00:00.000Z",
-    "status": "include"          // "include" | "flag" | "omit"
-  }
-]
+{
+  "requestId": "uuid",
+  "sessionId": "e962be54-ebd1-46a9-9059-e5b8c4cedb78",
+  "finished": true,
+  "totalRoomsRequested": 15,
+  "summary": {
+    "total": 42,
+    "included": 28,
+    "flagged": 9,
+    "omitted": 5
+  },
+  "results": [ ],
+  "alternativeResults": [ ]
+}
 ```
 
-**Note:** The search always uses 3 rooms (Oliver's rule), mid-range pricing, free cancellation filter. Results with `status: "omit"` don't have enough supplier capacity for the group size.
+`results` contains hotels matching the requested star rating.
+`alternativeResults` contains hotels at ±1 star — show these in a secondary section.
+
+Both arrays contain objects of this shape:
+
+**`HotelResult` object:**
+```json
+{
+  "hotelCode": "Ru0AcMoJrZg=",
+  "hotelName": "Jumeirah Beach",
+  "starRating": 5,
+  "imageUrl": "/api/v1/hotels/image?key=eoYaG3WL9qzdm6Np...",
+  "address": "PO Box 11416, Umm Suqeim, Dubai",
+  "addressCity": "Dubai",
+  "addressCountry": "AE",
+  "sessionId": "e962be54-ebd1-46a9-9059-e5b8c4cedb78",
+  "status": "include",
+  "totalAvailableRooms": 45,
+  "highestMidRangePrice": 187.50,
+  "currency": "EUR",
+  "bestOption": {
+    "tid": "00000000000051772101473458",
+    "sessionId": "e962be54-ebd1-46a9-9059-e5b8c4cedb78",
+    "supplierCode": "EANRP",
+    "buyingPricePerRoomPerNight": 187.50,
+    "currency": "EUR",
+    "freeCancellation": true,
+    "cancelDeadline": "2026-05-26T19:59:59.000Z",
+    "mealType": "BB",
+    "mealName": "Free breakfast",
+    "roomDescriptions": ["Club Room (Ocean) - 1 King Bed"]
+  },
+  "usableOptions": [ ],
+  "selectedOptions": [ ],
+  "supplierSplit": [ ],
+  "note": null
+}
+```
+
+**Key fields for the UI:**
+
+| Field | Use for |
+|-------|---------|
+| `hotelName`, `starRating`, `imageUrl`, `address` | Hotel card header. `imageUrl` is a relative path — prefix with the API base URL (e.g. `http://localhost:4000`). It is `null` if the hotel has no images. |
+| `status` | Availability badge (see table below) |
+| `bestOption.buyingPricePerRoomPerNight` | Display as buying price — apply markup before showing to customer |
+| `bestOption.mealName` | Meal plan badge |
+| `bestOption.cancelDeadline` | "Free cancellation until {date}" |
+| `bestOption.tid` + `bestOption.sessionId` | Required for option-details and add-to-proposal calls |
+| `supplierSplit` | **INTERNAL ONLY — never show to customer** |
+
+**Hotel `status` values:**
+
+| Value | Meaning | UI treatment |
+|-------|---------|--------------|
+| `"include"` | Hotel can fulfil the full room count | Show normally |
+| `"flag"` | Risky — inventory overlap likely | Yellow warning badge |
+| `"omit"` | Insufficient capacity for group size | Hide or grey out |
 
 ---
 
 ### Step 2 — Get Option Details
 
-After user selects hotels they want to quote, call this to get per-night pricing and cancellation policy:
+After the agent selects hotels to quote, call this to get exact per-night pricing and cancellation policy. Results are cached for 2 hours.
 
 ```
 POST /requests/:id/hotel-search/option-details
@@ -346,42 +405,81 @@ Content-Type: application/json
 ```
 
 **Body:**
-
 ```json
 {
   "selections": [
     {
-      "sessionId": "WBE-SESSION-xyz",
-      "tid": "TID-abc123",
-      "hotelCode": "BDC-4782"
+      "sessionId": "e962be54-ebd1-46a9-9059-e5b8c4cedb78",
+      "tid": "00000000000051772101473458",
+      "hotelCode": "Ru0AcMoJrZg="
     }
   ]
 }
 ```
 
-Max 20 selections per call. Results are cached (2hr TTL).
+Get `sessionId`, `tid`, and `hotelCode` from `bestOption` in the hotel search result. Max 20 selections per call.
 
 **Response `data`:**
-
 ```json
 [
   {
-    "tid": "TID-abc123",
-    "hotelCode": "BDC-4782",
-    "optionDetailsId": "uuid",
-    "roomBreakdown": [
-      { "date": "2026-06-10", "price": 250.00 }
-    ],
-    "cancellationPolicy": { ... },
-    "freeCancellation": true,
-    "cancelDeadline": "2026-06-01T00:00:00.000Z"
+    "tid": "00000000000051772101473458",
+    "hotelCode": "Ru0AcMoJrZg=",
+    "cached": false,
+    "parsed": {
+      "nonRefundable": false,
+      "cxlDeadline": "2026-05-26T19:59:59.000Z",
+      "mealType": "BB",
+      "mealName": "Free breakfast",
+      "daypricesTotal": 14062.50,
+      "daypricesCurrency": "EUR",
+      "providerPrice": 12500.00,
+      "essentialInfo": "Check-in from 15:00. Photo ID required.",
+      "roomBreakdown": [
+        {
+          "roomId": 1,
+          "description": "Club Room (Ocean) - 1 King Bed",
+          "prices": [
+            { "date": "2026-06-10", "price": 250.00 },
+            { "date": "2026-06-11", "price": 250.00 },
+            { "date": "2026-06-12", "price": 300.00 }
+          ]
+        }
+      ],
+      "cancellationPolicy": {
+        "nonRefundable": false,
+        "deadline": "2026-05-26T19:59:59.000Z",
+        "conditions": [
+          {
+            "fromDate": "2026-05-26",
+            "toDate": "2026-06-10",
+            "amount": 500.00,
+            "currency": "EUR",
+            "text": "One night penalty if cancelled after 26 May"
+          }
+        ],
+        "comment": "Free cancellation until 26 May 2026"
+      },
+      "supplements": []
+    }
   }
 ]
 ```
 
+| Field | Use for |
+|-------|---------|
+| `parsed.cxlDeadline` | "Free cancellation until {date}" |
+| `parsed.cancellationPolicy` | Full policy modal / tooltip |
+| `parsed.mealName` | Meal plan label |
+| `parsed.daypricesTotal` | Total buying cost for all 3 search rooms (see pricing note below) |
+| `parsed.roomBreakdown` | Per-night price table per room |
+| `parsed.essentialInfo` | Important hotel notes section |
+
+> **Pricing note:** `daypricesTotal` is the total price for the 3 rooms used in the search (Oliver's rule: always search with 3 rooms). The server automatically divides this by `(totalRooms × nights)` when building the proposal — you don't need to do this yourself.
+
 ---
 
-### Step 3 — Calculate Sell Price
+### Step 3 — Calculate Customer Price
 
 ```
 POST /requests/:id/hotel-search/calculate-price
@@ -390,30 +488,36 @@ Content-Type: application/json
 ```
 
 **Body:**
-
 ```json
 {
-  "buyingPrice": 28500,
-  "markupPercent": 15      // optional, defaults to system setting
+  "buyingPrice": 187.50,
+  "markupPercent": 18
 }
 ```
+
+`buyingPrice` = `bestOption.buyingPricePerRoomPerNight` from the search result (per room per night).
+`markupPercent` is optional, defaults to 18.
 
 **Response `data`:**
-
 ```json
 {
-  "buyingPrice": 28500,
-  "markupPercent": 15,
-  "sellPrice": 32775,
-  "recommendedSellPrice": 32748    // price psychology applied (avoids round numbers)
+  "buyingPrice": 187.50,
+  "sellPrice": 221,
+  "markupPercent": 18
 }
 ```
+
+**Price psychology is applied automatically:** numbers ending in `0` → subtract 2 (€200 → €198), numbers ending in `5` → subtract 1 (€195 → €194).
+
+`sellPrice` is **per room per night**. Total = `sellPrice × totalRooms × nights`.
+
+This is the price to show the customer.
 
 ---
 
 ## Proposals
 
-### Create Proposal for a Request
+### Create Proposal
 
 ```
 POST /requests/:requestId/proposals
@@ -422,15 +526,14 @@ Content-Type: application/json
 ```
 
 **Body (all optional):**
-
 ```json
 {
-  "notes": "This is our best offer for the group",
-  "markupSettings": { "globalMarkupPercent": 15 }
+  "notes": "Our best offer for your group",
+  "markupSettings": { "globalMarkupPercent": 18 }
 }
 ```
 
-**Response `data`:** Full proposal object including `id`.
+**Response `201`:** Proposal object including `id`.
 
 ---
 
@@ -450,7 +553,7 @@ GET /proposals/:id
 Authorization: Bearer <token>
 ```
 
-**Response `data`:** Proposal with hotels, services, totals.
+Returns proposal with its hotels, services, and totals.
 
 ---
 
@@ -462,14 +565,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
-**Body:**
-
-```json
-{
-  "notes": "Updated notes",
-  "markupSettings": { "globalMarkupPercent": 18 }
-}
-```
+**Body:** `notes` and/or `markupSettings` (both optional).
 
 ---
 
@@ -482,20 +578,22 @@ Content-Type: application/json
 ```
 
 **Body:**
-
 ```json
 {
-  "hotelCode": "BDC-4782",
-  "tid": "TID-abc123",             // optional, links to search result
-  "optionDetailsId": "uuid",       // optional, links to cached detail
+  "hotelCode": "Ru0AcMoJrZg=",
+  "tid": "00000000000051772101473458",
   "currency": "EUR",
-  "totalPrice": 32748,
+  "totalPrice": 33150,
   "freeCancellation": true,
-  "cancelDeadline": "2026-06-01",
-  "supplierCode": "HPG",
+  "cancelDeadline": "2026-05-26T19:59:59.000Z",
+  "supplierCode": "EANRP",
   "rooms": {
-    "double": { "net": 250, "sell": 310, "qty": 10, "nights": 5 },
-    "twin":   { "net": 220, "sell": 280, "qty": 5,  "nights": 5 }
+    "Club Room (Ocean) - 1 King Bed": {
+      "net": 187.50,
+      "sell": 221,
+      "qty": 15,
+      "nights": 5
+    }
   }
 }
 ```
@@ -520,13 +618,12 @@ Content-Type: application/json
 ```
 
 **Body (all optional):**
-
 ```json
 {
   "totalPrice": 31998,
   "currency": "EUR",
   "rooms": {
-    "double": { "sell": 308 }
+    "Club Room (Ocean) - 1 King Bed": { "sell": 308 }
   }
 }
 ```
@@ -551,7 +648,6 @@ Content-Type: application/json
 ```
 
 **Body:**
-
 ```json
 {
   "serviceName": "Airport Transfer",
@@ -561,25 +657,24 @@ Content-Type: application/json
   "sellPrice": 1000,
   "quantity": 2,
   "days": 1,
-  "notes": "Return transfer x2 coaches"
+  "notes": "Return transfer × 2 coaches"
 }
 ```
 
-Required: `serviceName` only. Everything else is optional.
+Only `serviceName` is required.
 
 ---
 
-### Lock Proposal (prevent concurrent edits)
+### Lock Proposal
 
 ```
 POST /proposals/:id/actions/lock
 Authorization: Bearer <token>
 ```
 
-Lock expires after 15 minutes automatically.
+Lock expires automatically after 15 minutes.
 
-**409 Conflict if already locked by another user:**
-
+**409 if locked by another user:**
 ```json
 {
   "error": {
@@ -608,8 +703,6 @@ POST /proposals/:id/actions/save-draft
 Authorization: Bearer <token>
 ```
 
-Sets proposal status to `draft`.
-
 ---
 
 ### Send Proposal
@@ -621,14 +714,11 @@ Content-Type: application/json
 ```
 
 **Body (optional):**
-
 ```json
 { "sendToEmail": "client@techcorp.com" }
 ```
 
-If `sendToEmail` is omitted, sends to the request's `contactEmail`. Sets status to `sent`.
-
-**409 Conflict** if locked by another user (same shape as lock endpoint).
+If omitted, sends to the request's `contactEmail`. Sets status → `sent`.
 
 ---
 
@@ -639,11 +729,7 @@ POST /proposals/:id/actions/preview-pdf
 Authorization: Bearer <token>
 ```
 
-**Note:** PDF generation is not yet implemented. Returns:
-
-```json
-{ "previewUrl": null, "note": "PDF generation pending" }
-```
+> PDF generation is not yet implemented. Returns `{ "previewUrl": null, "note": "PDF generation pending" }`.
 
 ---
 
@@ -657,17 +743,16 @@ Authorization: Bearer <token>
 ```
 
 **Response `data`:**
-
 ```json
 {
-  "totalRequests": { "value": 142, "vsLastMonth": 12.5 },
-  "pendingRequests": { "value": 38,  "vsLastMonth": -5.0 },
+  "totalRequests":  { "value": 142, "vsLastMonth": 12.5 },
+  "pendingRequests":{ "value": 38,  "vsLastMonth": -5.0 },
   "sentOffers":     { "value": 67,  "vsLastMonth": 8.3  },
   "declined":       { "value": 14,  "vsLastMonth": 0.0  }
 }
 ```
 
-`vsLastMonth` is a percentage change vs the previous calendar month (1 decimal place). Positive = up, negative = down.
+`vsLastMonth` is a percentage change vs the previous calendar month (positive = up, negative = down).
 
 ---
 
@@ -678,10 +763,7 @@ GET /dashboard/recent-offers?limit=10
 Authorization: Bearer <token>
 ```
 
-**Query:** `limit` (default 10, max 50)
-
-**Response `data`:** Array of rows:
-
+**Response `data`:**
 ```json
 [
   {
@@ -689,9 +771,8 @@ Authorization: Bearer <token>
     "referenceNumber": 2458,
     "offerId": "#2458",
     "customer": "TechCorp Ltd",
-    "destination": "Barcelona, Spain",
+    "destination": "Barcelona",
     "checkinDate": "2026-06-10T00:00:00.000Z",
-    "checkoutDate": "2026-06-15T00:00:00.000Z",
     "nights": 5,
     "totalRooms": 15,
     "groupSize": 30,
@@ -708,73 +789,209 @@ Authorization: Bearer <token>
 
 ---
 
-## Hotel Database Search (autocomplete)
+### Notifications
+
+#### List Notifications
 
 ```
-GET /hotels/search?q=barcelona&destinationId=123&starRating=4&limit=20
+GET /dashboard/notifications?unread=true&limit=20
 Authorization: Bearer <token>
 ```
 
-**Query parameters:**
+| Param    | Default | Notes                          |
+|----------|---------|--------------------------------|
+| `unread` | false   | `true` to return only unread   |
+| `limit`  | 20      |                                |
 
-| Param           | Type   | Notes                          |
-|-----------------|--------|--------------------------------|
-| `q`             | string | Hotel name search              |
-| `destinationId` | int    | Filter by destination          |
-| `starRating`    | float  | Filter by star rating (±0.49)  |
-| `limit`         | int    | Default 20                     |
-| `offset`        | int    | Default 0                      |
+**Response `data`:**
+```json
+[
+  {
+    "id": "uuid",
+    "type": "new_offer_ready",
+    "title": "New offer ready — #2458",
+    "message": "AI offer for John Doe (Barcelona) is ready for review.",
+    "entityId": "request-uuid",
+    "entityType": "booking_request",
+    "read": false,
+    "createdAt": "2026-03-06T10:00:00.000Z"
+  }
+]
+```
 
----
+**Notification `type` values:**
 
-## Status Enums
+| Type | When |
+|------|------|
+| `new_offer_ready` | Webhook request processed successfully, AI offer generated |
+| `offer_generation_failed` | Pipeline failed for a webhook request |
 
-### BookingRequest status
-
-| Value        | Meaning                                |
-|--------------|----------------------------------------|
-| `draft`      | Not yet submitted / incomplete form    |
-| `pending`    | Submitted, awaiting agent action       |
-| `processing` | Agent working on quotes                |
-| `completed`  | Proposal sent and accepted             |
-| `cancelled`  | Request cancelled                      |
-
-### Proposal status
-
-| Value      | Meaning                     |
-|------------|-----------------------------|
-| `draft`    | Work in progress            |
-| `sent`     | Sent to client              |
-| `accepted` | Client accepted             |
-| `declined` | Client declined             |
-
----
-
-## Common HTTP Error Codes
-
-| HTTP | `error` code        | Meaning                                  |
-|------|---------------------|------------------------------------------|
-| 400  | `VALIDATION_ERROR`  | Request body/query failed validation     |
-| 401  | `UNAUTHORIZED`      | Missing or invalid Bearer token          |
-| 403  | `FORBIDDEN`         | Token valid but not permitted            |
-| 404  | `NOT_FOUND`         | Resource not found                       |
-| 409  | `PROPOSAL_LOCKED`   | Proposal locked by another user          |
-| 429  | `rate_limited`      | Too many requests                        |
-| 500  | `INTERNAL_ERROR`    | Server error                             |
-
----
-
-## Complete Create-Request-to-Send-Proposal Flow
+#### Mark One Read
 
 ```
-1. POST /requests                         → get requestId
-2. POST /requests/:id/hotel-search        → get hotel options (TIDs + sessionIds)
+PATCH /dashboard/notifications/:id/read
+Authorization: Bearer <token>
+```
+
+#### Mark All Read
+
+```
+POST /dashboard/notifications/read-all
+Authorization: Bearer <token>
+```
+
+---
+
+## Hotel Images
+
+Hotel images are served through a SETT server-side proxy that fetches from WBE's content CDN (`uatcontent.wbeapi.com`). The `imageUrl` field in `HotelResult` contains the relative path — prefix it with the API base URL.
+
+```
+GET /hotels/image?key={imageKey}
+```
+
+No auth token required. Rate limited to 300 requests/minute.
+
+**How it works:**
+1. The search response includes `imageUrl` on each hotel (e.g. `"/api/v1/hotels/image?key=bIoq5Jji83SD..."`)
+2. The backend proxy receives the `key`, then fetches the actual image from WBE's content CDN:
+   `GET https://uatcontent.wbeapi.com/Image/getimage?pic={imageKey}`
+3. The binary image is forwarded to the frontend with proper `Content-Type` header
+
+**Frontend usage:**
+```tsx
+// From hotel search result: hotel.imageUrl = "/api/v1/hotels/image?key=bIoq5Jji83SD..."
+
+const API_BASE_URL = 'http://localhost:4000'; // or your deployed server URL
+
+// Build full image src
+const imageSrc = hotel.imageUrl
+  ? `${API_BASE_URL}${hotel.imageUrl}`
+  : null;
+
+// React example
+<img
+  src={imageSrc ?? '/placeholder-hotel.jpg'}
+  alt={hotel.hotelName}
+  onError={(e) => {
+    (e.target as HTMLImageElement).src = '/placeholder-hotel.jpg';
+  }}
+/>
+```
+
+**Important notes:**
+- `imageUrl` is `null` when no image exists in the database — always show a fallback placeholder
+- Response is cached with `Cache-Control: public, max-age=86400` (24 hours) — browser will cache automatically
+- The proxy returns the original content type from WBE (typically `image/jpeg`)
+- If the upstream image is unavailable, the proxy returns `404` with `{ "error": { "code": "not_found", "message": "Image not available" } }` — use `onError` handler to show placeholder
+
+---
+
+## Hotel Database Search (for hotel name autocomplete)
+
+```
+GET /hotels/search?q=hilton&destinationId=4503&starRating=4&limit=20
+Authorization: Bearer <token>
+```
+
+| Param           | Type   | Notes                         |
+|-----------------|--------|-------------------------------|
+| `q`             | string | Hotel name search             |
+| `destinationId` | int    | Filter by destination         |
+| `starRating`    | float  | Filter by star rating (±0.49) |
+| `limit`         | int    | Default 20                    |
+| `offset`        | int    | Default 0, for pagination     |
+
+---
+
+## Status Reference
+
+### BookingRequest `status`
+
+| Value          | Badge colour | Meaning |
+|----------------|-------------|---------|
+| `pending`      | grey        | Created, waiting for agent to act |
+| `processing`   | blue        | AI offer generation pipeline running |
+| `ai_generated` | green       | AI offer ready — agent should review |
+| `draft`        | yellow      | Agent manually started editing |
+| `completed`    | green       | Proposal sent and accepted |
+| `cancelled`    | red         | Request cancelled |
+
+**Status flow for webhook-submitted requests:**
+```
+pending → processing → ai_generated → completed
+```
+
+**Status flow for manually-created requests:**
+```
+pending → draft → (hotel search) → completed
+```
+
+### Proposal `status`
+
+| Value      | Meaning                   |
+|------------|---------------------------|
+| `draft`    | Work in progress          |
+| `sent`     | Sent to client            |
+| `accepted` | Client accepted           |
+| `declined` | Client declined           |
+
+---
+
+## HTTP Error Codes
+
+| HTTP | `code`              | When                                      |
+|------|---------------------|-------------------------------------------|
+| 400  | `validation_error`  | Request body/query failed validation      |
+| 401  | `unauthorized`      | Missing or invalid Bearer token           |
+| 403  | `forbidden`         | Token valid but not permitted             |
+| 404  | `NOT_FOUND`         | Resource not found                        |
+| 409  | `PROPOSAL_LOCKED`   | Proposal locked by another user           |
+| 429  | `rate_limited`      | Too many requests                         |
+| 500  | `internal_error`    | Server error                              |
+
+---
+
+## Rate Limits
+
+| Endpoint group             | Limit               |
+|----------------------------|---------------------|
+| `POST /requests`           | 50 per 15 minutes   |
+| `POST /requests/:id/hotel-search` | 10 per minute |
+| All other endpoints        | No hard rate limit  |
+
+---
+
+## Complete Manual Flow (Create Request → Send Proposal)
+
+```
+0. GET  /destinations/search?q=Barcelona     → pick destination, get its id
+1. POST /requests                             → create request (use real destinationId)
+2. POST /requests/:id/hotel-search            → run WBE search (30–45s, show spinner)
 3. POST /requests/:id/hotel-search/option-details  → get per-night pricing for selected hotels
-4. POST /requests/:id/hotel-search/calculate-price → get recommended sell price
-5. POST /requests/:requestId/proposals    → create proposal → get proposalId
-6. POST /proposals/:id/actions/lock       → lock for editing
-7. POST /proposals/:id/hotels             → add each hotel (repeat as needed)
-8. POST /proposals/:id/services           → add extra services (optional)
-9. POST /proposals/:id/actions/save-draft → save progress
-10. POST /proposals/:id/actions/send      → send to client
+4. POST /requests/:id/hotel-search/calculate-price → get customer sell price per room/night
+5. POST /requests/:requestId/proposals        → create proposal
+6. POST /proposals/:id/actions/lock           → lock for editing
+7. POST /proposals/:id/hotels                 → add each selected hotel (repeat per hotel)
+8. POST /proposals/:id/services               → add extras (optional)
+9. POST /proposals/:id/actions/save-draft     → save progress
+10. POST /proposals/:id/actions/send          → send to client
 ```
+
+## Webhook (Automatic) Flow
+
+When a group booking form is submitted via Wix, the backend handles everything automatically:
+
+```
+Wix form submitted
+  → POST /webhook (no auth, uses x-webhook-secret header)
+  → BookingRequest created (status: pending)
+  → status → processing (pipeline starts)
+  → WBE hotel search runs in background
+  → Proposal created with top 5 hotels
+  → status → ai_generated
+  → Staff notification sent (email + in-app)
+  → Notification appears in /dashboard/notifications
+```
+
+Agent's job after this: open the request, review the auto-generated proposal, adjust pricing/hotels if needed, then send to the client.

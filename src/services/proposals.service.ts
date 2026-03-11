@@ -189,6 +189,51 @@ export class ProposalService {
         return result;
     }
 
+    async updateServiceInProposal(proposalId: string, serviceId: string, serviceData: any, userId?: string, ip?: string) {
+        const existing = await proposalRepository.findById(proposalId);
+        if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        assertModifiable(existing);
+        assertNotLocked(existing, userId);
+
+        const result = await proposalRepository.updateServiceTx(proposalId, serviceId, serviceData);
+        if (!result) throw { status: 404, message: 'Service not found on this proposal', code: 'NOT_FOUND' };
+
+        await logAuditEvent({
+            userId,
+            action: 'update_service',
+            entity: 'proposal_service',
+            entityId: serviceId,
+            details: { proposalId, fields: Object.keys(serviceData) },
+            ipAddress: ip,
+        });
+
+        return result;
+    }
+
+    async removeServiceFromProposal(proposalId: string, serviceId: string, userId?: string, ip?: string) {
+        const existing = await proposalRepository.findById(proposalId);
+        if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        assertModifiable(existing);
+        assertNotLocked(existing, userId);
+
+        const service = existing.services.find((s: any) => s.id === serviceId);
+        if (!service) throw { status: 404, message: 'Service not found on this proposal', code: 'NOT_FOUND' };
+
+        const result = await proposalRepository.removeServiceTx(proposalId, serviceId);
+        if (!result) throw { status: 404, message: 'Service not found on this proposal', code: 'NOT_FOUND' };
+
+        await logAuditEvent({
+            userId,
+            action: 'remove_service',
+            entity: 'proposal_service',
+            entityId: serviceId,
+            details: { proposalId, snapshot: service },
+            ipAddress: ip,
+        });
+
+        return result;
+    }
+
     async lockProposal(id: string, userId: string, ip?: string) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };

@@ -7,6 +7,7 @@ import {
     AddProposalHotelSchema,
     AdjustHotelPricingSchema,
     AddProposalServiceSchema,
+    UpdateProposalServiceSchema,
     SendProposalSchema,
 } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
@@ -57,6 +58,15 @@ router.post(
     validate(AddProposalServiceSchema, 'body'),
     proposalsController.addService,
 );
+
+router.patch(
+    '/:id/services/:serviceId',
+    authMiddleware,
+    validate(UpdateProposalServiceSchema, 'body'),
+    proposalsController.updateService,
+);
+
+router.delete('/:id/services/:serviceId', authMiddleware, proposalsController.removeService);
 
 // Actions
 router.post('/:id/actions/lock', authMiddleware, proposalsController.lock);

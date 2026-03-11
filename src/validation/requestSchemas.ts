@@ -141,6 +141,7 @@ const RoomDetailSchema = z.object({
 
 export const AddProposalHotelSchema = z.object({
     hotelCode: z.string().min(1),
+    hotelName: z.string().max(500).optional(),
     tid: z.string().optional(),
     rooms: z.record(z.string(), RoomDetailSchema).optional(),
     currency: z.string().min(2).max(10),
@@ -169,6 +170,25 @@ export const AdjustHotelPricingSchema = z.object({
 // ── ProposalService ────────────────────────────────────────────────────────
 export const AddProposalServiceSchema = z.object({
     serviceName: z.string().min(1),
+    dateFrom: z
+        .string()
+        .optional()
+        .nullable()
+        .refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid date' }),
+    dateTo: z
+        .string()
+        .optional()
+        .nullable()
+        .refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid date' }),
+    buyPrice: z.number().nonnegative().optional(),
+    sellPrice: z.number().nonnegative().optional(),
+    quantity: z.number().int().nonnegative().optional(),
+    days: z.number().int().nonnegative().optional(),
+    notes: z.string().max(2000).optional(),
+});
+
+export const UpdateProposalServiceSchema = z.object({
+    serviceName: z.string().min(1).optional(),
     dateFrom: z
         .string()
         .optional()

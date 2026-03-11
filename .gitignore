@@ -30,3 +30,15 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Documentation & diagrams (keep README.md only)
+*.md
+!README.md
+*.mmd
+*.dbml
+*.pdf
+*.docx
+*.txt
+
+# Public files (docs, images, Figma assets)
+src/publicfiles/

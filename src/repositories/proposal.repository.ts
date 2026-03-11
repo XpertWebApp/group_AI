@@ -117,6 +117,7 @@ export class ProposalRepository {
         proposalId: string,
         hotelData: {
             hotelCode: string;
+            hotelName?: string;
             tid?: string;
             rooms?: any;
             currency: string;
@@ -147,6 +148,7 @@ export class ProposalRepository {
                 data: {
                     proposalId,
                     hotelCode: hotelData.hotelCode,
+                    hotelName: hotelData.hotelName ?? null,
                     tid: hotelData.tid ?? null,
                     rooms: hotelData.rooms ?? Prisma.JsonNull,
                     currency: hotelData.currency,
@@ -240,6 +242,87 @@ export class ProposalRepository {
             });
 
             return { service, proposal: updatedProposal };
+        });
+    }
+
+    /**
+     * Updates a service and recalculates totals atomically.
+     */
+    async updateServiceTx(
+        proposalId: string,
+        serviceId: string,
+        serviceData: {
+            serviceName?: string;
+            dateFrom?: string | null;
+            dateTo?: string | null;
+            buyPrice?: number;
+            sellPrice?: number;
+            quantity?: number;
+            days?: number;
+            notes?: string;
+        },
+    ) {
+        return prisma.$transaction(async (tx) => {
+            const existing = await tx.proposalService.findFirst({
+                where: { id: serviceId, proposalId },
+            });
+            if (!existing) return null;
+
+            const service = await tx.proposalService.update({
+                where: { id: serviceId },
+                data: {
+                    ...(serviceData.serviceName !== undefined && { serviceName: serviceData.serviceName }),
+                    ...(serviceData.dateFrom !== undefined && {
+                        dateFrom: serviceData.dateFrom ? new Date(serviceData.dateFrom) : null,
+                    }),
+                    ...(serviceData.dateTo !== undefined && {
+                        dateTo: serviceData.dateTo ? new Date(serviceData.dateTo) : null,
+                    }),
+                    ...(serviceData.buyPrice !== undefined && {
+                        buyPrice: new Decimal(serviceData.buyPrice).toFixed(2),
+                    }),
+                    ...(serviceData.sellPrice !== undefined && {
+                        sellPrice: new Decimal(serviceData.sellPrice).toFixed(2),
+                    }),
+                    ...(serviceData.quantity !== undefined && { quantity: serviceData.quantity }),
+                    ...(serviceData.days !== undefined && { days: serviceData.days }),
+                    ...(serviceData.notes !== undefined && { notes: serviceData.notes }),
+                },
+            });
+
+            const proposal = await tx.proposal.findUnique({ where: { id: proposalId }, select: { markupSettings: true } });
+            const { totalBuy, totalSell } = await recalcTotals(tx, proposalId, proposal?.markupSettings);
+
+            const updatedProposal = await tx.proposal.update({
+                where: { id: proposalId },
+                data: { totalBuy: totalBuy.toFixed(2), totalSell: totalSell.toFixed(2) },
+            });
+
+            return { service, proposal: updatedProposal };
+        });
+    }
+
+    /**
+     * Deletes a service and recalculates totals atomically.
+     */
+    async removeServiceTx(proposalId: string, serviceId: string) {
+        return prisma.$transaction(async (tx) => {
+            const existing = await tx.proposalService.findFirst({
+                where: { id: serviceId, proposalId },
+            });
+            if (!existing) return null;
+
+            await tx.proposalService.delete({ where: { id: serviceId } });
+
+            const proposal = await tx.proposal.findUnique({ where: { id: proposalId }, select: { markupSettings: true } });
+            const { totalBuy, totalSell } = await recalcTotals(tx, proposalId, proposal?.markupSettings);
+
+            const updatedProposal = await tx.proposal.update({
+                where: { id: proposalId },
+                data: { totalBuy: totalBuy.toFixed(2), totalSell: totalSell.toFixed(2) },
+            });
+
+            return { proposal: updatedProposal };
         });
     }
 

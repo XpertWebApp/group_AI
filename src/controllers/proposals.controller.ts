@@ -104,6 +104,40 @@ export class ProposalsController {
         }
     }
 
+    async updateService(req: Request, res: Response, next: NextFunction) {
+        try {
+            const body = (req as any).validated?.body ?? req.body;
+            const userId = (req as any).user?.id;
+            const ip = req.ip;
+            const result = await proposalsService.updateServiceInProposal(
+                req.params['id'] as string,
+                req.params['serviceId'] as string,
+                body,
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Service updated');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async removeService(req: Request, res: Response, next: NextFunction) {
+        try {
+            const userId = (req as any).user?.id;
+            const ip = req.ip;
+            await proposalsService.removeServiceFromProposal(
+                req.params['id'] as string,
+                req.params['serviceId'] as string,
+                userId,
+                ip,
+            );
+            return res.status(204).send();
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async lock(req: Request, res: Response, next: NextFunction) {
         try {
             const userId = (req as any).user?.id;
