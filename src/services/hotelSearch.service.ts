@@ -99,6 +99,8 @@ export interface HotelResult {
     address?: string | null;
     addressCity?: string | null;
     addressCountry?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     sessionId: string;
     /**
      * include  – hotel can confidently fulfill the requested room count
@@ -925,6 +927,8 @@ export class HotelSearchService {
                 address,
                 addressCity: dbHotel?.addressCity ?? null,
                 addressCountry: dbHotel?.addressCountry ?? null,
+                latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,
+                longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : null,
                 sessionId: globalSessionId,
                 status,
                 totalRooms: hotelTotalRooms,

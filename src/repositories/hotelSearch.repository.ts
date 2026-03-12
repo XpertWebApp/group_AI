@@ -10,6 +10,8 @@ export interface HotelCodeRow {
     destinationId: number | null;
     addressCity: string | null;
     addressCountry: string | null;
+    latitude: Decimal | null;
+    longitude: Decimal | null;
     /** Physical room count from WBE static data. Used for Step 3.2 inventory overlap check. */
     totalRooms?: number | null;
     /** Primary image key (displayOrder=0) from HotelImage table, if available. */
@@ -33,6 +35,8 @@ export class HotelSearchRepository {
             destinationId: true,
             addressCity: true,
             addressCountry: true,
+            latitude: true,
+            longitude: true,
             totalRooms: true,
         };
 
@@ -69,6 +73,8 @@ export class HotelSearchRepository {
                     destinationId: true,
                     addressCity: true,
                     addressCountry: true,
+                    latitude: true,
+                    longitude: true,
                     totalRooms: true,
                 },
             }),

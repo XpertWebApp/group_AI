@@ -154,6 +154,8 @@ export const AddProposalHotelSchema = z.object({
         .refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid date' }),
     supplierCode: z.string().optional(),
     optionDetailsId: z.string().uuid().optional(),
+    latitude: z.number().min(-90).max(90).optional().nullable(),
+    longitude: z.number().min(-180).max(180).optional().nullable(),
 });
 
 export const AdjustHotelPricingSchema = z.object({
@@ -209,6 +211,64 @@ export const UpdateProposalServiceSchema = z.object({
 // ── Send Proposal ─────────────────────────────────────────────────────────
 export const SendProposalSchema = z.object({
     sendToEmail: z.string().email().optional(),
+});
+
+// ── Settings: General Configuration ─────────────────────────────────────────
+export const UpdateGeneralConfigSchema = z.object({
+    defaultMarkupPercentage: z
+        .string()
+        .regex(/^\d{1,3}$/, 'Must be a number between 0 and 100')
+        .refine((v) => parseInt(v, 10) >= 0 && parseInt(v, 10) <= 100, {
+            message: 'Markup must be between 0 and 100',
+        }),
+});
+
+// ── Settings: Email Configuration ───────────────────────────────────────────
+export const UpdateEmailConfigSchema = z.object({
+    smtpHost: z.string().min(1, 'SMTP host is required'),
+    smtpPort: z.string().regex(/^\d+$/, 'Port must be a number'),
+    smtpUsername: z.string().min(1, 'Username is required'),
+    smtpPassword: z.string().optional(),
+    fromEmail: z.string().email('Invalid from email'),
+    fromName: z.string().min(1, 'From name is required'),
+});
+
+// ── Settings: Company Details ───────────────────────────────────────────────
+export const UpdateCompanyDetailsSchema = z.object({
+    companyName: z.string().min(1, 'Company name is required'),
+    assignedPerson: z.string().min(1, 'Assigned person is required'),
+    emailAddress: z.string().email('Invalid email address'),
+    phoneNumber: z.string().min(5, 'Phone number is required'),
+    website: z.string().min(1, 'Website is required'),
+    taxId: z.string().min(1, 'Tax ID is required'),
+    address: z.string().min(1, 'Address is required'),
+});
+
+// ── Settings: Policies ──────────────────────────────────────────────────────
+export const UpdatePoliciesSchema = z.object({
+    termsConditionsEn: z.string().optional(),
+    termsConditionsDe: z.string().optional(),
+    cancellationConditionsEn: z.string().optional(),
+    cancellationConditionsDe: z.string().optional(),
+});
+
+// ── Settings: Supplier Limits ───────────────────────────────────────────────
+export const UpdateSupplierLimitSchema = z.object({
+    maxRooms: z.number().int().min(0).optional(),
+    groupsAllowed: z.boolean().optional(),
+    notes: z.string().max(500).nullable().optional(),
+});
+
+export const SupplierLimitsQuerySchema = z.object({
+    search: z.string().optional(),
+    page: z
+        .string()
+        .optional()
+        .transform((v) => (v ? parseInt(v, 10) : 1)),
+    limit: z
+        .string()
+        .optional()
+        .transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 20)),
 });
 
 // ── Hotel Search (DB query) ────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import config from './config';
 import logger from './utils/logger';
 import { PrismaClient } from '@prisma/client';
 import './services/cron.service'; // Initialize cron jobs
+import { refreshSupplierLimitsCache } from './config/supplierLimits';
 
 const prisma = new PrismaClient();
 
@@ -10,6 +11,10 @@ const startServer = async () => {
     try {
         await prisma.$connect();
         logger.info('Connected to the database');
+
+        // Load supplier limits from DB into in-memory cache
+        await refreshSupplierLimitsCache();
+        logger.info('Supplier limits cache loaded');
 
         const server = app.listen(config.port, '0.0.0.0', () => {
             logger.info(`Server is running on port ${config.port} in ${config.env} mode`);

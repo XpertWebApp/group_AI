@@ -301,6 +301,8 @@ model ProposalHotel {
   cancelDeadline       DateTime? @map("cancel_deadline") @db.Timestamptz(6)
   supplierCode         String?   @map("supplier_code") @db.VarChar(50)
   rooms                Json?
+  latitude             Decimal?  @db.Decimal(10, 7)
+  longitude            Decimal?  @db.Decimal(10, 7)
   optionDetailsId      String?   @map("option_details_id") @db.Uuid
   createdAt            DateTime  @default(now()) @map("created_at")
   deletedAt            DateTime? @map("deleted_at")
@@ -414,5 +416,46 @@ enum ProposalStatus {
   approved
   declined
 
+  @@schema("app")
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+model Setting {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  SettingCategory
+  key       String           @db.VarChar(100)
+  value     String?
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("settings")
+  @@schema("app")
+}
+
+enum SettingCategory {
+  general
+  email
+  company
+  policies
+
+  @@schema("app")
+}
+
+model SupplierLimit {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierCode  String   @unique @map("supplier_code") @db.VarChar(50)
+  providerName  String   @map("provider_name") @db.VarChar(255)
+  accCode       String?  @map("acc_code") @db.VarChar(50)
+  maxRooms      Int      @default(9) @map("max_rooms")
+  groupsAllowed Boolean  @default(true) @map("groups_allowed")
+  notes         String?
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([supplierCode])
+  @@map("supplier_limits")
   @@schema("app")
 }

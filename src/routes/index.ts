@@ -7,6 +7,7 @@ import proposalsRoutes from './proposals.routes';
 import hotelsRoutes from './hotels.routes';
 import destinationsRoutes from './destinations.routes';
 import dashboardRoutes from './dashboard.routes';
+import settingsRoutes from './settings.routes';
 
 const router = Router();
 
@@ -14,6 +15,7 @@ router.use('/auth', authRoutes);
 router.use('/webhook', webhookRoutes);
 router.use('/admin', adminRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/settings', settingsRoutes);
 router.use('/requests', requestsRoutes);
 router.use('/proposals', proposalsRoutes);
 router.use('/hotels', hotelsRoutes);

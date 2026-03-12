@@ -126,6 +126,8 @@ export class ProposalRepository {
             cancelDeadline?: string | null;
             supplierCode?: string;
             optionDetailsId?: string;
+            latitude?: number | null;
+            longitude?: number | null;
         },
         markupSettings?: any,
     ) {
@@ -160,6 +162,8 @@ export class ProposalRepository {
                     supplierCode: hotelData.supplierCode ?? null,
                     optionDetailsId: hotelData.optionDetailsId ?? null,
                     optionDetailsFetched,
+                    latitude: hotelData.latitude != null ? new Decimal(hotelData.latitude).toFixed(7) : null,
+                    longitude: hotelData.longitude != null ? new Decimal(hotelData.longitude).toFixed(7) : null,
                 },
             });
 

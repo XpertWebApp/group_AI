@@ -1,10 +1,13 @@
 /**
  * Supplier code → room limits and group booking rules.
- * Source: SETT Phase 1 guide (Oliver's meetings & emails).
  *
- * maxRooms: null = unlimited (HPG/HyperGuest)
+ * DB-backed with in-memory cache. The static SUPPLIER_LIMITS_FALLBACK serves
+ * as a safety net if the DB hasn't been loaded yet (e.g., during startup).
+ *
+ * maxRooms: 0 with unlimited flag = unlimited (HPG/HyperGuest)
  * groupsAllowed: false = skip entirely for group bookings
  */
+import { PrismaClient } from '@prisma/client';
 
 export interface SupplierLimit {
     code: string;
@@ -14,7 +17,8 @@ export interface SupplierLimit {
     notes?: string;
 }
 
-export const SUPPLIER_LIMITS: Record<string, SupplierLimit> = {
+// ── Static fallback (used before DB cache is loaded) ────────────────────────
+const SUPPLIER_LIMITS_FALLBACK: Record<string, SupplierLimit> = {
     BMMX: { code: 'BMMX', name: 'BookMe Maldives', maxRooms: 9, groupsAllowed: true },
     DDT: { code: 'DDT', name: 'Dida Travel', maxRooms: 9, groupsAllowed: true },
     DOTW: { code: 'DOTW', name: 'DOTW', maxRooms: 9, groupsAllowed: true },
@@ -34,6 +38,63 @@ export const SUPPLIER_LIMITS: Record<string, SupplierLimit> = {
     TLE_S: { code: 'TLE_S', name: 'TLE_S', maxRooms: 0, groupsAllowed: false, notes: 'Not for groups' },
     YLG: { code: 'YLG', name: 'Yalago', maxRooms: 9, groupsAllowed: true },
 };
+
+// ── In-memory cache ─────────────────────────────────────────────────────────
+let cachedLimits: Record<string, SupplierLimit> | null = null;
+
+/**
+ * Loads supplier limits from DB into the in-memory cache.
+ * Call this on server startup and after any supplier limit update.
+ */
+export async function refreshSupplierLimitsCache(): Promise<void> {
+    try {
+        const prisma = new PrismaClient();
+        const rows = await prisma.supplierLimit.findMany();
+        await prisma.$disconnect();
+
+        const map: Record<string, SupplierLimit> = {};
+        for (const row of rows) {
+            map[row.supplierCode] = {
+                code: row.supplierCode,
+                name: row.providerName,
+                // DB stores 0 for unlimited (HPG), convert to null for backward compat
+                maxRooms: row.maxRooms === 0 && row.groupsAllowed ? null : row.maxRooms,
+                groupsAllowed: row.groupsAllowed,
+                notes: row.notes ?? undefined,
+            };
+        }
+        cachedLimits = map;
+    } catch {
+        // If DB is unavailable, keep using the fallback
+        cachedLimits = null;
+    }
+}
+
+/** Returns the active supplier limits map (DB cache or static fallback). */
+export const SUPPLIER_LIMITS: Record<string, SupplierLimit> = new Proxy(
+    {} as Record<string, SupplierLimit>,
+    {
+        get(_target, prop: string) {
+            const source = cachedLimits ?? SUPPLIER_LIMITS_FALLBACK;
+            return source[prop];
+        },
+        has(_target, prop: string) {
+            const source = cachedLimits ?? SUPPLIER_LIMITS_FALLBACK;
+            return prop in source;
+        },
+        ownKeys() {
+            const source = cachedLimits ?? SUPPLIER_LIMITS_FALLBACK;
+            return Object.keys(source);
+        },
+        getOwnPropertyDescriptor(_target, prop: string) {
+            const source = cachedLimits ?? SUPPLIER_LIMITS_FALLBACK;
+            if (prop in source) {
+                return { configurable: true, enumerable: true, value: source[prop] };
+            }
+            return undefined;
+        },
+    },
+);
 
 /** Returns the max rooms for a supplier. Unknown suppliers default to 9 (conservative). */
 export function getSupplierMaxRooms(supplierCode: string): number {
