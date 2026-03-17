@@ -444,6 +444,41 @@ enum SettingCategory {
   @@schema("app")
 }
 
+enum HotelProbeJobStatus {
+  QUEUED
+  RUNNING
+  PROBING
+  COMPLETED
+  SKIPPED_INSUFFICIENT
+  FAILED
+
+  @@schema("app")
+}
+
+model HotelProbeJob {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  searchRequestId String              @map("search_request_id") @db.Uuid
+  hotelCode       String              @map("hotel_code") @db.VarChar(255)
+  requestedRooms  Int                 @map("requested_rooms")
+  probeLimit      Int                 @map("probe_limit")
+  roomsFound      Int                 @default(0) @map("rooms_found")
+  status          HotelProbeJobStatus @default(QUEUED)
+  lastProbeRange  String?             @map("last_probe_range") @db.VarChar(20)
+  attempts        Int                 @default(0)
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz(6)
+  resultJson      Json?               @map("result_json")
+  optionsSnapshot Json?               @map("options_snapshot")
+  errorMsg        String?             @map("error_msg")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([searchRequestId])
+  @@index([status])
+  @@index([searchRequestId, status])
+  @@map("hotel_probe_jobs")
+  @@schema("app")
+}
+
 model SupplierLimit {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   supplierCode  String   @unique @map("supplier_code") @db.VarChar(50)

@@ -69,6 +69,26 @@ router.post(
 );
 
 /**
+ * GET /requests/:id/hotel-search/events
+ * SSE stream — real-time hotel probe progress + completed events.
+ */
+router.get(
+    '/:id/hotel-search/events',
+    authMiddleware,
+    hotelSearchController.events,
+);
+
+/**
+ * GET /requests/:id/hotel-search/status
+ * Polling endpoint — returns current HotelProbeJob states for clients without SSE.
+ */
+router.get(
+    '/:id/hotel-search/status',
+    authMiddleware,
+    hotelSearchController.probeStatus,
+);
+
+/**
  * POST /requests/:id/hotel-search/option-details
  * Fetches exact per-night pricing and cancellation policy (OptionDetailsV2) for selected TIDs.
  * Step 6 from the SETT Phase 1 guide. Results are cached in HotelOptionDetail.

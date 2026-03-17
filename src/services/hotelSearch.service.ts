@@ -1,10 +1,15 @@
 
 
+import { randomUUID } from 'crypto';
 import requestRepository from '../repositories/request.repository';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
+import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import wbeClientService from './wbe.client.service';
+import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
+import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
+import type { ExpandedRoom } from '../queue/hotelProbeJob.types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -151,6 +156,21 @@ export interface HotelSearchResponse {
     };
 }
 
+/**
+ * Returned by searchForRequest and generateAutoOffer after the new queue-based flow.
+ * The actual hotel results arrive asynchronously via SSE / polling.
+ */
+export interface HotelSearchQueueResponse {
+    requestId: string;
+    totalCandidates: number;
+    jobsQueued: number;
+    message: string;
+    /** Subscribe for real-time hotel-level updates. */
+    sseEndpoint: string;
+    /** Poll this endpoint if SSE is not available. */
+    statusEndpoint: string;
+}
+
 // ─── Auto-Offer Types (accumulation loop — PDF Steps 2–4) ────────────────────
 
 /** One accepted hotel in the auto-generated offer. */
@@ -260,7 +280,48 @@ function countTotalRooms(rooms: any): number {
     );
 }
 
-/** Build the Rooms array for the WBE search body (always SEARCH_ROOMS entries). */
+/**
+ * Expand the booking request rooms JSON into a flat ordered list of individual rooms.
+ * e.g. { double: 3, single: 1 } → [2-adult, 2-adult, 2-adult, 1-adult]
+ * Used by buildProbeBatch to compose the Rooms array for each probe call.
+ */
+export function expandRequestRooms(rooms: any): ExpandedRoom[] {
+    if (!rooms || typeof rooms !== 'object') return [{ adults: ADULTS_PER_ROOM, children: 0, childrenAges: [] }];
+    const expanded: ExpandedRoom[] = [];
+    for (const [type, count] of Object.entries(rooms)) {
+        const n = Number(count) || 0;
+        const adults = ROOM_TYPE_ADULTS[type as string] ?? ADULTS_PER_ROOM;
+        for (let i = 0; i < n; i++) {
+            expanded.push({ adults, children: 0, childrenAges: [] });
+        }
+    }
+    return expanded.length > 0 ? expanded : [{ adults: ADULTS_PER_ROOM, children: 0, childrenAges: [] }];
+}
+
+/**
+ * Build the WBE Rooms array for one probe batch.
+ * startRoomId is 1-based (R1 = first room, R4 = second batch, etc.).
+ * Room composition cycles through expandedRooms so the adults/children
+ * match the actual group composition.
+ */
+export function buildProbeBatch(
+    expandedRooms: ExpandedRoom[],
+    startRoomId: number,
+    batchSize: number = PROBE_BATCH_SIZE,
+): Array<{ RoomID: number; AdultsNo: string; ChildrenNo: string; ChildrenAges: number[] }> {
+    return Array.from({ length: batchSize }, (_, i) => {
+        const roomIndex = (startRoomId - 1 + i) % expandedRooms.length;
+        const room = expandedRooms[roomIndex];
+        return {
+            RoomID: startRoomId + i,
+            AdultsNo: String(room.adults),
+            ChildrenNo: String(room.children),
+            ChildrenAges: room.childrenAges,
+        };
+    });
+}
+
+/** @deprecated Use buildProbeBatch with expandRequestRooms instead. Kept for backward-compat. */
 function buildSearchRooms(): Array<{ RoomID: number; AdultsNo: string; ChildrenNo: string; ChildrenAges: any[] }> {
     return Array.from({ length: SEARCH_ROOMS }, (_, i) => ({
         RoomID: i + 1,
@@ -669,17 +730,14 @@ function parseOptionDetails(raw: any): {
 
 export class HotelSearchService {
     /**
-     * Full hotel search orchestration for a booking request.
+     * Queue-based hotel search orchestration for a booking request.
      *
-     * Steps:
-     *  1. Load request from DB
-     *  2. Get hotel codes by destination + star rating (±1 if includeAlternativeStars)
-     *  3. Call WBE SearchAndGetByHotelsV2 with SEARCH_ROOMS rooms
-     *  4. Session-level poll if Finished: false
-     *  5. Per-option poll for any options with UpdatedOptionsNeeded: true (Option B)
-     *  6. Filter, validate capacity, select mid-range, build supplier split
+     * Dispatches one HotelProbeJob per candidate hotel to RabbitMQ.
+     * Each job probes R1-R3, R4-R6, R7-R9 … sequentially until capacity is confirmed.
+     * Returns immediately — results arrive via SSE (GET /requests/:id/hotel-search/events)
+     * or polling (GET /requests/:id/hotel-search/status).
      */
-    async searchForRequest(requestId: string, params: HotelSearchParams = {}): Promise<HotelSearchResponse> {
+    async searchForRequest(requestId: string, params: HotelSearchParams = {}): Promise<HotelSearchQueueResponse> {
         // 1. Load request
         const request = await requestRepository.findById(requestId);
         if (!request) {
@@ -697,14 +755,21 @@ export class HotelSearchService {
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const includeAlternativeStars = params.includeAlternativeStars !== false;
-        const waitSeconds = params.waitSeconds ?? 35;
+        const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
+        const markupPercent = 18;
 
-        // 2. Resolve hotel codes from DB
+        const checkinDate = request.checkinDate instanceof Date
+            ? request.checkinDate.toISOString().split('T')[0]
+            : String(request.checkinDate);
+
+        const dominantRoomType = getDominantRoomType((request as any).rooms);
+        const expandedRooms = expandRequestRooms((request as any).rooms);
+
+        // Resolve candidate hotels from DB
         const primaryStars = requestedStarRating ? [requestedStarRating] : [];
         const altStars = includeAlternativeStars && requestedStarRating
             ? [requestedStarRating - 1, requestedStarRating + 1].filter((s) => s >= 1 && s <= 5)
             : [];
-
         const allSearchStars = [...new Set([...primaryStars, ...altStars])];
 
         const dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
@@ -714,282 +779,57 @@ export class HotelSearchService {
 
         if (dbHotels.length === 0) {
             logger.warn({ requestId, destinationId, starRatings: allSearchStars }, 'No hotels found in DB for destination');
-        }
-
-        const primaryHotelCodes = new Set(
-            primaryStars.length === 0
-                ? dbHotels.map((h) => h.hotelCode)
-                : dbHotels
-                      .filter((h) => {
-                          const s = h.starRating ? Number(h.starRating) : null;
-                          return s !== null && primaryStars.some((ps) => Math.abs(ps - s) < 0.5);
-                      })
-                      .map((h) => h.hotelCode),
-        );
-
-        const allHotelCodes = dbHotels.map((h) => h.hotelCode);
-
-        // 3. Call WBE in chunks of MAX_HOTEL_IDS_PER_CALL
-        const chunks: string[][] = [];
-        for (let i = 0; i < allHotelCodes.length; i += MAX_HOTEL_IDS_PER_CALL) {
-            chunks.push(allHotelCodes.slice(i, i + MAX_HOTEL_IDS_PER_CALL));
-        }
-
-        const checkinDate = request.checkinDate instanceof Date
-            ? request.checkinDate.toISOString().split('T')[0]
-            : String(request.checkinDate);
-
-        const chunkResults = await Promise.all(
-            chunks.map((hotelIds) =>
-                wbeClientService.searchAndGetByHotelsV2({
-                    HotelIds: hotelIds,
-                    CheckInDate: checkinDate,
-                    Nights: nights,
-                    // Live API uses 'Waitseconds' (lowercase 's') — confirmed from actual API call
-                    Waitseconds: waitSeconds,
-                    CurrencyCode: currencyCode,
-                    NationalityCode: nationalityCode,
-                    Rooms: buildSearchRooms(),
-                }).catch((err: any) => {
-                    logger.error({ requestId, error: err.message, hotelIds }, 'WBE search chunk failed');
-                    return null;
-                }),
-            ),
-        );
-
-        // 4. Merge chunk results; session-level poll for Finished: false
-        // Key fix: WBE returns hotels under 'Data', not 'Hotels'
-        const mergedHotels: any[] = [];
-        let globalSessionId = '';
-        let finished = true;
-
-        for (const result of chunkResults) {
-            if (!result) continue;
-
-            const sessionId = field<string>(result, 'SessionID', 'sessionId', 'SessionId') ?? '';
-            if (!globalSessionId) globalSessionId = sessionId;
-
-            const isFinished = field<boolean>(result, 'Finished', 'finished') ?? true;
-
-            // Live API: hotel data is in 'Data' array (not 'Hotels')
-            const hotels = field<any[]>(result, 'Data', 'data', 'Hotels', 'hotels') ?? [];
-            mergedHotels.push(...hotels);
-
-            if (!isFinished && sessionId) {
-                finished = false;
-                const polledHotels = await this.pollUntilFinished(sessionId);
-                mergedHotels.push(...polledHotels);
-            }
-        }
-
-        // 5. Option B: per-option UpdatedOptionsNeeded refresh
-        //    After initial collection, if any hotel has options with UpdatedOptionsNeeded: true,
-        //    poll GetUpdatedOptions once more to get fresh data and merge it in.
-        if (globalSessionId) {
-            const hasStaleOptions = mergedHotels.some((h) =>
-                (field<any[]>(h, 'Options', 'options') ?? []).some(
-                    (o: any) => field<boolean>(o, 'UpdatedOptionsNeeded', 'updatedOptionsNeeded') === true,
-                ),
-            );
-
-            if (hasStaleOptions) {
-                logger.info({ requestId, sessionId: globalSessionId }, 'Polling for UpdatedOptionsNeeded options');
-                const refreshed = await this.pollUntilFinished(globalSessionId);
-                // Replace stale hotel entries with refreshed ones (matched by HotelCode)
-                const refreshMap = new Map<string, any>();
-                for (const h of refreshed) {
-                    const code = field<string>(h, 'HotelCode', 'hotelCode') ?? '';
-                    if (code) refreshMap.set(code, h);
-                }
-                for (let i = 0; i < mergedHotels.length; i++) {
-                    const code = field<string>(mergedHotels[i], 'HotelCode', 'hotelCode') ?? '';
-                    if (refreshMap.has(code)) mergedHotels[i] = refreshMap.get(code);
-                }
-            }
-        }
-
-        // Build DB lookup map for enriching results
-        const dbHotelMap = await hotelSearchRepository.getHotelsByCode(
-            mergedHotels.map((h) => field<string>(h, 'HotelCode', 'hotelCode') ?? '').filter(Boolean),
-        );
-
-        // Step 2.3: Determine dominant room type from request (for room type filter).
-        // EC3 (mixed room types) is handled by running the loop per room type —
-        // for now we use the dominant type as primary filter. TODO: full EC3 implementation.
-        const dominantRoomType = getDominantRoomType((request as any).rooms);
-
-        // 6. Process each hotel
-        const primaryResults: HotelResult[] = [];
-        const alternativeResults: HotelResult[] = [];
-
-        for (const wbeHotel of mergedHotels) {
-            const hotelCode = field<string>(wbeHotel, 'HotelCode', 'hotelCode', 'Code') ?? '';
-            if (!hotelCode) continue;
-
-            const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
-            const allOptions = parseWbeOptions(rawOptions, nights);
-
-            // Filter 1: Only group-allowed suppliers
-            const groupAllowed = allOptions.filter((o) => isGroupAllowed(o.supplierCode));
-
-            // Filter 2: Free cancellation only (mandatory for groups)
-            const freeCxlOptions = groupAllowed.filter((o) => o.freeCancellation);
-
-            // Filter 3: Exclude on-request options (groups need instant confirmation)
-            const confirmedOptions = freeCxlOptions.filter((o) => !o.onRequest);
-
-            // Filter 4: Meal type (if specified)
-            const mealFiltered = params.mealType
-                ? confirmedOptions.filter((o) => o.mealType?.toUpperCase() === params.mealType!.toUpperCase())
-                : confirmedOptions;
-
-            if (mealFiltered.length === 0) continue;
-
-            // Filter 5 (Step 2.3): Room type filter with Oliver's flexibility rules.
-            // Single→Twin, Double→Twin, Triple→Quad. If dominant type is null → no filter.
-            const roomTypeFiltered = mealFiltered.filter(
-                (o) => matchesRoomType(o.roomDescriptions, dominantRoomType),
-            );
-            if (roomTypeFiltered.length === 0) continue;
-
-            // Filter 6 (Step 2.3): Supplier deduplication — one entry per supplier, lowest price wins.
-            const dedupedOptions = deduplicateBySupplier(roomTypeFiltered);
-
-            // Step 2.4: Mid-range price band (skip bottom 20% + top 20%)
-            const prices = dedupedOptions.map((o) => o.pricePerRoomPerNight);
-            const midPrices = selectMidRange(prices);
-            const selectedOptions = dedupedOptions.filter((o) => midPrices.includes(o.pricePerRoomPerNight));
-            const optionsForCapacity = selectedOptions.length > 0 ? selectedOptions : dedupedOptions;
-            const highestMidRangePrice = midPrices.length > 0 ? Math.max(...midPrices) : undefined;
-
-            // Enrich with DB info (needed for Steps 3.1 + 3.2)
-            const dbHotel = dbHotelMap.get(hotelCode);
-            const hotelTotalRooms = dbHotel?.totalRooms ?? null;
-
-            // Steps 3.1 + 3.2: Capacity check + inventory overlap detection.
-            // rooms_still_needed = totalRooms for the agent search view (show full picture).
-            const { contribution, inventoryOverlapFlag, overlapDetected, note: capacityNote } =
-                computeHotelContribution(optionsForCapacity, hotelTotalRooms, totalRooms, totalRooms);
-
-            // Determine include / flag / omit status for the agent UI
-            const { status, note: statusNote } = determineStatus(contribution, totalRooms, false);
-            const note = capacityNote ?? statusNote;
-
-            // Step 3.3: Build supplier split (A2) using getCappedMax (HPG capped at 40%)
-            const supplierSplit = status !== 'omit'
-                ? buildSupplierSplit(optionsForCapacity, contribution, totalRooms)
-                : [];
-
-            const hotelName =
-                field<string>(wbeHotel, 'HotelName', 'hotelName', 'Name', 'name') ??
-                dbHotel?.name ??
-                hotelCode;
-
-            const starRating =
-                field<number>(wbeHotel, 'StarRating', 'starRating', 'Stars') ??
-                (dbHotel?.starRating ? Number(dbHotel.starRating) : null);
-
-            // Image URL — decode DB key (already URL-encoded) then re-encode once to avoid double-encoding
-            const rawImageKey = dbHotel?.primaryImageKey ?? null;
-            let imageUrl: string | null = null;
-            if (rawImageKey) {
-                let decodedKey = rawImageKey;
-                try { decodedKey = decodeURIComponent(rawImageKey); } catch { /* malformed — use as-is */ }
-                imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
-            }
-            const address = field<string>(wbeHotel, 'Address', 'address', 'Location') ?? null;
-
-            // Build bestOption — cheapest mid-range option (for frontend card + option-details call)
-            const cheapestMidRange = selectedOptions.length > 0
-                ? [...selectedOptions].sort((a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight)[0]
-                : [...dedupedOptions].sort((a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight)[0];
-
-            const bestOption: HotelBestOption | undefined = cheapestMidRange
-                ? {
-                      tid: cheapestMidRange.tid,
-                      sessionId: globalSessionId,
-                      supplierCode: cheapestMidRange.supplierCode,
-                      buyingPricePerRoomPerNight: cheapestMidRange.pricePerRoomPerNight,
-                      currency: cheapestMidRange.currency,
-                      freeCancellation: cheapestMidRange.freeCancellation,
-                      cancelDeadline: cheapestMidRange.cancelDeadline ?? null,
-                      mealType: cheapestMidRange.mealType,
-                      mealName: cheapestMidRange.mealName,
-                      roomDescriptions: cheapestMidRange.roomDescriptions,
-                  }
-                : undefined;
-
-            const hotelResult: HotelResult = {
-                hotelCode,
-                hotelName,
-                starRating,
-                imageUrl,
-                address,
-                addressCity: dbHotel?.addressCity ?? null,
-                addressCountry: dbHotel?.addressCountry ?? null,
-                latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,
-                longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : null,
-                sessionId: globalSessionId,
-                status,
-                totalRooms: hotelTotalRooms,
-                roomsAllocated: contribution,
-                inventoryOverlapFlag: inventoryOverlapFlag || overlapDetected,
-                totalAvailableRooms: contribution,
-                highestMidRangePrice,
-                currency: dedupedOptions[0]?.currency,
-                bestOption,
-                usableOptions: dedupedOptions,
-                selectedOptions,
-                supplierSplit,
-                note,
-            };
-
-            if (primaryHotelCodes.has(hotelCode)) {
-                primaryResults.push(hotelResult);
-            } else {
-                alternativeResults.push(hotelResult);
-            }
-        }
-
-        // Sort: included first, then flagged, then omitted; price asc within each group
-        const sortResults = (arr: HotelResult[]) =>
-            arr.sort((a, b) => {
-                const order = { include: 0, flag: 1, omit: 2 };
-                const statusDiff = order[a.status] - order[b.status];
-                if (statusDiff !== 0) return statusDiff;
-                return (a.highestMidRangePrice ?? 0) - (b.highestMidRangePrice ?? 0);
-            });
-
-        const sortedPrimary = sortResults(primaryResults);
-        const sortedAlternative = sortResults(alternativeResults);
-
-        const allResults = [...sortedPrimary, ...sortedAlternative];
-
-        logger.info(
-            {
+            return {
                 requestId,
-                destinationId,
-                totalHotelsFromWBE: mergedHotels.length,
-                included: allResults.filter((r) => r.status === 'include').length,
-                flagged: allResults.filter((r) => r.status === 'flag').length,
-                omitted: allResults.filter((r) => r.status === 'omit').length,
-            },
-            'Hotel search complete',
-        );
+                totalCandidates: 0,
+                jobsQueued: 0,
+                message: 'No candidate hotels found for this destination and star rating.',
+                sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+                statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+            };
+        }
+
+        // Dispatch one HotelProbeJob per hotel to RabbitMQ
+        const probeLimit = totalRooms * PROBE_MULTIPLIER;
+        let jobsQueued = 0;
+
+        for (const dbHotel of dbHotels) {
+            const jobId = randomUUID();
+            await hotelProbeJobRepository.create({
+                id: jobId,
+                searchRequestId: requestId,
+                hotelCode: dbHotel.hotelCode,
+                requestedRooms: totalRooms,
+                probeLimit,
+            });
+            await publishHotelProbeJob({
+                jobId,
+                searchRequestId: requestId,
+                hotelCode: dbHotel.hotelCode,
+                checkinDate,
+                nights,
+                requestedRooms: totalRooms,
+                probeLimit,
+                currencyCode,
+                nationalityCode,
+                waitSeconds,
+                mealType: params.mealType,
+                markupPercent,
+                expandedRooms,
+                dominantRoomType,
+            });
+            jobsQueued++;
+        }
+
+        logger.info({ requestId, totalCandidates: dbHotels.length, jobsQueued }, 'Hotel probe jobs queued');
 
         return {
             requestId,
-            sessionId: globalSessionId,
-            finished,
-            totalRoomsRequested: totalRooms,
-            results: sortedPrimary,
-            alternativeResults: sortedAlternative,
-            summary: {
-                total: allResults.length,
-                included: allResults.filter((r) => r.status === 'include').length,
-                flagged: allResults.filter((r) => r.status === 'flag').length,
-                omitted: allResults.filter((r) => r.status === 'omit').length,
-            },
+            totalCandidates: dbHotels.length,
+            jobsQueued,
+            message: `${jobsQueued} hotel probe jobs queued. Subscribe to SSE for real-time updates.`,
+            sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+            statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
         };
     }
 
@@ -1139,24 +979,18 @@ export class HotelSearchService {
     }
 
     /**
-     * Full PDF accumulation loop — Steps 2.1–4.2.
+     * Webhook-triggered auto offer — queue-based version.
      *
-     * Searches candidate hotels ONE AT A TIME (sequentially), applying all
-     * Oliver filters (2.2–2.4), capacity + overlap checks (3.1–3.2), A2 supplier
-     * split (3.3), and inline option details (3.4), accumulating committed rooms
-     * until the group size is met or all candidates are exhausted.
-     *
-     * Step 4.1: Unified buying price = MAX(pricePerRoomPerNight) across ALL
-     * supplier-split entries across ALL accepted hotels.
-     * Customer sees ONE price = buying_price_base × (1 + markup) + psychology.
+     * Dispatches one HotelProbeJob per candidate hotel (primary stars first, then
+     * alternatives). Each job runs R1-R3 → R4-R6 → … probes sequentially in the
+     * worker and emits SSE events as results arrive. Returns immediately.
      *
      * Used by offerGeneration.service.ts for webhook-triggered auto offers.
      */
     async generateAutoOffer(
         requestId: string,
         params: HotelSearchParams & { markupPercent?: number } = {},
-    ): Promise<AutoOfferResult> {
-        // ── 1. Load request ──────────────────────────────────────────────────
+    ): Promise<HotelSearchQueueResponse> {
         const request = await requestRepository.findById(requestId);
         if (!request) {
             throw { status: 404, message: 'Booking request not found', code: 'NOT_FOUND' };
@@ -1167,21 +1001,20 @@ export class HotelSearchService {
             throw { status: 400, message: 'Booking request has no rooms specified', code: 'INVALID_REQUEST' };
         }
 
-        const nights = request.nights;
-        const destinationId = request.destinationId;
-        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const includeAlternativeStars = params.includeAlternativeStars !== false;
-        const waitSeconds = params.waitSeconds ?? 35;
+        const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
         const markupPercent = params.markupPercent ?? 18;
-        const dominantRoomType = getDominantRoomType((request as any).rooms);
 
         const checkinDate = request.checkinDate instanceof Date
             ? request.checkinDate.toISOString().split('T')[0]
             : String(request.checkinDate);
 
-        // ── 2. Resolve candidate hotels from DB (primary stars first) ────────
+        const dominantRoomType = getDominantRoomType((request as any).rooms);
+        const expandedRooms = expandRequestRooms((request as any).rooms);
+
+        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
         const primaryStars = requestedStarRating ? [requestedStarRating] : [];
         const altStars = includeAlternativeStars && requestedStarRating
             ? [requestedStarRating - 1, requestedStarRating + 1].filter((s) => s >= 1 && s <= 5)
@@ -1189,28 +1022,23 @@ export class HotelSearchService {
         const allSearchStars = [...new Set([...primaryStars, ...altStars])];
 
         const dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
-            destinationId,
+            request.destinationId,
             allSearchStars.length > 0 ? allSearchStars : [],
         );
 
         if (dbHotels.length === 0) {
+            logger.warn({ requestId, destinationId: request.destinationId }, 'Auto-offer: no hotels in DB');
             return {
-                success: false,
                 requestId,
-                roomsNeeded: totalRooms,
-                roomsCommitted: 0,
-                currency: currencyCode,
-                nights,
-                validatedHotels: [],
-                escalation: {
-                    roomsMissing: totalRooms,
-                    partialHotels: [],
-                    suggestion: 'No hotels found in database for this destination and star rating.',
-                },
+                totalCandidates: 0,
+                jobsQueued: 0,
+                message: 'No candidate hotels found for this destination and star rating.',
+                sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+                statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
             };
         }
 
-        // Primary star hotels first, then alternatives
+        // Primary stars first, then alternatives
         const primaryHotelCodes = new Set(
             primaryStars.length === 0
                 ? dbHotels.map((h) => h.hotelCode)
@@ -1221,219 +1049,51 @@ export class HotelSearchService {
                       })
                       .map((h) => h.hotelCode),
         );
-
-        const sortedDbHotels = [
+        const sortedHotels = [
             ...dbHotels.filter((h) => primaryHotelCodes.has(h.hotelCode)),
             ...dbHotels.filter((h) => !primaryHotelCodes.has(h.hotelCode)),
         ];
 
-        // ── 3. Sequential accumulation loop ─────────────────────────────────
-        const validatedHotels: AutoOfferHotel[] = [];
-        let roomsCommitted = 0;
+        const probeLimit = totalRooms * PROBE_MULTIPLIER;
+        let jobsQueued = 0;
 
-        for (const dbHotel of sortedDbHotels) {
-            if (roomsCommitted >= totalRooms) break;
-
-            const roomsStillNeeded = totalRooms - roomsCommitted;
-
-            // Step 2.1: WBE search — always SEARCH_ROOMS=3, single hotel
-            let wbeResult: any = null;
-            try {
-                wbeResult = await wbeClientService.searchAndGetByHotelsV2({
-                    HotelIds: [dbHotel.hotelCode],
-                    CheckInDate: checkinDate,
-                    Nights: nights,
-                    Waitseconds: waitSeconds,
-                    CurrencyCode: currencyCode,
-                    NationalityCode: nationalityCode,
-                    Rooms: buildSearchRooms(),
-                });
-            } catch (err: any) {
-                logger.warn(
-                    { requestId, hotelCode: dbHotel.hotelCode, error: err.message },
-                    'WBE single-hotel search failed — skipping',
-                );
-                continue;
-            }
-
-            if (!wbeResult) continue;
-
-            const sessionId = field<string>(wbeResult, 'SessionID', 'sessionId', 'SessionId') ?? '';
-            const isFinished = field<boolean>(wbeResult, 'Finished', 'finished') ?? true;
-            let hotelEntries: any[] = field<any[]>(wbeResult, 'Data', 'data', 'Hotels', 'hotels') ?? [];
-
-            // Poll session if not finished
-            if (!isFinished && sessionId) {
-                const polled = await this.pollUntilFinished(sessionId);
-                hotelEntries.push(...polled);
-            }
-
-            // Refresh stale UpdatedOptionsNeeded entries
-            if (sessionId) {
-                const hasStale = hotelEntries.some((h) =>
-                    (field<any[]>(h, 'Options', 'options') ?? []).some(
-                        (o: any) => field<boolean>(o, 'UpdatedOptionsNeeded', 'updatedOptionsNeeded') === true,
-                    ),
-                );
-                if (hasStale) {
-                    const refreshed = await this.pollUntilFinished(sessionId);
-                    const refreshMap = new Map<string, any>();
-                    for (const h of refreshed) {
-                        const code = field<string>(h, 'HotelCode', 'hotelCode') ?? '';
-                        if (code) refreshMap.set(code, h);
-                    }
-                    for (let i = 0; i < hotelEntries.length; i++) {
-                        const code = field<string>(hotelEntries[i], 'HotelCode', 'hotelCode') ?? '';
-                        if (refreshMap.has(code)) hotelEntries[i] = refreshMap.get(code);
-                    }
-                }
-            }
-
-            const wbeHotel = hotelEntries.find(
-                (h) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === dbHotel.hotelCode,
-            );
-            if (!wbeHotel) continue;
-
-            // Steps 2.2–2.4: Filter pipeline
-            const allOptions = parseWbeOptions(field<any[]>(wbeHotel, 'Options', 'options') ?? [], nights);
-
-            const groupAllowed = allOptions.filter((o) => isGroupAllowed(o.supplierCode));
-            const freeCxlOptions = groupAllowed.filter((o) => o.freeCancellation);
-            const confirmedOptions = freeCxlOptions.filter((o) => !o.onRequest);
-            const mealFiltered = params.mealType
-                ? confirmedOptions.filter((o) => o.mealType?.toUpperCase() === params.mealType!.toUpperCase())
-                : confirmedOptions;
-
-            if (mealFiltered.length === 0) continue;
-
-            const roomTypeFiltered = mealFiltered.filter((o) => matchesRoomType(o.roomDescriptions, dominantRoomType));
-            if (roomTypeFiltered.length === 0) continue;
-
-            const dedupedOptions = deduplicateBySupplier(roomTypeFiltered);
-            const prices = dedupedOptions.map((o) => o.pricePerRoomPerNight);
-            const midPrices = selectMidRange(prices);
-            const selectedOptions = dedupedOptions.filter((o) => midPrices.includes(o.pricePerRoomPerNight));
-            const optionsForCapacity = selectedOptions.length > 0 ? selectedOptions : dedupedOptions;
-
-            // Steps 3.1 + 3.2: Capacity check + inventory overlap
-            const hotelTotalRooms = dbHotel.totalRooms ?? null;
-            const { contribution, inventoryOverlapFlag, overlapDetected, note: capacityNote } =
-                computeHotelContribution(optionsForCapacity, hotelTotalRooms, totalRooms, roomsStillNeeded);
-
-            if (contribution <= 0) continue; // Step 3.5: hotel can't contribute — skip
-
-            // Step 3.3: A2 supplier split
-            const supplierSplit = buildSupplierSplit(optionsForCapacity, contribution, totalRooms);
-            if (supplierSplit.length === 0) continue;
-
-            // Step 3.4: Fetch option details for cheapest A2 entry (get cxlDeadline)
-            let cxlDeadline: string | null = null;
-            if (sessionId) {
-                const cheapestSplit = [...supplierSplit].sort(
-                    (a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight,
-                )[0];
-                try {
-                    const [detail] = await this.fetchOptionDetails([{
-                        sessionId,
-                        tid: cheapestSplit.tid,
-                        hotelCode: dbHotel.hotelCode,
-                    }]);
-                    cxlDeadline = detail?.parsed?.cxlDeadline ?? null;
-                } catch (err: any) {
-                    logger.warn(
-                        { requestId, hotelCode: dbHotel.hotelCode, error: err.message },
-                        'OptionDetailsV2 failed in accumulation loop — no cxl date',
-                    );
-                }
-            }
-
-            // Step 3.5: Accept hotel — build image URL the same way as searchForRequest
-            const rawImageKey = dbHotel.primaryImageKey ?? null;
-            let imageUrl: string | null = null;
-            if (rawImageKey) {
-                let decodedKey = rawImageKey;
-                try { decodedKey = decodeURIComponent(rawImageKey); } catch { /* use as-is */ }
-                imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
-            }
-
-            validatedHotels.push({
+        for (const dbHotel of sortedHotels) {
+            const jobId = randomUUID();
+            await hotelProbeJobRepository.create({
+                id: jobId,
+                searchRequestId: requestId,
                 hotelCode: dbHotel.hotelCode,
-                hotelName: dbHotel.name,
-                starRating: dbHotel.starRating ? Number(dbHotel.starRating) : null,
-                imageUrl,
-                address: null,
-                addressCity: dbHotel.addressCity ?? null,
-                addressCountry: dbHotel.addressCountry ?? null,
-                roomsAllocated: contribution,
-                cxlDeadline,
-                inventoryOverlapFlag: inventoryOverlapFlag || overlapDetected,
-                note: capacityNote,
-                supplierSplit,
+                requestedRooms: totalRooms,
+                probeLimit,
             });
-
-            roomsCommitted += contribution;
-
-            logger.info(
-                { requestId, hotelCode: dbHotel.hotelCode, contribution, roomsCommitted, totalRooms },
-                'Hotel accepted in auto-offer accumulation loop',
-            );
-        }
-
-        // ── Escalation: not enough rooms found ───────────────────────────────
-        if (roomsCommitted < totalRooms) {
-            logger.warn({ requestId, roomsCommitted, totalRooms }, 'Auto-offer escalation — insufficient capacity');
-            return {
-                success: false,
-                requestId,
-                roomsNeeded: totalRooms,
-                roomsCommitted,
-                currency: currencyCode,
-                nights,
-                validatedHotels,
-                escalation: {
-                    roomsMissing: totalRooms - roomsCommitted,
-                    partialHotels: validatedHotels,
-                    suggestion: `Only ${roomsCommitted} of ${totalRooms} rooms could be sourced from available hotels. Manual review required.`,
-                },
-            };
-        }
-
-        // ── Step 4.1: Unified pricing ─────────────────────────────────────────
-        // Buying price base = MAX supplier price across ALL A2 entries for ALL accepted hotels.
-        // This ensures the customer price covers the most expensive split.
-        const allSplitPrices = validatedHotels.flatMap((h) =>
-            h.supplierSplit.map((s) => s.pricePerRoomPerNight),
-        );
-        const buyingPriceBase = allSplitPrices.length > 0 ? Math.max(...allSplitPrices) : 0;
-
-        const { sellPrice: sellingPricePerRoomPerNight } = this.calculateSellPrice(buyingPriceBase, markupPercent);
-        const totalOfferPrice = sellingPricePerRoomPerNight * totalRooms * nights;
-
-        logger.info(
-            {
-                requestId,
-                hotelsAccepted: validatedHotels.length,
-                roomsCommitted,
-                buyingPriceBase,
-                sellingPricePerRoomPerNight,
-                totalOfferPrice,
+            await publishHotelProbeJob({
+                jobId,
+                searchRequestId: requestId,
+                hotelCode: dbHotel.hotelCode,
+                checkinDate,
+                nights: request.nights,
+                requestedRooms: totalRooms,
+                probeLimit,
+                currencyCode,
+                nationalityCode,
+                waitSeconds,
+                mealType: params.mealType,
                 markupPercent,
-            },
-            'Auto-offer generation complete',
-        );
+                expandedRooms,
+                dominantRoomType,
+            });
+            jobsQueued++;
+        }
+
+        logger.info({ requestId, totalCandidates: dbHotels.length, jobsQueued }, 'Auto-offer probe jobs queued');
 
         return {
-            success: true,
             requestId,
-            roomsNeeded: totalRooms,
-            roomsCommitted,
-            currency: currencyCode,
-            nights,
-            validatedHotels,
-            buyingPriceBase,
-            sellingPricePerRoomPerNight,
-            totalOfferPrice,
-            markupPercent,
+            totalCandidates: dbHotels.length,
+            jobsQueued,
+            message: `${jobsQueued} hotel probe jobs queued for auto-offer generation.`,
+            sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+            statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
         };
     }
 

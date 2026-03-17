@@ -1,30 +1,41 @@
 /**
  * Offer Generation Service
  *
- * Runs the full AI offer pipeline in the background after a webhook booking request is received.
- * Uses generateAutoOffer — the full PDF accumulation loop (Steps 2.1–4.2):
- *   1. Sequential per-hotel WBE search + filter + capacity checks + A2 supplier split
- *   2. Option details fetched inline per hotel (Step 3.4)
- *   3. Unified customer price = MAX buying price across all A2 splits × markup + psychology (Step 4.1)
- *   4. Create proposal with validated hotels
- *   5. Update booking request status → ai_generated
- *   6. Notify staff (email + in-app)
+ * Triggers the queue-based hotel probe pipeline, waits for all jobs to finish,
+ * then builds a proposal from the results and notifies staff.
  */
 
 import hotelSearchService from './hotelSearch.service';
 import notificationService from './notification.service';
 import requestRepository from '../repositories/request.repository';
 import proposalRepository from '../repositories/proposal.repository';
+import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import logger from '../utils/logger';
 import { BookingRequestStatus } from '@prisma/client';
 
-/** Default markup for auto-generated offers (%). */
 const DEFAULT_MARKUP_PCT = 18;
+
+/** Max time to wait for all probe jobs to complete (ms). */
+const JOB_WAIT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const JOB_POLL_INTERVAL_MS = 5_000; // 5 seconds
+
+const TERMINAL_STATUSES = new Set(['COMPLETED', 'SKIPPED_INSUFFICIENT', 'FAILED']);
+
+async function waitForJobs(searchRequestId: string): Promise<any[]> {
+    const deadline = Date.now() + JOB_WAIT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, JOB_POLL_INTERVAL_MS));
+        const jobs = await hotelProbeJobRepository.findBySearchRequest(searchRequestId);
+        const pending = jobs.filter((j: { status: string }) => !TERMINAL_STATUSES.has(j.status));
+        if (pending.length === 0) return jobs;
+    }
+    // Timeout — return whatever we have
+    return hotelProbeJobRepository.findBySearchRequest(searchRequestId);
+}
 
 export class OfferGenerationService {
     /**
      * Trigger the full offer generation pipeline asynchronously (fire-and-forget).
-     * Returns immediately — caller gets 200 without waiting for the pipeline.
      */
     triggerAsync(requestId: string) {
         setImmediate(() => {
@@ -34,9 +45,6 @@ export class OfferGenerationService {
         });
     }
 
-    /**
-     * Full pipeline — runs in background.
-     */
     async run(requestId: string) {
         logger.info({ requestId }, 'Starting AI offer generation');
 
@@ -50,53 +58,66 @@ export class OfferGenerationService {
         const contactName = (request as any).contactName ?? (request as any).firstName ?? 'Guest';
         const destinationName = (request as any).destinationName ?? 'Unknown destination';
 
-        // Mark request as processing before the pipeline starts
         await requestRepository.updateStatus(requestId, BookingRequestStatus.processing);
 
         try {
-            // ── Step 1: generateAutoOffer — full PDF accumulation loop ────────
+            // Step 1: Queue probe jobs
             const mealType = (request as any).breakfastPreference === 'BB' ? 'BB' : undefined;
-
-            const autoOffer = await hotelSearchService.generateAutoOffer(requestId, {
+            const queueResult = await hotelSearchService.generateAutoOffer(requestId, {
                 mealType,
                 markupPercent: DEFAULT_MARKUP_PCT,
             });
 
-            if (!autoOffer.success || autoOffer.validatedHotels.length === 0) {
-                const reason = autoOffer.escalation?.suggestion
-                    ?? 'No hotels with free cancellation and sufficient capacity found.';
-                logger.warn({ requestId, roomsMissing: autoOffer.escalation?.roomsMissing }, reason);
+            if (queueResult.jobsQueued === 0) {
+                const reason = 'No candidate hotels found for this destination and star rating.';
                 await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason });
                 return;
             }
 
-            // ── Step 2: Create proposal ───────────────────────────────────────
+            logger.info({ requestId, jobsQueued: queueResult.jobsQueued }, 'Waiting for probe jobs to complete');
+
+            // Step 2: Wait for all jobs to reach a terminal state
+            const jobs = await waitForJobs(requestId);
+            const completedJobs = jobs.filter((j) => (j.status as string) === 'COMPLETED');
+
+            if (completedJobs.length === 0) {
+                const reason = 'No hotels with sufficient capacity found after probing.';
+                logger.warn({ requestId }, reason);
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason });
+                return;
+            }
+
+            // Step 3: Create proposal
             const proposal = await proposalRepository.createForRequest(requestId, {
-                notes: `Auto-generated offer. ${autoOffer.validatedHotels.length} hotel(s), ${autoOffer.roomsCommitted} rooms committed.`,
+                notes: `Auto-generated offer. ${completedJobs.length} hotel(s) confirmed via capacity probing.`,
                 markupSettings: { globalMarkupPercent: DEFAULT_MARKUP_PCT, source: 'auto' },
             });
 
-            // ── Step 3: Add each validated hotel to the proposal ──────────────
-            const nights = autoOffer.nights;
-            const sellingPrice = autoOffer.sellingPricePerRoomPerNight ?? 0;
+            let totalOfferPrice = 0;
 
-            for (const hotel of autoOffer.validatedHotels) {
-                // Use cheapest A2 split entry as the representative TID + supplier
-                const cheapestSplit = [...hotel.supplierSplit].sort(
-                    (a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight,
-                )[0];
+            // Step 4: Add each confirmed hotel to the proposal
+            for (const job of completedJobs) {
+                const result = job.resultJson as any;
+                if (!result?.supplierSplit?.length) continue;
+
+                const cheapestSplit = [...result.supplierSplit].sort(
+                    (a: any, b: any) => a.pricePerRoomPerNight - b.pricePerRoomPerNight,
+                )[0] as any;
                 if (!cheapestSplit) continue;
 
-                const roomsQty = hotel.roomsAllocated;
-                const totalPrice = sellingPrice * roomsQty * nights;
+                const sellingPrice = result.sellingPricePerRoomPerNight ?? 0;
+                const roomsQty = result.roomsAllocated ?? job.requestedRooms;
+                const nights = (request as any).nights ?? 1;
+                const hotelTotal = sellingPrice * roomsQty * nights;
+                totalOfferPrice += hotelTotal;
 
                 await proposalRepository.addHotelTx(proposal.id, {
-                    hotelCode: hotel.hotelCode,
+                    hotelCode: result.hotelCode,
                     tid: cheapestSplit.tid,
                     currency: cheapestSplit.currency ?? 'EUR',
-                    totalPrice,
-                    freeCancellation: true, // guaranteed by filter pipeline
-                    cancelDeadline: hotel.cxlDeadline,
+                    totalPrice: hotelTotal,
+                    freeCancellation: true,
+                    cancelDeadline: null,
                     supplierCode: cheapestSplit.supplierCode,
                     rooms: {
                         standard: {
@@ -109,20 +130,15 @@ export class OfferGenerationService {
                 });
             }
 
-            // ── Step 4: Update request status ─────────────────────────────────
+            // Step 5: Update request status
             await requestRepository.updateStatus(requestId, BookingRequestStatus.ai_generated);
 
             logger.info(
-                {
-                    requestId,
-                    proposalId: proposal.id,
-                    hotelsAdded: autoOffer.validatedHotels.length,
-                    totalOfferPrice: autoOffer.totalOfferPrice,
-                },
+                { requestId, proposalId: proposal.id, hotelsAdded: completedJobs.length, totalOfferPrice },
                 'AI offer generation complete',
             );
 
-            // ── Step 5: Notify staff ──────────────────────────────────────────
+            // Step 6: Notify staff
             await notificationService.notifyNewOfferReady({
                 requestId,
                 referenceNumber: refNum,
@@ -132,7 +148,6 @@ export class OfferGenerationService {
             });
         } catch (err: any) {
             logger.error({ err, requestId }, 'AI offer generation failed');
-
             await notificationService.notifyOfferGenerationFailed({
                 requestId,
                 referenceNumber: refNum,

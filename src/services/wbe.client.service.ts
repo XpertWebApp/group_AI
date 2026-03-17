@@ -224,6 +224,7 @@ export class WbeClientService {
     /**
      * Matches docs: POST /hotel/SearchAndGetByHotelsV2?apiKey=...
      * Body contains HotelIds, CheckInDate, Nights, CurrencyCode, NationalityCode, WaitSeconds, Rooms.
+     * NOTE: WBE uses "WaitSeconds" (capital S) — confirmed from API spec.
      */
     async searchAndGetByHotelsV2(body: any) {
         try {
