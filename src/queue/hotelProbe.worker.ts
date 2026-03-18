@@ -1,5 +1,11 @@
 import { getChannel, HOTEL_PROBE_QUEUE } from './rabbitmq.client';
-import { HotelProbeJobPayload, HotelProbeCompletedEvent, HotelProbeProgressEvent, ExpandedRoom } from './hotelProbeJob.types';
+import {
+    HotelProbeJobPayload,
+    HotelProbeCompletedEvent,
+    HotelProbeProgressEvent,
+    RoomTypeProbeProgress,
+    ExpandedRoom,
+} from './hotelProbeJob.types';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import wbeClientService from '../services/wbe.client.service';
@@ -102,6 +108,25 @@ function buildProbeBatch(
     });
 }
 
+/**
+ * Build a homogeneous WBE Rooms array where all rooms have the same composition.
+ * Used for per-room-type probing (all singles, all doubles, etc.).
+ */
+function buildHomogeneousBatch(
+    adults: number,
+    children: number,
+    childrenAges: number[],
+    startRoomId: number,
+    batchSize: number = PROBE_BATCH_SIZE,
+): Array<{ RoomID: number; AdultsNo: string; ChildrenNo: string; ChildrenAges: number[] }> {
+    return Array.from({ length: batchSize }, (_, i) => ({
+        RoomID: startRoomId + i,
+        AdultsNo: String(adults),
+        ChildrenNo: String(children),
+        ChildrenAges: childrenAges,
+    }));
+}
+
 // ─── WBE polling ─────────────────────────────────────────────────────────────
 
 async function pollUntilFinished(sessionId: string): Promise<any[]> {
@@ -188,9 +213,10 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         markupPercent,
         expandedRooms,
         dominantRoomType,
+        roomTypeTargets,
     } = payload;
 
-    logger.info({ jobId, hotelCode, requestedRooms, probeLimit }, 'Processing HotelProbeJob');
+    logger.info({ jobId, hotelCode, requestedRooms, probeLimit, hasPerTypeTargets: !!roomTypeTargets }, 'Processing HotelProbeJob');
 
     await hotelProbeJobRepository.setRunning(jobId);
 
@@ -198,121 +224,296 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     const allOptions: any[] = [];
     let roomsFound = 0;
     let lastProbeRange = '';
-    const maxBatches = Math.ceil(probeLimit / PROBE_BATCH_SIZE);
 
-    for (let batch = 0; batch < maxBatches; batch++) {
-        const startRoomId = batch * PROBE_BATCH_SIZE + 1;
-        const endRoomId = startRoomId + PROBE_BATCH_SIZE - 1;
-        lastProbeRange = `R${startRoomId}-R${endRoomId}`;
+    // Per-room-type progress tracking
+    const typeProgressMap = new Map<string, RoomTypeProbeProgress>();
 
-        let wbeResult: any;
-        try {
-            wbeResult = await wbeClientService.searchAndGetByHotelsV2({
-                HotelIds: [hotelCode],
-                CheckInDate: checkinDate,
-                Nights: nights,
-                WaitSeconds: waitSeconds,
-                CurrencyCode: currencyCode,
-                NationalityCode: nationalityCode,
-                Rooms: buildProbeBatch(expandedRooms, startRoomId),
+    if (roomTypeTargets && roomTypeTargets.length > 0) {
+        // ── NEW: Per-room-type probing ────────────────────────────────────────
+        for (const target of roomTypeTargets) {
+            typeProgressMap.set(target.roomType, {
+                roomType: target.roomType,
+                requested: target.requested,
+                probeLimit: target.probeLimit,
+                roomsFound: 0,
             });
-        } catch (err: any) {
-            logger.warn({ jobId, hotelCode, lastProbeRange, error: err.message }, 'WBE probe call failed');
-            break;
         }
 
-        if (!wbeResult) break;
+        let globalRoomId = 1; // Running RoomID across all type phases
 
-        const sessionId = field<string>(wbeResult, 'SessionID', 'sessionId', 'SessionId') ?? '';
-        const isFinished = field<boolean>(wbeResult, 'Finished', 'finished') ?? true;
-        let hotelEntries: any[] = field<any[]>(wbeResult, 'Data', 'data', 'Hotels', 'hotels') ?? [];
+        for (const target of roomTypeTargets) {
+            const typeBatches = Math.ceil(target.probeLimit / PROBE_BATCH_SIZE);
+            let typeRoomsFound = 0;
 
-        if (!isFinished && sessionId) {
-            const polled = await pollUntilFinished(sessionId);
-            hotelEntries.push(...polled);
+            logger.info(
+                { jobId, hotelCode, roomType: target.roomType, requested: target.requested, probeLimit: target.probeLimit, batches: typeBatches },
+                'Starting per-type probe phase',
+            );
+
+            for (let batch = 0; batch < typeBatches; batch++) {
+                const startRoomId = globalRoomId;
+                const endRoomId = startRoomId + PROBE_BATCH_SIZE - 1;
+                lastProbeRange = `R${startRoomId}-R${endRoomId}`;
+                globalRoomId += PROBE_BATCH_SIZE;
+
+                let wbeResult: any;
+                try {
+                    wbeResult = await wbeClientService.searchAndGetByHotelsV2({
+                        HotelIds: [hotelCode],
+                        CheckInDate: checkinDate,
+                        Nights: nights,
+                        WaitSeconds: waitSeconds,
+                        CurrencyCode: currencyCode,
+                        NationalityCode: nationalityCode,
+                        Rooms: buildHomogeneousBatch(target.adults, target.children, target.childrenAges, startRoomId),
+                    });
+                } catch (err: any) {
+                    logger.warn({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, error: err.message }, 'WBE probe call failed');
+                    break;
+                }
+
+                if (!wbeResult) break;
+
+                const sessionId = field<string>(wbeResult, 'SessionID', 'sessionId', 'SessionId') ?? '';
+                const isFinished = field<boolean>(wbeResult, 'Finished', 'finished') ?? true;
+                let hotelEntries: any[] = field<any[]>(wbeResult, 'Data', 'data', 'Hotels', 'hotels') ?? [];
+
+                if (!isFinished && sessionId) {
+                    const polled = await pollUntilFinished(sessionId);
+                    hotelEntries.push(...polled);
+                }
+
+                const wbeHotel = hotelEntries.find(
+                    (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
+                );
+
+                if (!wbeHotel) {
+                    logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No hotel entry — stopping probes for this type');
+                    break;
+                }
+
+                const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
+                const batchOptions = parseProbeOptions(rawOptions, nights, PROBE_BATCH_SIZE);
+
+                // Apply meal type filter
+                const mealFiltered = mealType
+                    ? batchOptions.filter((o) => o.mealType?.toUpperCase() === mealType.toUpperCase())
+                    : batchOptions;
+
+                // Apply room type filter — use the specific type for this phase
+                const roomTypeFiltered = mealFiltered.filter((o) =>
+                    matchesRoomType(o.roomDescriptions, target.roomType),
+                );
+
+                if (roomTypeFiltered.length === 0) {
+                    logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No usable options — stopping probes for this type');
+                    break;
+                }
+
+                // Tag options with roomType + sessionId for downstream use (Step 3.4 needs sessionId)
+                for (const opt of roomTypeFiltered) {
+                    opt.roomType = target.roomType;
+                    opt.sessionId = sessionId;
+                }
+
+                typeRoomsFound += PROBE_BATCH_SIZE;
+                roomsFound += PROBE_BATCH_SIZE;
+                allOptions.push(...roomTypeFiltered);
+
+                // Update per-type progress
+                const typeProgress = typeProgressMap.get(target.roomType)!;
+                typeProgress.roomsFound = typeRoomsFound;
+
+                // Build per-type summary for SSE message
+                const typeProgressArray = Array.from(typeProgressMap.values());
+                const progressSummary = typeProgressArray
+                    .map((tp) => `${tp.roomsFound}/${tp.probeLimit} ${tp.roomType}s`)
+                    .join(', ');
+
+                // Persist partial state + emit progress
+                await hotelProbeJobRepository.updateProbing(jobId, {
+                    roomsFound,
+                    lastProbeRange,
+                    optionsSnapshot: allOptions,
+                });
+
+                const progressEvent: HotelProbeProgressEvent = {
+                    hotelCode,
+                    status: 'PROBING',
+                    roomsFound,
+                    lastProbeRange,
+                    percentComplete: Math.min(100, Math.round((roomsFound / probeLimit) * 100)),
+                    message: `Probing ${target.roomType} ${lastProbeRange}: ${progressSummary}`,
+                    roomTypeProgress: typeProgressArray,
+                };
+                broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
+
+                logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, typeRoomsFound, roomsFound }, 'Probe batch complete');
+
+                if (typeRoomsFound >= target.probeLimit) break;
+            }
+
+            logger.info(
+                { jobId, hotelCode, roomType: target.roomType, typeRoomsFound, probeLimit: target.probeLimit },
+                'Per-type probe phase finished',
+            );
         }
+    } else {
+        // ── LEGACY: Aggregate probing (backward compat for old jobs) ──────────
+        const maxBatches = Math.ceil(probeLimit / PROBE_BATCH_SIZE);
 
-        const wbeHotel = hotelEntries.find(
-            (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
-        );
+        for (let batch = 0; batch < maxBatches; batch++) {
+            const startRoomId = batch * PROBE_BATCH_SIZE + 1;
+            const endRoomId = startRoomId + PROBE_BATCH_SIZE - 1;
+            lastProbeRange = `R${startRoomId}-R${endRoomId}`;
 
-        if (!wbeHotel) {
-            // Hotel returned no data for this probe — no more capacity
-            logger.info({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
-            break;
+            let wbeResult: any;
+            try {
+                wbeResult = await wbeClientService.searchAndGetByHotelsV2({
+                    HotelIds: [hotelCode],
+                    CheckInDate: checkinDate,
+                    Nights: nights,
+                    WaitSeconds: waitSeconds,
+                    CurrencyCode: currencyCode,
+                    NationalityCode: nationalityCode,
+                    Rooms: buildProbeBatch(expandedRooms, startRoomId),
+                });
+            } catch (err: any) {
+                logger.warn({ jobId, hotelCode, lastProbeRange, error: err.message }, 'WBE probe call failed');
+                break;
+            }
+
+            if (!wbeResult) break;
+
+            const sessionId = field<string>(wbeResult, 'SessionID', 'sessionId', 'SessionId') ?? '';
+            const isFinished = field<boolean>(wbeResult, 'Finished', 'finished') ?? true;
+            let hotelEntries: any[] = field<any[]>(wbeResult, 'Data', 'data', 'Hotels', 'hotels') ?? [];
+
+            if (!isFinished && sessionId) {
+                const polled = await pollUntilFinished(sessionId);
+                hotelEntries.push(...polled);
+            }
+
+            const wbeHotel = hotelEntries.find(
+                (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
+            );
+
+            if (!wbeHotel) {
+                logger.info({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
+                break;
+            }
+
+            const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
+            const batchOptions = parseProbeOptions(rawOptions, nights, PROBE_BATCH_SIZE);
+
+            const mealFiltered = mealType
+                ? batchOptions.filter((o) => o.mealType?.toUpperCase() === mealType.toUpperCase())
+                : batchOptions;
+
+            const roomTypeFiltered = mealFiltered.filter((o) =>
+                matchesRoomType(o.roomDescriptions, dominantRoomType),
+            );
+
+            if (roomTypeFiltered.length === 0) {
+                logger.info({ jobId, hotelCode, lastProbeRange }, 'No usable options in probe — stopping probes');
+                break;
+            }
+
+            // Tag options with sessionId for downstream use (Step 3.4 needs sessionId)
+            for (const opt of roomTypeFiltered) {
+                opt.sessionId = sessionId;
+            }
+
+            roomsFound += PROBE_BATCH_SIZE;
+            allOptions.push(...roomTypeFiltered);
+
+            await hotelProbeJobRepository.updateProbing(jobId, {
+                roomsFound,
+                lastProbeRange,
+                optionsSnapshot: allOptions,
+            });
+
+            const progressEvent: HotelProbeProgressEvent = {
+                hotelCode,
+                status: 'PROBING',
+                roomsFound,
+                lastProbeRange,
+                percentComplete: Math.min(100, Math.round((roomsFound / probeLimit) * 100)),
+                message: `Probed ${lastProbeRange}: found ${roomsFound} rooms so far`,
+            };
+            broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
+
+            logger.info({ jobId, hotelCode, lastProbeRange, roomsFound }, 'Probe batch complete');
+
+            if (roomsFound >= probeLimit) break;
         }
-
-        const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
-        const batchOptions = parseProbeOptions(rawOptions, nights, PROBE_BATCH_SIZE);
-
-        // Apply meal type filter
-        const mealFiltered = mealType
-            ? batchOptions.filter((o) => o.mealType?.toUpperCase() === mealType.toUpperCase())
-            : batchOptions;
-
-        // Apply room type filter
-        const roomTypeFiltered = mealFiltered.filter((o) =>
-            matchesRoomType(o.roomDescriptions, dominantRoomType),
-        );
-
-        if (roomTypeFiltered.length === 0) {
-            // No usable options in this batch — hotel exhausted
-            logger.info({ jobId, hotelCode, lastProbeRange }, 'No usable options in probe — stopping probes');
-            break;
-        }
-
-        // Count rooms this batch confirmed — number of distinct options × batch size rooms supported
-        // Each successful probe response indicates PROBE_BATCH_SIZE rooms are available at this hotel
-        roomsFound += PROBE_BATCH_SIZE;
-        allOptions.push(...roomTypeFiltered);
-
-        // Persist partial state + emit progress
-        await hotelProbeJobRepository.updateProbing(jobId, {
-            roomsFound,
-            lastProbeRange,
-            optionsSnapshot: allOptions,
-        });
-
-        const progressEvent: HotelProbeProgressEvent = {
-            hotelCode,
-            status: 'PROBING',
-            roomsFound,
-            lastProbeRange,
-            percentComplete: Math.min(100, Math.round((roomsFound / probeLimit) * 100)),
-            message: `Probed ${lastProbeRange}: found ${roomsFound} rooms so far`,
-        };
-        broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
-
-        logger.info({ jobId, hotelCode, lastProbeRange, roomsFound }, 'Probe batch complete');
-
-        // Early stop — already found enough rooms
-        if (roomsFound >= probeLimit) break;
     }
 
     // ── Capacity evaluation ───────────────────────────────────────────────────
     let capacityStatus: 'CONFIRMED' | 'LIMITED' | 'INSUFFICIENT';
     let capacityVerificationRequired = false;
     let reason: string | undefined;
+    const typeProgressArray = Array.from(typeProgressMap.values());
 
-    if (roomsFound > requestedRooms) {
-        capacityStatus = 'CONFIRMED';
-    } else if (roomsFound === requestedRooms) {
-        capacityStatus = 'LIMITED';
-        capacityVerificationRequired = true;
+    if (roomTypeTargets && roomTypeTargets.length > 0) {
+        // Per-room-type capacity evaluation
+        let allConfirmed = true;
+        let anyInsufficient = false;
+        const insufficientTypes: string[] = [];
+
+        for (const target of roomTypeTargets) {
+            const found = typeProgressMap.get(target.roomType)?.roomsFound ?? 0;
+            if (found < target.requested) {
+                anyInsufficient = true;
+                insufficientTypes.push(`${target.roomType}: found ${found}, need ${target.requested}`);
+            } else if (found === target.requested) {
+                allConfirmed = false;
+            }
+        }
+
+        if (anyInsufficient) {
+            capacityStatus = 'INSUFFICIENT';
+            reason = `Insufficient capacity per room type — ${insufficientTypes.join('; ')}.`;
+            await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
+            const completedEvent: HotelProbeCompletedEvent = {
+                hotelCode,
+                status: 'INSUFFICIENT',
+                roomsFound,
+                capacityVerificationRequired: false,
+                reason,
+                roomTypeProgress: typeProgressArray,
+            };
+            broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
+            logger.info({ jobId, hotelCode, roomsFound, requestedRooms, insufficientTypes }, 'Hotel skipped — insufficient per-type capacity');
+            return;
+        } else if (allConfirmed) {
+            capacityStatus = 'CONFIRMED';
+        } else {
+            capacityStatus = 'LIMITED';
+            capacityVerificationRequired = true;
+        }
     } else {
-        capacityStatus = 'INSUFFICIENT';
-        reason = `Only ${roomsFound} rooms found, ${requestedRooms} required.`;
-        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
-        const completedEvent: HotelProbeCompletedEvent = {
-            hotelCode,
-            status: 'INSUFFICIENT',
-            roomsFound,
-            capacityVerificationRequired: false,
-            reason,
-        };
-        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, roomsFound, requestedRooms }, 'Hotel skipped — insufficient capacity');
-        return;
+        // Legacy aggregate evaluation
+        if (roomsFound > requestedRooms) {
+            capacityStatus = 'CONFIRMED';
+        } else if (roomsFound === requestedRooms) {
+            capacityStatus = 'LIMITED';
+            capacityVerificationRequired = true;
+        } else {
+            capacityStatus = 'INSUFFICIENT';
+            reason = `Only ${roomsFound} rooms found, ${requestedRooms} required.`;
+            await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
+            const completedEvent: HotelProbeCompletedEvent = {
+                hotelCode,
+                status: 'INSUFFICIENT',
+                roomsFound,
+                capacityVerificationRequired: false,
+                reason,
+            };
+            broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
+            logger.info({ jobId, hotelCode, roomsFound, requestedRooms }, 'Hotel skipped — insufficient capacity');
+            return;
+        }
     }
 
     // ── Run filter pipeline + supplier split on aggregated options ────────────
@@ -323,9 +524,12 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     const optionsForSplit = selectedOptions.length > 0 ? selectedOptions : dedupedOptions;
     const highestMidRangePrice = midPrices.length > 0 ? Math.max(...midPrices) : 0;
 
+    // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
+    const dbHotelMap = await hotelSearchRepository.getHotelsByCode([hotelCode]);
+    const dbHotel = dbHotelMap.get(hotelCode);
+
     // ── Step 3.1 — Hotel Room Capacity Check ──────────────────────────────────
-    // Calculate max_possible_from_hotel BEFORE building the split, to decide
-    // whether this hotel can contribute meaningfully (>= 6 rooms).
+    // Does this hotel physically have enough rooms to contribute meaningfully (>= 6)?
     const MIN_MEANINGFUL_CONTRIBUTION = 6;
     const maxPossibleFromHotel = optionsForSplit.reduce(
         (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms),
@@ -333,8 +537,12 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     );
     const hotelContribution = Math.min(maxPossibleFromHotel, requestedRooms);
 
+    console.log(`[Step 3.1] ${hotelCode}: maxPossibleFromHotel=${maxPossibleFromHotel}, hotelContribution=${hotelContribution}, minRequired=${MIN_MEANINGFUL_CONTRIBUTION}, suppliers=${optionsForSplit.length}`);
+    logger.info({ jobId, hotelCode, maxPossibleFromHotel, hotelContribution, suppliersCount: optionsForSplit.length }, 'Step 3.1: Hotel capacity check');
+
     if (hotelContribution < MIN_MEANINGFUL_CONTRIBUTION) {
         reason = `Hotel contribution ${hotelContribution} rooms (supplier caps) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
+        console.log(`[Step 3.1] SKIP ${hotelCode}: ${reason}`);
         await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
         const completedEvent: HotelProbeCompletedEvent = {
             hotelCode,
@@ -342,25 +550,303 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             roomsFound,
             capacityVerificationRequired: false,
             reason,
+            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
         };
         broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, hotelContribution, maxPossibleFromHotel }, 'Hotel skipped — contribution below minimum');
+        logger.info({ jobId, hotelCode, hotelContribution, maxPossibleFromHotel }, 'Step 3.1: Hotel skipped — contribution below minimum');
         return;
     }
 
-    const supplierSplit = buildSupplierSplit(optionsForSplit, requestedRooms, requestedRooms);
+    console.log(`[Step 3.1] PASS ${hotelCode}: contribution ${hotelContribution} >= ${MIN_MEANINGFUL_CONTRIBUTION}`);
 
-    // Actual rooms covered by the supplier split (may be less than requestedRooms due to supplier caps)
+    // ── Step 3.2 — Inventory Overlap Check ──────────────────────────────────
+    // Detect if suppliers are likely reselling the same physical rooms.
+    // Use probed rooms as physical capacity (WBE doesn't reliably provide total_rooms).
+    const totalSupplierClaim = optionsForSplit.reduce(
+        (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms),
+        0,
+    );
+    const dbTotalRooms = dbHotel?.totalRooms ?? 0;
+    const probedCapacity = roomsFound;
+    const physicalCapacity = dbTotalRooms > 0
+        ? Math.min(probedCapacity, dbTotalRooms)
+        : probedCapacity;
+
+    let effectiveCapacity: number;
+    let overlapDetected = false;
+    let totalRoomsUnverified = false;
+
+    if (totalSupplierClaim > physicalCapacity) {
+        overlapDetected = true;
+        effectiveCapacity = physicalCapacity; // cap at what we actually proved
+        console.log(`[Step 3.2] OVERLAP DETECTED for ${hotelCode}: totalSupplierClaim=${totalSupplierClaim} > physicalCapacity=${physicalCapacity} (probed=${probedCapacity}, dbTotalRooms=${dbTotalRooms}), effectiveCapacity capped to ${effectiveCapacity}`);
+        logger.warn(
+            { jobId, hotelCode, totalSupplierClaim, physicalCapacity, probedCapacity, dbTotalRooms, effectiveCapacity },
+            'Step 3.2: Overlap detected — capping at physical capacity',
+        );
+    } else {
+        effectiveCapacity = totalSupplierClaim;
+        console.log(`[Step 3.2] No overlap for ${hotelCode}: totalSupplierClaim=${totalSupplierClaim} <= physicalCapacity=${physicalCapacity} (probed=${probedCapacity}, dbTotalRooms=${dbTotalRooms})`);
+        logger.info(
+            { jobId, hotelCode, totalSupplierClaim, physicalCapacity, probedCapacity, dbTotalRooms },
+            'Step 3.2: No overlap',
+        );
+    }
+
+    if (dbTotalRooms === 0) {
+        totalRoomsUnverified = true;
+        console.log(`[Step 3.2] DB totalRooms unknown for ${hotelCode} — using probed capacity only`);
+    }
+
+    // Re-check contribution with effective capacity after overlap
+    const effectiveContribution = Math.min(effectiveCapacity, requestedRooms);
+    console.log(`[Step 3.2] effectiveContribution=${effectiveContribution} for ${hotelCode} (effectiveCapacity=${effectiveCapacity}, requestedRooms=${requestedRooms})`);
+
+    if (effectiveContribution < MIN_MEANINGFUL_CONTRIBUTION) {
+        reason = `After overlap check: effective contribution ${effectiveContribution} rooms (supplier claim ${totalSupplierClaim}, capped to ${effectiveCapacity}) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
+        console.log(`[Step 3.2] SKIP ${hotelCode}: ${reason}`);
+        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
+        const completedEvent: HotelProbeCompletedEvent = {
+            hotelCode,
+            status: 'INSUFFICIENT',
+            roomsFound,
+            capacityVerificationRequired: false,
+            reason,
+            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
+        };
+        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
+        logger.info({ jobId, hotelCode, effectiveContribution, effectiveCapacity, totalSupplierClaim }, 'Step 3.2: Hotel skipped — overlap reduces contribution below minimum');
+        return;
+    }
+
+    // ── Step 3.3 — Build Supplier Split (A2 Array) ──────────────────────────
+    const supplierSplit = buildSupplierSplit(optionsForSplit, effectiveContribution, requestedRooms);
+
     const roomsAllocated = supplierSplit.reduce((s, o) => s + o.rooms, 0);
+    console.log(`[Step 3.3] ${hotelCode}: supplierSplit built — roomsAllocated=${roomsAllocated}, effectiveContribution=${effectiveContribution}, suppliers=${supplierSplit.length}`);
+    for (const entry of supplierSplit) {
+        console.log(`[Step 3.3]   ${entry.supplierCode}: ${entry.rooms} rooms @ ${entry.pricePerRoomPerNight} ${entry.currency}`);
+    }
+    logger.info({ jobId, hotelCode, roomsAllocated, effectiveContribution, splitEntries: supplierSplit.length }, 'Step 3.3: Supplier split built');
+
+    // Validate: critical math check — if split doesn't match target, skip hotel
+    if (roomsAllocated !== effectiveContribution) {
+        console.log(`[Step 3.3] CRITICAL MISMATCH ${hotelCode}: roomsAllocated=${roomsAllocated} != effectiveContribution=${effectiveContribution} — skipping hotel`);
+        reason = `Supplier split math error: allocated ${roomsAllocated} rooms but expected ${effectiveContribution}. Suppliers may not cover the target.`;
+        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
+        const completedEvent: HotelProbeCompletedEvent = {
+            hotelCode,
+            status: 'INSUFFICIENT',
+            roomsFound,
+            capacityVerificationRequired: false,
+            reason,
+            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
+        };
+        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
+        logger.error({ jobId, hotelCode, roomsAllocated, effectiveContribution }, 'Step 3.3: Supplier split math mismatch — skipping hotel');
+        return;
+    }
+
+    // Validate: skip hotel if allocated rooms < 6 after supplier split
+    if (roomsAllocated < MIN_MEANINGFUL_CONTRIBUTION) {
+        reason = `Supplier split allocated only ${roomsAllocated} rooms, below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
+        console.log(`[Step 3.3] SKIP ${hotelCode}: ${reason}`);
+        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
+        const completedEvent: HotelProbeCompletedEvent = {
+            hotelCode,
+            status: 'INSUFFICIENT',
+            roomsFound,
+            capacityVerificationRequired: false,
+            reason,
+            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
+        };
+        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
+        logger.info({ jobId, hotelCode, roomsAllocated }, 'Step 3.3: Hotel skipped — allocated rooms below minimum');
+        return;
+    }
+
+    // Warn if fewer than 2 suppliers (Oliver: always prefer 2+ suppliers per hotel)
+    if (supplierSplit.length < 2) {
+        console.log(`[Step 3.3] WARNING ${hotelCode}: only ${supplierSplit.length} supplier(s) in split — Oliver prefers 2+`);
+        logger.warn({ jobId, hotelCode, suppliersCount: supplierSplit.length }, 'Step 3.3: Fewer than 2 suppliers in split');
+    }
+
     if (roomsAllocated < requestedRooms) {
         capacityStatus = 'LIMITED';
         capacityVerificationRequired = true;
     }
 
-    // Enrich with DB hotel info
-    const dbHotelMap = await hotelSearchRepository.getHotelsByCode([hotelCode]);
-    const dbHotel = dbHotelMap.get(hotelCode);
+    console.log(`[Step 3.3] PASS ${hotelCode}: roomsAllocated=${roomsAllocated}, capacityStatus=${capacityStatus}, suppliers=${supplierSplit.length}`);
 
+    // ── Step 3.4 — Fetch Option Details per Supplier Entry ──────────────────
+    // Call optionDetailsV2 for each entry in the supplier split to get exact
+    // cancellation deadlines and per-night price breakdowns. If a call fails,
+    // remove that supplier from the split. If remaining < 6, skip hotel.
+    console.log(`[Step 3.4] Fetching option details for ${supplierSplit.length} supplier entries of ${hotelCode}...`);
+    logger.info({ jobId, hotelCode, splitEntries: supplierSplit.length }, 'Step 3.4: Starting option detail fetch');
+
+    const validatedSplit: any[] = [];
+    const cxlDeadlines: string[] = [];
+    const OPTION_DETAIL_TTL_HOURS = 2;
+
+    for (const entry of supplierSplit) {
+        // Find the matching option to get sessionId (stored during probing)
+        const matchingOption = allOptions.find((o) => o.tid === entry.tid);
+        const entrySessionId = matchingOption?.sessionId ?? '';
+
+        if (!entrySessionId) {
+            console.log(`[Step 3.4] ⚠️  ${entry.supplierCode}: No sessionId for TID ${entry.tid} — removing from split`);
+            logger.warn({ jobId, hotelCode, supplierCode: entry.supplierCode, tid: entry.tid }, 'Step 3.4: No sessionId — cannot fetch details');
+            continue;
+        }
+
+        try {
+            console.log(`[Step 3.4] Calling optionDetailsV2 for ${entry.supplierCode} (TID: ${entry.tid})...`);
+            const detailRaw = await wbeClientService.optionDetailsV2({
+                SessionID: entrySessionId,
+                TID: entry.tid,
+                HotelCode: hotelCode,
+            });
+
+            const detailData = detailRaw?.Data ?? detailRaw?.data ?? {};
+            const cxlPolicy = detailData?.CxlPolicy ?? detailData?.cxlPolicy ?? {};
+            const dayPricesObj = detailData?.DayPrices ?? detailData?.dayPrices ?? {};
+            const cxlSuccess = cxlPolicy?.Success ?? cxlPolicy?.success ?? false;
+            const daySuccess = dayPricesObj?.Success ?? dayPricesObj?.success ?? false;
+
+            console.log(`[Step 3.4] ${entry.supplierCode}: CxlPolicy.Success=${cxlSuccess}, DayPrices.Success=${daySuccess}`);
+
+            // Check NonRefundable — skip entry if it turned non-refundable
+            const nonRefundable = field<boolean>(cxlPolicy, 'NonRefundable', 'nonRefundable') ?? false;
+            if (nonRefundable) {
+                console.log(`[Step 3.4] ❌ ${entry.supplierCode}: NonRefundable=true — removing from split`);
+                logger.info({ jobId, hotelCode, supplierCode: entry.supplierCode, tid: entry.tid }, 'Step 3.4: Option is non-refundable — removed');
+                continue;
+            }
+
+            // Extract cancellation deadline (OptionDate = date by which booking may be cancelled free)
+            const optionDate = field<string>(cxlPolicy, 'OptionDate', 'optionDate') ?? null;
+            if (optionDate) {
+                cxlDeadlines.push(optionDate);
+            }
+
+            // Extract cancellation conditions
+            const rawConditions: any[] = field<any[]>(cxlPolicy, 'Conditions', 'conditions') ?? [];
+            const cxlComment = field<string>(cxlPolicy, 'Comment', 'comment') ?? undefined;
+            const cxlRemarks = field<any>(cxlPolicy, 'Remarks', 'remarks') ?? undefined;
+
+            // Extract validated total price from DayPrices
+            const detailTotalPrice = field<number>(dayPricesObj, 'TotalPrice', 'totalPrice');
+            const detailCurrency = field<string>(dayPricesObj, 'Currency', 'currency') ?? entry.currency;
+            const detailMealType = field<string>(dayPricesObj, 'MealType', 'mealType');
+            const detailMealName = field<string>(dayPricesObj, 'MealName', 'mealName');
+            const essentialInfo = field<string>(dayPricesObj, 'EssentialInfo', 'essentialInfo') ?? undefined;
+            const supplements = field<any[]>(dayPricesObj, 'Supplements', 'supplements') ?? undefined;
+            const detailProviderPrice = field<number>(dayPricesObj, 'ProviderPrice', 'providerPrice');
+            const detailProviderCurrency = field<string>(dayPricesObj, 'ProviderCurrency', 'providerCurrency');
+            const detailSupplierCode = field<string>(dayPricesObj, 'SupplierCode', 'supplierCode') ?? entry.supplierCode;
+
+            // Extract per-room per-day breakdown
+            const detailRooms: any[] = field<any[]>(dayPricesObj, 'Rooms', 'rooms') ?? [];
+            const roomBreakdown = detailRooms.map((r) => ({
+                roomId: field<number>(r, 'RoomId', 'roomId', 'RoomID') ?? 0,
+                description: field<string>(r, 'Description', 'description', 'RoomName') ?? '',
+                prices: (field<any[]>(r, 'Prices', 'prices') ?? []).map((p) => ({
+                    date: field<string>(p, 'Date', 'date') ?? '',
+                    price: field<number>(p, 'Price', 'price') ?? 0,
+                })),
+            }));
+
+            // Enrich the supplier split entry with detail data
+            entry.detailTotalPrice = detailTotalPrice ?? entry.rawTotalPrice;
+            entry.cxlDeadline = optionDate;
+            entry.cxlConditions = rawConditions;
+            entry.roomBreakdown = roomBreakdown;
+
+            validatedSplit.push(entry);
+
+            console.log(`[Step 3.4] ✅ ${entry.supplierCode}: cxlDeadline=${optionDate}, totalPrice=${detailTotalPrice}, rooms=${entry.rooms}`);
+            logger.info({
+                jobId, hotelCode, supplierCode: entry.supplierCode, tid: entry.tid,
+                cxlDeadline: optionDate, detailTotalPrice, rooms: entry.rooms,
+            }, 'Step 3.4: Option detail fetched successfully');
+
+            // Cache to DB (fire-and-forget — don't block the pipeline)
+            const expiresAt = new Date(Date.now() + OPTION_DETAIL_TTL_HOURS * 60 * 60 * 1000);
+            hotelSearchRepository.upsertOptionDetail({
+                tid: entry.tid,
+                hotelCode,
+                data: detailRaw,
+                nonRefundable,
+                cxlOptionDate: optionDate ? new Date(optionDate) : undefined,
+                cxlConditions: rawConditions,
+                cxlComment,
+                cxlRemarks,
+                daypricesTotal: detailTotalPrice,
+                daypricesCurrency: detailCurrency,
+                mealType: detailMealType,
+                mealName: detailMealName,
+                providerPrice: detailProviderPrice,
+                providerCurrency: detailProviderCurrency,
+                supplierCode: detailSupplierCode,
+                essentialInfo,
+                supplements,
+                rooms: roomBreakdown,
+                success: cxlSuccess && daySuccess,
+                expiresAt,
+            }).catch((cacheErr: any) => {
+                logger.warn({ jobId, hotelCode, tid: entry.tid, error: cacheErr.message }, 'Step 3.4: Failed to cache option detail');
+            });
+
+        } catch (err: any) {
+            console.log(`[Step 3.4] ❌ ${entry.supplierCode}: FAILED — ${err.message} — removing from split`);
+            logger.warn({
+                jobId, hotelCode, supplierCode: entry.supplierCode, tid: entry.tid, error: err.message,
+            }, 'Step 3.4: optionDetailsV2 call failed — removing supplier from split');
+            // Entry NOT added to validatedSplit → effectively removed
+        }
+    }
+
+    // Re-validate after removals
+    const validatedRoomsAllocated = validatedSplit.reduce((s: number, e: any) => s + e.rooms, 0);
+    const removedCount = supplierSplit.length - validatedSplit.length;
+    console.log(`[Step 3.4] After detail fetch: ${validatedSplit.length}/${supplierSplit.length} suppliers remain, ${validatedRoomsAllocated} rooms allocated (${removedCount} removed)`);
+    logger.info({
+        jobId, hotelCode, validatedSuppliers: validatedSplit.length, originalSuppliers: supplierSplit.length,
+        validatedRoomsAllocated, removedCount,
+    }, 'Step 3.4: Option detail fetch complete');
+
+    if (validatedRoomsAllocated < MIN_MEANINGFUL_CONTRIBUTION) {
+        reason = `After option detail fetch: only ${validatedRoomsAllocated} rooms remain (${removedCount} suppliers failed/removed), below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
+        console.log(`[Step 3.4] SKIP ${hotelCode}: ${reason}`);
+        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
+        const completedEvent: HotelProbeCompletedEvent = {
+            hotelCode,
+            status: 'INSUFFICIENT',
+            roomsFound,
+            capacityVerificationRequired: false,
+            reason,
+            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
+        };
+        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
+        logger.info({ jobId, hotelCode, validatedRoomsAllocated, removedCount }, 'Step 3.4: Hotel skipped — too few rooms after detail validation');
+        return;
+    }
+
+    // Update capacity status if validated allocation changed
+    if (validatedRoomsAllocated < requestedRooms) {
+        capacityStatus = 'LIMITED';
+        capacityVerificationRequired = true;
+    }
+
+    // Earliest cancellation deadline = most restrictive (protects client)
+    const earliestCxlDeadline = cxlDeadlines.length > 0
+        ? cxlDeadlines.sort()[0]  // ISO strings sort chronologically
+        : null;
+
+    console.log(`[Step 3.4] PASS ${hotelCode}: validatedRooms=${validatedRoomsAllocated}, suppliers=${validatedSplit.length}, earliestCxlDeadline=${earliestCxlDeadline}`);
+
+    // ── Enrich with DB hotel info ────────────────────────────────────────────
     const rawImageKey = dbHotel?.primaryImageKey ?? null;
     let imageUrl: string | null = null;
     if (rawImageKey) {
@@ -377,11 +863,25 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     if (rounded % 10 === 0) sellingPrice = rounded - 2;
     else if (rounded % 5 === 0) sellingPrice = rounded - 1;
 
-    const note = capacityVerificationRequired
-        ? roomsAllocated < requestedRooms
-            ? `Supplier caps limit allocation to ${roomsAllocated} of ${requestedRooms} requested rooms — verify additional supply with the hotel.`
-            : 'Room availability equals requested amount — capacity should be verified with the hotel.'
-        : undefined;
+    // Build note with overlap/unverified context
+    const noteLines: string[] = [];
+    if (overlapDetected) {
+        noteLines.push(`Inventory overlap detected — supplier claims (${totalSupplierClaim}) exceed physical capacity (${physicalCapacity}). Effective capacity capped to ${effectiveCapacity}.`);
+    }
+    if (totalRoomsUnverified) {
+        noteLines.push(`Total room count unverified for this hotel — confirm with hotel directly.`);
+    }
+    if (removedCount > 0) {
+        noteLines.push(`${removedCount} supplier(s) removed during option detail validation — ${validatedSplit.length} remain.`);
+    }
+    if (capacityVerificationRequired) {
+        if (validatedRoomsAllocated < requestedRooms) {
+            noteLines.push(`Supplier caps limit allocation to ${validatedRoomsAllocated} of ${requestedRooms} requested rooms — verify additional supply with the hotel.`);
+        } else {
+            noteLines.push('Room availability equals requested amount — capacity should be verified with the hotel.');
+        }
+    }
+    const note = noteLines.length > 0 ? noteLines.join(' ') : undefined;
 
     const resultJson = {
         hotelCode,
@@ -393,16 +893,23 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,
         longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : null,
         roomsFound,
-        roomsAllocated,
+        roomsAllocated: validatedRoomsAllocated,
         capacityStatus,
         capacityVerificationRequired,
+        overlapDetected,
+        totalRoomsUnverified,
+        effectiveCapacity,
+        totalSupplierClaim,
+        physicalCapacity,
+        cxlDeadline: earliestCxlDeadline,
         highestMidRangePrice,
         sellingPricePerRoomPerNight: sellingPrice,
         currency: dedupedOptions[0]?.currency ?? currencyCode,
-        supplierSplit,
+        supplierSplit: validatedSplit,
         usableOptions: dedupedOptions,
         selectedOptions,
         note,
+        roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
     };
 
     await hotelProbeJobRepository.complete(jobId, resultJson);
@@ -413,11 +920,12 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         roomsFound,
         capacityVerificationRequired,
         result: resultJson,
+        roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
     };
     broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
 
     logger.info(
-        { jobId, hotelCode, roomsFound, capacityStatus, sellingPrice },
+        { jobId, hotelCode, roomsFound, capacityStatus, sellingPrice, roomTypeProgress: typeProgressArray },
         'HotelProbeJob completed',
     );
 }

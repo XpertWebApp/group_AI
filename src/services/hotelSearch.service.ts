@@ -9,7 +9,7 @@ import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
 import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
-import type { ExpandedRoom } from '../queue/hotelProbeJob.types';
+import type { ExpandedRoom, RoomTypeProbeTarget } from '../queue/hotelProbeJob.types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -296,6 +296,33 @@ export function expandRequestRooms(rooms: any): ExpandedRoom[] {
         }
     }
     return expanded.length > 0 ? expanded : [{ adults: ADULTS_PER_ROOM, children: 0, childrenAges: [] }];
+}
+
+/**
+ * Build per-room-type probe targets from the booking request rooms JSON.
+ * Each room type gets its own target with probeLimit = requested × PROBE_MULTIPLIER.
+ * e.g. { single: 5, double: 10 } → [
+ *   { roomType: 'single', requested: 5, probeLimit: 10, adults: 1, ... },
+ *   { roomType: 'double', requested: 10, probeLimit: 20, adults: 2, ... },
+ * ]
+ */
+export function buildRoomTypeTargets(rooms: any): RoomTypeProbeTarget[] {
+    if (!rooms || typeof rooms !== 'object') return [];
+    const targets: RoomTypeProbeTarget[] = [];
+    for (const [type, count] of Object.entries(rooms)) {
+        const n = Number(count) || 0;
+        if (n <= 0) continue;
+        const adults = ROOM_TYPE_ADULTS[type] ?? ADULTS_PER_ROOM;
+        targets.push({
+            roomType: type,
+            requested: n,
+            probeLimit: n * PROBE_MULTIPLIER,
+            adults,
+            children: 0,
+            childrenAges: [],
+        });
+    }
+    return targets;
 }
 
 /**
@@ -790,7 +817,8 @@ export class HotelSearchService {
         }
 
         // Dispatch one HotelProbeJob per hotel to RabbitMQ
-        const probeLimit = totalRooms * PROBE_MULTIPLIER;
+        const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
+        const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
         let jobsQueued = 0;
 
         for (const dbHotel of dbHotels) {
@@ -817,6 +845,7 @@ export class HotelSearchService {
                 markupPercent,
                 expandedRooms,
                 dominantRoomType,
+                roomTypeTargets,
             });
             jobsQueued++;
         }
@@ -1054,7 +1083,8 @@ export class HotelSearchService {
             ...dbHotels.filter((h) => !primaryHotelCodes.has(h.hotelCode)),
         ];
 
-        const probeLimit = totalRooms * PROBE_MULTIPLIER;
+        const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
+        const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
         let jobsQueued = 0;
 
         for (const dbHotel of sortedHotels) {
@@ -1081,6 +1111,7 @@ export class HotelSearchService {
                 markupPercent,
                 expandedRooms,
                 dominantRoomType,
+                roomTypeTargets,
             });
             jobsQueued++;
         }
