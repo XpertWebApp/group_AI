@@ -8,7 +8,7 @@ import wbeClientService from './wbe.client.service';
 import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
-import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
+import { PROBE_BATCH_SIZE, MAX_PROBE_BATCHES, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
 import type { ExpandedRoom } from '../queue/hotelProbeJob.types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -790,7 +790,7 @@ export class HotelSearchService {
         }
 
         // Dispatch one HotelProbeJob per hotel to RabbitMQ
-        const probeLimit = totalRooms * PROBE_MULTIPLIER;
+        const probeLimit = MAX_PROBE_BATCHES * PROBE_BATCH_SIZE; // safety cap for DB audit
         let jobsQueued = 0;
 
         for (const dbHotel of dbHotels) {
@@ -809,7 +809,6 @@ export class HotelSearchService {
                 checkinDate,
                 nights,
                 requestedRooms: totalRooms,
-                probeLimit,
                 currencyCode,
                 nationalityCode,
                 waitSeconds,
@@ -1054,7 +1053,7 @@ export class HotelSearchService {
             ...dbHotels.filter((h) => !primaryHotelCodes.has(h.hotelCode)),
         ];
 
-        const probeLimit = totalRooms * PROBE_MULTIPLIER;
+        const probeLimit = MAX_PROBE_BATCHES * PROBE_BATCH_SIZE; // safety cap for DB audit
         let jobsQueued = 0;
 
         for (const dbHotel of sortedHotels) {
@@ -1073,7 +1072,6 @@ export class HotelSearchService {
                 checkinDate,
                 nights: request.nights,
                 requestedRooms: totalRooms,
-                probeLimit,
                 currencyCode,
                 nationalityCode,
                 waitSeconds,
@@ -1092,6 +1090,86 @@ export class HotelSearchService {
             totalCandidates: dbHotels.length,
             jobsQueued,
             message: `${jobsQueued} hotel probe jobs queued for auto-offer generation.`,
+            sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+            statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+        };
+    }
+
+    /**
+     * Re-verify availability for hotels that previously passed capacity checks.
+     * Re-queues fresh probe jobs for each COMPLETED or LIMITED hotel from a prior search.
+     * Frontend receives progressive SSE updates as each hotel is re-checked.
+     */
+    async reVerifyHotels(requestId: string, params: HotelSearchParams = {}): Promise<HotelSearchQueueResponse> {
+        const request = await requestRepository.findById(requestId);
+        if (!request) {
+            throw { status: 404, message: 'Booking request not found', code: 'NOT_FOUND' };
+        }
+
+        // Find completed/limited jobs from previous search
+        const previousJobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+        const eligibleJobs = previousJobs.filter(
+            (j) => j.status === 'COMPLETED',
+        );
+
+        if (eligibleJobs.length === 0) {
+            return {
+                requestId,
+                totalCandidates: 0,
+                jobsQueued: 0,
+                message: 'No previously completed hotels found to re-verify.',
+                sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+                statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+            };
+        }
+
+        const totalRooms = countTotalRooms(request.rooms);
+        const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
+        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
+        const markupPercent = 18;
+        const checkinDate = request.checkinDate instanceof Date
+            ? request.checkinDate.toISOString().split('T')[0]
+            : String(request.checkinDate);
+        const dominantRoomType = getDominantRoomType((request as any).rooms);
+        const expandedRooms = expandRequestRooms((request as any).rooms);
+        const probeLimit = MAX_PROBE_BATCHES * PROBE_BATCH_SIZE;
+
+        let jobsQueued = 0;
+        for (const prevJob of eligibleJobs) {
+            const jobId = randomUUID();
+            await hotelProbeJobRepository.create({
+                id: jobId,
+                searchRequestId: requestId,
+                hotelCode: prevJob.hotelCode,
+                requestedRooms: totalRooms,
+                probeLimit,
+            });
+            await publishHotelProbeJob({
+                jobId,
+                searchRequestId: requestId,
+                hotelCode: prevJob.hotelCode,
+                checkinDate,
+                nights: request.nights,
+                requestedRooms: totalRooms,
+                currencyCode,
+                nationalityCode,
+                waitSeconds,
+                mealType: params.mealType,
+                markupPercent,
+                expandedRooms,
+                dominantRoomType,
+            });
+            jobsQueued++;
+        }
+
+        logger.info({ requestId, hotelsReVerified: jobsQueued }, 'Re-verification probe jobs queued');
+
+        return {
+            requestId,
+            totalCandidates: eligibleJobs.length,
+            jobsQueued,
+            message: `${jobsQueued} hotel re-verification jobs queued. Subscribe to SSE for real-time updates.`,
             sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
             statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
         };

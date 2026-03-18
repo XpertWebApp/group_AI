@@ -101,6 +101,18 @@ router.post(
 );
 
 /**
+ * POST /requests/:id/hotel-search/re-verify
+ * Re-verifies availability for hotels that previously passed capacity checks.
+ * Re-queues fresh probe jobs; results arrive via SSE or polling.
+ */
+router.post(
+    '/:id/hotel-search/re-verify',
+    authMiddleware,
+    searchLimiter,
+    hotelSearchController.reVerifyAvailability,
+);
+
+/**
  * POST /requests/:id/hotel-search/calculate-price
  * Calculates the recommended customer sell price (highest mid-range + markup + psychology).
  * Step 7 from the SETT Phase 1 guide.

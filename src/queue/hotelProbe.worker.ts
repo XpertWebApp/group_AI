@@ -8,6 +8,7 @@ import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/sup
 import logger from '../utils/logger';
 import {
     PROBE_BATCH_SIZE,
+    MAX_PROBE_BATCHES,
     PROBE_WAIT_SECONDS,
     PROBE_POLL_INTERVAL_MS,
     PROBE_POLL_TIMEOUT_MS,
@@ -180,7 +181,6 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         checkinDate,
         nights,
         requestedRooms,
-        probeLimit,
         currencyCode,
         nationalityCode,
         waitSeconds,
@@ -190,7 +190,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         dominantRoomType,
     } = payload;
 
-    logger.info({ jobId, hotelCode, requestedRooms, probeLimit }, 'Processing HotelProbeJob');
+    logger.info({ jobId, hotelCode, requestedRooms }, 'Processing HotelProbeJob');
 
     await hotelProbeJobRepository.setRunning(jobId);
 
@@ -198,7 +198,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     const allOptions: any[] = [];
     let roomsFound = 0;
     let lastProbeRange = '';
-    const maxBatches = Math.ceil(probeLimit / PROBE_BATCH_SIZE);
+    const maxBatches = MAX_PROBE_BATCHES;
 
     for (let batch = 0; batch < maxBatches; batch++) {
         const startRoomId = batch * PROBE_BATCH_SIZE + 1;
@@ -278,30 +278,31 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             status: 'PROBING',
             roomsFound,
             lastProbeRange,
-            percentComplete: Math.min(100, Math.round((roomsFound / probeLimit) * 100)),
+            batchesCompleted: batch + 1,
             message: `Probed ${lastProbeRange}: found ${roomsFound} rooms so far`,
         };
         broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
 
         logger.info({ jobId, hotelCode, lastProbeRange, roomsFound }, 'Probe batch complete');
-
-        // Early stop — already found enough rooms
-        if (roomsFound >= probeLimit) break;
     }
 
-    // ── Capacity evaluation ───────────────────────────────────────────────────
+    // ── Capacity evaluation (2x rule) ────────────────────────────────────────
+    const safetyThreshold = requestedRooms * 2;
     let capacityStatus: 'CONFIRMED' | 'LIMITED' | 'INSUFFICIENT';
     let capacityVerificationRequired = false;
     let reason: string | undefined;
 
-    if (roomsFound > requestedRooms) {
+    if (roomsFound >= safetyThreshold) {
+        // SAFE — hotel has >= 2x the rooms needed, low overlap risk
         capacityStatus = 'CONFIRMED';
-    } else if (roomsFound === requestedRooms) {
+    } else if (roomsFound >= requestedRooms) {
+        // RISKY — hotel has rooms but below 2x safety threshold, flag for staff review
         capacityStatus = 'LIMITED';
         capacityVerificationRequired = true;
     } else {
+        // INSUFFICIENT — hotel cannot cover the group at all, skip silently
         capacityStatus = 'INSUFFICIENT';
-        reason = `Only ${roomsFound} rooms found, ${requestedRooms} required.`;
+        reason = `Only ${roomsFound} rooms found, ${requestedRooms} required (2x safety threshold: ${safetyThreshold}).`;
         await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
         const completedEvent: HotelProbeCompletedEvent = {
             hotelCode,
@@ -311,7 +312,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             reason,
         };
         broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, roomsFound, requestedRooms }, 'Hotel skipped — insufficient capacity');
+        logger.info({ jobId, hotelCode, roomsFound, requestedRooms, safetyThreshold }, 'Hotel skipped — insufficient capacity');
         return;
     }
 
@@ -322,31 +323,6 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     const selectedOptions = dedupedOptions.filter((o) => midPrices.includes(o.pricePerRoomPerNight));
     const optionsForSplit = selectedOptions.length > 0 ? selectedOptions : dedupedOptions;
     const highestMidRangePrice = midPrices.length > 0 ? Math.max(...midPrices) : 0;
-
-    // ── Step 3.1 — Hotel Room Capacity Check ──────────────────────────────────
-    // Calculate max_possible_from_hotel BEFORE building the split, to decide
-    // whether this hotel can contribute meaningfully (>= 6 rooms).
-    const MIN_MEANINGFUL_CONTRIBUTION = 6;
-    const maxPossibleFromHotel = optionsForSplit.reduce(
-        (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms),
-        0,
-    );
-    const hotelContribution = Math.min(maxPossibleFromHotel, requestedRooms);
-
-    if (hotelContribution < MIN_MEANINGFUL_CONTRIBUTION) {
-        reason = `Hotel contribution ${hotelContribution} rooms (supplier caps) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
-        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
-        const completedEvent: HotelProbeCompletedEvent = {
-            hotelCode,
-            status: 'INSUFFICIENT',
-            roomsFound,
-            capacityVerificationRequired: false,
-            reason,
-        };
-        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, hotelContribution, maxPossibleFromHotel }, 'Hotel skipped — contribution below minimum');
-        return;
-    }
 
     const supplierSplit = buildSupplierSplit(optionsForSplit, requestedRooms, requestedRooms);
 
@@ -378,9 +354,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     else if (rounded % 5 === 0) sellingPrice = rounded - 1;
 
     const note = capacityVerificationRequired
-        ? roomsAllocated < requestedRooms
-            ? `Supplier caps limit allocation to ${roomsAllocated} of ${requestedRooms} requested rooms — verify additional supply with the hotel.`
-            : 'Room availability equals requested amount — capacity should be verified with the hotel.'
+        ? `Hotel has ${roomsFound} available rooms for ${requestedRooms} requested — below 2x safety threshold (${safetyThreshold}). Staff should verify with hotel before booking.`
         : undefined;
 
     const resultJson = {

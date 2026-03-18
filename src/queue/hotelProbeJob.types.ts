@@ -13,7 +13,6 @@ export interface HotelProbeJobPayload {
     checkinDate: string;
     nights: number;
     requestedRooms: number;
-    probeLimit: number;
     currencyCode: string;
     nationalityCode: string;
     waitSeconds: number;
@@ -39,7 +38,7 @@ export interface HotelProbeProgressEvent {
     status: HotelProbeStatus;
     roomsFound: number;
     lastProbeRange: string;
-    percentComplete: number;
+    batchesCompleted: number;
     message: string;
 }
 

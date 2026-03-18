@@ -105,6 +105,30 @@ export class HotelSearchController {
     }
 
     /**
+     * POST /api/v1/requests/:id/hotel-search/re-verify
+     *
+     * Re-verifies availability for hotels that previously passed capacity checks.
+     * Re-queues fresh probe jobs — frontend receives progressive SSE updates.
+     */
+    async reVerifyAvailability(req: Request, res: Response, next: NextFunction) {
+        try {
+            const requestId = req.params['id'] as string;
+            const body = (req as any).validated?.body ?? req.body;
+
+            const result = await hotelSearchService.reVerifyHotels(requestId, {
+                mealType: body.mealType,
+                currencyCode: body.currencyCode,
+                nationalityCode: body.nationalityCode,
+                waitSeconds: body.waitSeconds,
+            });
+
+            return sendResponse(res, 200, result, 'Re-verification started');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
      * POST /api/v1/requests/:id/hotel-search/calculate-price
      *
      * Calculates the recommended customer sell price for a given buying price + markup.
