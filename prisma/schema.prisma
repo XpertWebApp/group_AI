@@ -273,13 +273,19 @@ model Proposal {
   updatedAt      DateTime?         @updatedAt @map("updated_at")
   lockedAt       DateTime?         @map("locked_at")
   lockedBy       String?           @map("locked_by") @db.Uuid
-  sentAt         DateTime?         @map("sent_at")
-  sentBy         String?           @map("sent_by") @db.Uuid
-  sentToEmail    String?           @map("sent_to_email") @db.VarChar(255)
-  status         ProposalStatus    @default(draft)
-  hotels         ProposalHotel[]
-  services       ProposalService[]
-  bookingRequest BookingRequest?   @relation(fields: [requestId], references: [id])
+  sentAt           DateTime?         @map("sent_at")
+  sentBy           String?           @map("sent_by") @db.Uuid
+  sentToEmail      String?           @map("sent_to_email") @db.VarChar(255)
+  status           ProposalStatus    @default(draft)
+  approvedAt       DateTime?         @map("approved_at")
+  approvedBy       String?           @map("approved_by") @db.Uuid
+  rejectedAt       DateTime?         @map("rejected_at")
+  rejectedBy       String?           @map("rejected_by") @db.Uuid
+  rejectionReason  String?           @map("rejection_reason")
+  pdfUrl           String?           @map("pdf_url") @db.VarChar(1000)
+  hotels           ProposalHotel[]
+  services         ProposalService[]
+  bookingRequest   BookingRequest?   @relation(fields: [requestId], references: [id])
 
   @@index([requestId])
   @@index([status])
@@ -412,6 +418,7 @@ enum BookingRequestStatus {
 
 enum ProposalStatus {
   draft
+  pending_admin_approval
   sent
   approved
   declined

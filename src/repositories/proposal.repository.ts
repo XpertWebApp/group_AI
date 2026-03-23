@@ -413,6 +413,51 @@ export class ProposalRepository {
         });
     }
 
+    async setPendingAdminApproval(id: string) {
+        return prisma.proposal.update({
+            where: { id },
+            data: {
+                status: ProposalStatus.pending_admin_approval,
+                lockedBy: null,
+                lockedAt: null,
+            },
+        });
+    }
+
+    async setApproved(id: string, approvedBy: string, pdfUrl?: string) {
+        return prisma.proposal.update({
+            where: { id },
+            data: {
+                status: ProposalStatus.approved,
+                approvedAt: new Date(),
+                approvedBy,
+                pdfUrl: pdfUrl ?? null,
+                rejectedAt: null,
+                rejectedBy: null,
+                rejectionReason: null,
+                lockedBy: null,
+                lockedAt: null,
+            },
+        });
+    }
+
+    async setDeclined(id: string, rejectedBy: string, rejectionReason: string) {
+        return prisma.proposal.update({
+            where: { id },
+            data: {
+                status: ProposalStatus.declined,
+                rejectedAt: new Date(),
+                rejectedBy,
+                rejectionReason,
+                approvedAt: null,
+                approvedBy: null,
+                pdfUrl: null,
+                lockedBy: null,
+                lockedAt: null,
+            },
+        });
+    }
+
     async addHotel(proposalId: string, hotelData: any) {
         return prisma.proposalHotel.create({
             data: { ...hotelData, proposalId },

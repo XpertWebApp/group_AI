@@ -10,6 +10,7 @@ import logger from '../utils/logger';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
 import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
 import type { ExpandedRoom, RoomTypeProbeTarget } from '../queue/hotelProbeJob.types';
+import { countTotalRooms } from '../utils/roomUtils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -266,19 +267,6 @@ export interface OptionDetailsResponse {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Count the total rooms requested across all room types. */
-function countTotalRooms(rooms: any): number {
-    if (!rooms || typeof rooms !== 'object') return 0;
-    return (
-        (rooms.single ?? 0) +
-        (rooms.double ?? 0) +
-        (rooms.twin ?? 0) +
-        (rooms.triple ?? 0) +
-        (rooms.quadruple ?? 0) +
-        (rooms.suites ?? 0)
-    );
-}
 
 /**
  * Expand the booking request rooms JSON into a flat ordered list of individual rooms.

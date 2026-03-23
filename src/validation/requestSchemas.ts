@@ -213,6 +213,16 @@ export const SendProposalSchema = z.object({
     sendToEmail: z.string().email().optional(),
 });
 
+// ── Approve / Decline Proposal ───────────────────────────────────────────────
+export const ApproveProposalSchema = z.object({
+    agentEmail: z.string().email().optional(),
+    adminNotes: z.string().max(2000).optional(),
+});
+
+export const DeclineProposalSchema = z.object({
+    rejectionReason: z.string().min(1, 'Rejection reason is required').max(2000),
+});
+
 // ── Settings: General Configuration ─────────────────────────────────────────
 export const UpdateGeneralConfigSchema = z.object({
     defaultMarkupPercentage: z

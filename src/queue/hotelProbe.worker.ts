@@ -516,140 +516,144 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         }
     }
 
-    // ── Run filter pipeline + supplier split on aggregated options ────────────
-    const dedupedOptions = deduplicateBySupplier(allOptions);
-    const prices = dedupedOptions.map((o) => o.pricePerRoomPerNight);
-    const midPrices = selectMidRange(prices);
-    const selectedOptions = dedupedOptions.filter((o) => midPrices.includes(o.pricePerRoomPerNight));
-    const optionsForSplit = selectedOptions.length > 0 ? selectedOptions : dedupedOptions;
-    const highestMidRangePrice = midPrices.length > 0 ? Math.max(...midPrices) : 0;
-
     // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
     const dbHotelMap = await hotelSearchRepository.getHotelsByCode([hotelCode]);
     const dbHotel = dbHotelMap.get(hotelCode);
-
-    // ── Step 3.1 — Hotel Room Capacity Check ──────────────────────────────────
-    // Does this hotel physically have enough rooms to contribute meaningfully (>= 6)?
     const MIN_MEANINGFUL_CONTRIBUTION = 6;
-    const maxPossibleFromHotel = optionsForSplit.reduce(
-        (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms),
-        0,
-    );
-    const hotelContribution = Math.min(maxPossibleFromHotel, requestedRooms);
 
-    console.log(`[Step 3.1] ${hotelCode}: maxPossibleFromHotel=${maxPossibleFromHotel}, hotelContribution=${hotelContribution}, minRequired=${MIN_MEANINGFUL_CONTRIBUTION}, suppliers=${optionsForSplit.length}`);
-    logger.info({ jobId, hotelCode, maxPossibleFromHotel, hotelContribution, suppliersCount: optionsForSplit.length }, 'Step 3.1: Hotel capacity check');
+    // ══════════════════════════════════════════════════════════════════════════
+    // EC3: Per-Room-Type Filter Pipeline + Supplier Splits
+    // Group options by roomType → deduplicate → price band → supplier split per type
+    // ══════════════════════════════════════════════════════════════════════════
 
-    if (hotelContribution < MIN_MEANINGFUL_CONTRIBUTION) {
-        reason = `Hotel contribution ${hotelContribution} rooms (supplier caps) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
-        console.log(`[Step 3.1] SKIP ${hotelCode}: ${reason}`);
-        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
-        const completedEvent: HotelProbeCompletedEvent = {
-            hotelCode,
-            status: 'INSUFFICIENT',
-            roomsFound,
-            capacityVerificationRequired: false,
-            reason,
-            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
-        };
-        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, hotelContribution, maxPossibleFromHotel }, 'Step 3.1: Hotel skipped — contribution below minimum');
-        return;
+    const optionsByType = new Map<string, any[]>();
+    for (const opt of allOptions) {
+        const type = opt.roomType ?? 'standard';
+        if (!optionsByType.has(type)) optionsByType.set(type, []);
+        optionsByType.get(type)!.push(opt);
     }
 
-    console.log(`[Step 3.1] PASS ${hotelCode}: contribution ${hotelContribution} >= ${MIN_MEANINGFUL_CONTRIBUTION}`);
+    console.log(`[EC3] ${hotelCode}: Grouped options into ${optionsByType.size} room type(s): ${[...optionsByType.keys()].join(', ')}`);
 
-    // ── Step 3.2 — Inventory Overlap Check ──────────────────────────────────
-    // Detect if suppliers are likely reselling the same physical rooms.
-    // Use probed rooms as physical capacity (WBE doesn't reliably provide total_rooms).
-    const totalSupplierClaim = optionsForSplit.reduce(
-        (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms),
-        0,
-    );
-    const dbTotalRooms = dbHotel?.totalRooms ?? 0;
-    const probedCapacity = roomsFound;
-    const physicalCapacity = dbTotalRooms > 0
-        ? Math.min(probedCapacity, dbTotalRooms)
-        : probedCapacity;
-
-    let effectiveCapacity: number;
+    interface PerTypeSplitData {
+        roomType: string;
+        requested: number;
+        dedupedOptions: any[];
+        midRangeOptions: any[];
+        highestMidRangePrice: number;
+        supplierSplit: any[];
+        roomsAllocated: number;
+    }
+    const perTypeSplits: Record<string, PerTypeSplitData> = {};
+    let overallHighestMidRangePrice = 0;
+    let totalRoomsAllocatedAllTypes = 0;
     let overlapDetected = false;
     let totalRoomsUnverified = false;
+    let totalSupplierClaim = 0;
+    let effectiveCapacity = 0;
+    let physicalCapacity = 0;
 
-    if (totalSupplierClaim > physicalCapacity) {
-        overlapDetected = true;
-        effectiveCapacity = physicalCapacity; // cap at what we actually proved
-        console.log(`[Step 3.2] OVERLAP DETECTED for ${hotelCode}: totalSupplierClaim=${totalSupplierClaim} > physicalCapacity=${physicalCapacity} (probed=${probedCapacity}, dbTotalRooms=${dbTotalRooms}), effectiveCapacity capped to ${effectiveCapacity}`);
-        logger.warn(
-            { jobId, hotelCode, totalSupplierClaim, physicalCapacity, probedCapacity, dbTotalRooms, effectiveCapacity },
-            'Step 3.2: Overlap detected — capping at physical capacity',
-        );
-    } else {
-        effectiveCapacity = totalSupplierClaim;
-        console.log(`[Step 3.2] No overlap for ${hotelCode}: totalSupplierClaim=${totalSupplierClaim} <= physicalCapacity=${physicalCapacity} (probed=${probedCapacity}, dbTotalRooms=${dbTotalRooms})`);
-        logger.info(
-            { jobId, hotelCode, totalSupplierClaim, physicalCapacity, probedCapacity, dbTotalRooms },
-            'Step 3.2: No overlap',
-        );
-    }
-
+    const dbTotalRooms = dbHotel?.totalRooms ?? 0;
     if (dbTotalRooms === 0) {
         totalRoomsUnverified = true;
         console.log(`[Step 3.2] DB totalRooms unknown for ${hotelCode} — using probed capacity only`);
     }
 
-    // Re-check contribution with effective capacity after overlap
-    const effectiveContribution = Math.min(effectiveCapacity, requestedRooms);
-    console.log(`[Step 3.2] effectiveContribution=${effectiveContribution} for ${hotelCode} (effectiveCapacity=${effectiveCapacity}, requestedRooms=${requestedRooms})`);
+    for (const [roomType, typeOptions] of optionsByType) {
+        const target = roomTypeTargets?.find((t) => t.roomType === roomType);
+        const typeRequested = target?.requested ?? typeOptions.length;
 
-    if (effectiveContribution < MIN_MEANINGFUL_CONTRIBUTION) {
-        reason = `After overlap check: effective contribution ${effectiveContribution} rooms (supplier claim ${totalSupplierClaim}, capped to ${effectiveCapacity}) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
-        console.log(`[Step 3.2] SKIP ${hotelCode}: ${reason}`);
-        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
-        const completedEvent: HotelProbeCompletedEvent = {
-            hotelCode,
-            status: 'INSUFFICIENT',
-            roomsFound,
-            capacityVerificationRequired: false,
-            reason,
-            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
+        console.log(`\n[EC3:${roomType}] Processing ${typeOptions.length} options, requested=${typeRequested}`);
+
+        // Step 2.3 — Deduplicate by supplier (within this room type only)
+        const deduped = deduplicateBySupplier(typeOptions);
+        console.log(`[EC3:${roomType}] After dedup: ${deduped.length} unique suppliers`);
+
+        // Step 2.4 — Price band filter
+        const prices = deduped.map((o) => o.pricePerRoomPerNight);
+        const midPrices = selectMidRange(prices);
+        const selected = deduped.filter((o) => midPrices.includes(o.pricePerRoomPerNight));
+        const optionsForSplit = selected.length > 0 ? selected : deduped;
+        const highestMid = midPrices.length > 0 ? Math.max(...midPrices) : 0;
+
+        if (highestMid > overallHighestMidRangePrice) overallHighestMidRangePrice = highestMid;
+
+        console.log(`[EC3:${roomType}] Mid-range: ${optionsForSplit.length} options, highestMidPrice=${highestMid}`);
+
+        // Step 3.1 — Capacity check per type
+        const typeMaxPossible = optionsForSplit.reduce(
+            (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms), 0,
+        );
+        const typeContribution = Math.min(typeMaxPossible, typeRequested);
+        console.log(`[Step 3.1:${roomType}] maxPossible=${typeMaxPossible}, contribution=${typeContribution}, suppliers=${optionsForSplit.length}`);
+
+        if (typeContribution === 0) {
+            console.log(`[Step 3.1:${roomType}] SKIP — no capacity for this room type`);
+            continue;
+        }
+
+        // Step 3.2 — Overlap check per type (using per-type probed rooms)
+        const typeProbed = typeProgressMap.get(roomType)?.roomsFound ?? roomsFound;
+        const typePhysical = dbTotalRooms > 0 ? Math.min(typeProbed, dbTotalRooms) : typeProbed;
+        const typeSupplierClaim = optionsForSplit.reduce(
+            (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms), 0,
+        );
+
+        let typeEffective: number;
+        if (typeSupplierClaim > typePhysical) {
+            overlapDetected = true;
+            typeEffective = typePhysical;
+            console.log(`[Step 3.2:${roomType}] OVERLAP: supplierClaim=${typeSupplierClaim} > physical=${typePhysical}, capped to ${typeEffective}`);
+        } else {
+            typeEffective = typeSupplierClaim;
+            console.log(`[Step 3.2:${roomType}] No overlap: supplierClaim=${typeSupplierClaim} <= physical=${typePhysical}`);
+        }
+
+        totalSupplierClaim += typeSupplierClaim;
+        effectiveCapacity += typeEffective;
+        physicalCapacity += typePhysical;
+
+        const typeEffectiveContribution = Math.min(typeEffective, typeRequested);
+
+        // Step 3.3 — Build supplier split for this room type
+        const typeSplit = buildSupplierSplit(optionsForSplit, typeEffectiveContribution, requestedRooms);
+        const typeAllocated = typeSplit.reduce((s, e) => s + e.rooms, 0);
+
+        // Tag each split entry with roomType
+        for (const entry of typeSplit) {
+            (entry as any).roomType = roomType;
+        }
+
+        console.log(`[Step 3.3:${roomType}] Split built: ${typeAllocated} rooms across ${typeSplit.length} suppliers`);
+        for (const entry of typeSplit) {
+            console.log(`[Step 3.3:${roomType}]   ${entry.supplierCode}: ${entry.rooms} rooms @ ${entry.pricePerRoomPerNight} ${entry.currency}`);
+        }
+
+        if (typeSplit.length < 2 && typeAllocated > 0) {
+            console.log(`[Step 3.3:${roomType}] WARNING: only ${typeSplit.length} supplier(s) — Oliver prefers 2+`);
+        }
+
+        perTypeSplits[roomType] = {
+            roomType,
+            requested: typeRequested,
+            dedupedOptions: deduped,
+            midRangeOptions: optionsForSplit,
+            highestMidRangePrice: highestMid,
+            supplierSplit: typeSplit,
+            roomsAllocated: typeAllocated,
         };
-        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, effectiveContribution, effectiveCapacity, totalSupplierClaim }, 'Step 3.2: Hotel skipped — overlap reduces contribution below minimum');
-        return;
+
+        totalRoomsAllocatedAllTypes += typeAllocated;
     }
 
-    // ── Step 3.3 — Build Supplier Split (A2 Array) ──────────────────────────
-    const supplierSplit = buildSupplierSplit(optionsForSplit, effectiveContribution, requestedRooms);
+    // ── Aggregate validation across all types ─────────────────────────────────
+    const allTypeSplitEntries = Object.values(perTypeSplits).flatMap((t) => t.supplierSplit);
 
-    const roomsAllocated = supplierSplit.reduce((s, o) => s + o.rooms, 0);
-    console.log(`[Step 3.3] ${hotelCode}: supplierSplit built — roomsAllocated=${roomsAllocated}, effectiveContribution=${effectiveContribution}, suppliers=${supplierSplit.length}`);
-    for (const entry of supplierSplit) {
-        console.log(`[Step 3.3]   ${entry.supplierCode}: ${entry.rooms} rooms @ ${entry.pricePerRoomPerNight} ${entry.currency}`);
-    }
-    logger.info({ jobId, hotelCode, roomsAllocated, effectiveContribution, splitEntries: supplierSplit.length }, 'Step 3.3: Supplier split built');
+    console.log(`\n[Step 3.3] AGGREGATE ${hotelCode}: totalAllocated=${totalRoomsAllocatedAllTypes}, types=${Object.keys(perTypeSplits).length}, totalSplitEntries=${allTypeSplitEntries.length}`);
+    logger.info({ jobId, hotelCode, totalRoomsAllocatedAllTypes, types: Object.keys(perTypeSplits) }, 'Step 3.3: Per-type splits complete');
 
-    // Validate: critical math check — if split doesn't match target, skip hotel
-    if (roomsAllocated !== effectiveContribution) {
-        console.log(`[Step 3.3] CRITICAL MISMATCH ${hotelCode}: roomsAllocated=${roomsAllocated} != effectiveContribution=${effectiveContribution} — skipping hotel`);
-        reason = `Supplier split math error: allocated ${roomsAllocated} rooms but expected ${effectiveContribution}. Suppliers may not cover the target.`;
-        await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
-        const completedEvent: HotelProbeCompletedEvent = {
-            hotelCode,
-            status: 'INSUFFICIENT',
-            roomsFound,
-            capacityVerificationRequired: false,
-            reason,
-            roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
-        };
-        broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.error({ jobId, hotelCode, roomsAllocated, effectiveContribution }, 'Step 3.3: Supplier split math mismatch — skipping hotel');
-        return;
-    }
-
-    // Validate: skip hotel if allocated rooms < 6 after supplier split
-    if (roomsAllocated < MIN_MEANINGFUL_CONTRIBUTION) {
-        reason = `Supplier split allocated only ${roomsAllocated} rooms, below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
+    if (totalRoomsAllocatedAllTypes < MIN_MEANINGFUL_CONTRIBUTION) {
+        reason = `Total rooms allocated across all types (${totalRoomsAllocatedAllTypes}) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}.`;
         console.log(`[Step 3.3] SKIP ${hotelCode}: ${reason}`);
         await hotelProbeJobRepository.skipInsufficient(jobId, roomsFound, reason);
         const completedEvent: HotelProbeCompletedEvent = {
@@ -661,35 +665,30 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
         };
         broadcast(searchRequestId, 'hotelProbeCompleted', completedEvent);
-        logger.info({ jobId, hotelCode, roomsAllocated }, 'Step 3.3: Hotel skipped — allocated rooms below minimum');
         return;
     }
 
-    // Warn if fewer than 2 suppliers (Oliver: always prefer 2+ suppliers per hotel)
-    if (supplierSplit.length < 2) {
-        console.log(`[Step 3.3] WARNING ${hotelCode}: only ${supplierSplit.length} supplier(s) in split — Oliver prefers 2+`);
-        logger.warn({ jobId, hotelCode, suppliersCount: supplierSplit.length }, 'Step 3.3: Fewer than 2 suppliers in split');
-    }
-
-    if (roomsAllocated < requestedRooms) {
+    if (totalRoomsAllocatedAllTypes < requestedRooms) {
         capacityStatus = 'LIMITED';
         capacityVerificationRequired = true;
     }
 
-    console.log(`[Step 3.3] PASS ${hotelCode}: roomsAllocated=${roomsAllocated}, capacityStatus=${capacityStatus}, suppliers=${supplierSplit.length}`);
+    console.log(`[Step 3.3] PASS ${hotelCode}: totalAllocated=${totalRoomsAllocatedAllTypes}, capacityStatus=${capacityStatus}`);
 
     // ── Step 3.4 — Fetch Option Details per Supplier Entry ──────────────────
     // Call optionDetailsV2 for each entry in the supplier split to get exact
     // cancellation deadlines and per-night price breakdowns. If a call fails,
     // remove that supplier from the split. If remaining < 6, skip hotel.
-    console.log(`[Step 3.4] Fetching option details for ${supplierSplit.length} supplier entries of ${hotelCode}...`);
-    logger.info({ jobId, hotelCode, splitEntries: supplierSplit.length }, 'Step 3.4: Starting option detail fetch');
+    // Summary of entries per type for logging
+    const typeEntrySummary = Object.entries(perTypeSplits).map(([t, d]) => `${d.supplierSplit.length} ${t}`).join(' + ');
+    console.log(`[Step 3.4] Fetching option details for ${allTypeSplitEntries.length} entries (${typeEntrySummary}) of ${hotelCode}...`);
+    logger.info({ jobId, hotelCode, splitEntries: allTypeSplitEntries.length }, 'Step 3.4: Starting option detail fetch');
 
     const validatedSplit: any[] = [];
     const cxlDeadlines: string[] = [];
     const OPTION_DETAIL_TTL_HOURS = 2;
 
-    for (const entry of supplierSplit) {
+    for (const entry of allTypeSplitEntries) {
         // Find the matching option to get sessionId (stored during probing)
         const matchingOption = allOptions.find((o) => o.tid === entry.tid);
         const entrySessionId = matchingOption?.sessionId ?? '';
@@ -809,10 +808,10 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     // Re-validate after removals
     const validatedRoomsAllocated = validatedSplit.reduce((s: number, e: any) => s + e.rooms, 0);
-    const removedCount = supplierSplit.length - validatedSplit.length;
-    console.log(`[Step 3.4] After detail fetch: ${validatedSplit.length}/${supplierSplit.length} suppliers remain, ${validatedRoomsAllocated} rooms allocated (${removedCount} removed)`);
+    const removedCount = allTypeSplitEntries.length - validatedSplit.length;
+    console.log(`[Step 3.4] After detail fetch: ${validatedSplit.length}/${allTypeSplitEntries.length} suppliers remain, ${validatedRoomsAllocated} rooms allocated (${removedCount} removed)`);
     logger.info({
-        jobId, hotelCode, validatedSuppliers: validatedSplit.length, originalSuppliers: supplierSplit.length,
+        jobId, hotelCode, validatedSuppliers: validatedSplit.length, originalSuppliers: allTypeSplitEntries.length,
         validatedRoomsAllocated, removedCount,
     }, 'Step 3.4: Option detail fetch complete');
 
@@ -855,8 +854,8 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
     }
 
-    // Calculate sell price
-    const buyingPriceBase = highestMidRangePrice;
+    // Calculate sell price — uses HIGHEST mid-range price across ALL room types (Step 4.1)
+    const buyingPriceBase = overallHighestMidRangePrice;
     const raw = buyingPriceBase * (1 + markupPercent / 100);
     const rounded = Math.ceil(raw);
     let sellingPrice = rounded;
@@ -883,6 +882,25 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     }
     const note = noteLines.length > 0 ? noteLines.join(' ') : undefined;
 
+    // Build per-type allocation summary for downstream (offer generation + PDF)
+    const perTypeAllocations = Object.entries(perTypeSplits).map(([type, data]) => {
+        // Count validated rooms for this type (some suppliers may have been removed in Step 3.4)
+        const validatedForType = validatedSplit.filter((e: any) => e.roomType === type);
+        const validatedTypeRooms = validatedForType.reduce((s: number, e: any) => s + e.rooms, 0);
+        return {
+            roomType: type,
+            requested: data.requested,
+            roomsAllocated: validatedTypeRooms,
+            highestMidRangePrice: data.highestMidRangePrice,
+            supplierCount: validatedForType.length,
+        };
+    }).filter((t) => t.roomsAllocated > 0); // Only include types that have rooms
+
+    console.log(`[EC3] Per-type allocations for ${hotelCode}:`);
+    for (const t of perTypeAllocations) {
+        console.log(`[EC3]   ${t.roomType}: ${t.roomsAllocated}/${t.requested} rooms, ${t.supplierCount} suppliers, highestMid=${t.highestMidRangePrice}`);
+    }
+
     const resultJson = {
         hotelCode,
         hotelName: dbHotel?.name ?? hotelCode,
@@ -902,12 +920,11 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         totalSupplierClaim,
         physicalCapacity,
         cxlDeadline: earliestCxlDeadline,
-        highestMidRangePrice,
+        highestMidRangePrice: overallHighestMidRangePrice,
         sellingPricePerRoomPerNight: sellingPrice,
-        currency: dedupedOptions[0]?.currency ?? currencyCode,
+        currency: allOptions[0]?.currency ?? currencyCode,
         supplierSplit: validatedSplit,
-        usableOptions: dedupedOptions,
-        selectedOptions,
+        perTypeAllocations,
         note,
         roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
     };

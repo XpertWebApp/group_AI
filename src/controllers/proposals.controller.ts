@@ -197,8 +197,55 @@ export class ProposalsController {
     async previewPdf(req: Request, res: Response, next: NextFunction) {
         try {
             const result = await proposalsService.previewPdf(req.params['id'] as string);
-            return sendResponse(res, 200, result, 'PDF preview placeholder');
+            if (result.pdfBuffer) {
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', 'inline; filename="offer-preview.pdf"');
+                return res.send(result.pdfBuffer);
+            }
+            return sendResponse(res, 200, { previewUrl: null }, 'PDF preview not available');
         } catch (error) {
+            next(error);
+        }
+    }
+
+    async approve(req: Request, res: Response, next: NextFunction) {
+        try {
+            const userId = (req as any).user?.id;
+            if (!userId) return sendResponse(res, 401, null, 'Unauthorized', 'UNAUTHORIZED');
+            const body = (req as any).validated?.body ?? req.body;
+            const ip = req.ip;
+            const result = await proposalsService.approveProposal(
+                req.params['id'] as string,
+                { agentEmail: body.agentEmail, adminNotes: body.adminNotes },
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Proposal approved');
+        } catch (error: any) {
+            if (error.code === 'PROPOSAL_NOT_APPROVABLE') {
+                return res.status(409).json({ error: { code: error.code, message: error.message } });
+            }
+            next(error);
+        }
+    }
+
+    async decline(req: Request, res: Response, next: NextFunction) {
+        try {
+            const userId = (req as any).user?.id;
+            if (!userId) return sendResponse(res, 401, null, 'Unauthorized', 'UNAUTHORIZED');
+            const body = (req as any).validated?.body ?? req.body;
+            const ip = req.ip;
+            const result = await proposalsService.declineProposal(
+                req.params['id'] as string,
+                { rejectionReason: body.rejectionReason },
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Proposal declined');
+        } catch (error: any) {
+            if (error.code === 'PROPOSAL_NOT_APPROVABLE' || error.code === 'REJECTION_REASON_REQUIRED') {
+                return res.status(error.status ?? 409).json({ error: { code: error.code, message: error.message } });
+            }
             next(error);
         }
     }

@@ -9,6 +9,8 @@ import {
     AddProposalServiceSchema,
     UpdateProposalServiceSchema,
     SendProposalSchema,
+    ApproveProposalSchema,
+    DeclineProposalSchema,
 } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
 
@@ -81,5 +83,19 @@ router.post(
 );
 
 router.post('/:id/actions/preview-pdf', authMiddleware, proposalsController.previewPdf);
+
+router.post(
+    '/:id/actions/approve',
+    authMiddleware,
+    validate(ApproveProposalSchema, 'body'),
+    proposalsController.approve,
+);
+
+router.post(
+    '/:id/actions/decline',
+    authMiddleware,
+    validate(DeclineProposalSchema, 'body'),
+    proposalsController.decline,
+);
 
 export default router;

@@ -127,6 +127,189 @@ export class NotificationService {
             entityType: 'booking_request',
         });
     }
+
+    /**
+     * Escalate to human when the accumulation gate cannot meet the room target.
+     * A partial offer is still created with whatever hotels were accepted.
+     * Staff are notified with the shortfall details and a suggested action.
+     */
+    async notifyInsufficientInventory(opts: {
+        requestId: string;
+        referenceNumber: number;
+        contactName: string;
+        destinationName: string;
+        roomsNeeded: number;
+        roomsFound: number;
+        roomsMissing: number;
+        hotelsAccepted: number;
+        suggestion: string;
+        staffEmail?: string;
+    }) {
+        const title = `Insufficient inventory — manual action required`;
+        const message =
+            `Offer #${opts.referenceNumber} for ${opts.contactName} (${opts.destinationName}): ` +
+            `only ${opts.roomsFound} of ${opts.roomsNeeded} rooms found across ${opts.hotelsAccepted} hotel(s). ` +
+            `${opts.roomsMissing} rooms short. Suggestion: ${opts.suggestion}`;
+
+        const emailHtml = `
+<h2>Insufficient Inventory — Manual Action Required</h2>
+<p>The AI offer generation pipeline could not fully satisfy the following group request:</p>
+<ul>
+  <li><strong>Reference:</strong> #${opts.referenceNumber}</li>
+  <li><strong>Client:</strong> ${opts.contactName}</li>
+  <li><strong>Destination:</strong> ${opts.destinationName}</li>
+</ul>
+<h3>Shortfall Details</h3>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+  <tr><td><strong>Rooms needed</strong></td><td>${opts.roomsNeeded}</td></tr>
+  <tr><td><strong>Rooms found</strong></td><td>${opts.roomsFound}</td></tr>
+  <tr><td><strong>Rooms missing</strong></td><td>${opts.roomsMissing}</td></tr>
+  <tr><td><strong>Hotels accepted</strong></td><td>${opts.hotelsAccepted}</td></tr>
+</table>
+<h3>Suggested Action</h3>
+<p>${opts.suggestion}</p>
+<p>A partial offer has been saved with the hotels found so far. Please log in to the SETT dashboard to review, adjust, and complete the offer manually.</p>
+`.trim();
+
+        await this.notify({
+            type: 'insufficient_inventory',
+            title,
+            message,
+            entityId: opts.requestId,
+            entityType: 'booking_request',
+            email: opts.staffEmail
+                ? {
+                      to: opts.staffEmail,
+                      subject: `Offer #${opts.referenceNumber} — ${opts.roomsMissing} rooms short, manual action needed`,
+                      html: emailHtml,
+                  }
+                : undefined,
+        });
+    }
+
+    /**
+     * Notify staff that an offer has been approved and PDF sent to agent.
+     */
+    async notifyOfferApproved(opts: {
+        requestId: string;
+        proposalId: string;
+        referenceNumber: number;
+        contactName: string;
+        destinationName: string;
+        approvedBy: string;
+        agentEmail?: string;
+        staffEmail?: string;
+    }) {
+        const title = `Offer #${opts.referenceNumber} approved`;
+        const message = `Offer #${opts.referenceNumber} for ${opts.contactName} (${opts.destinationName}) has been approved and the PDF has been sent to the agent.`;
+
+        await this.notify({
+            type: 'offer_approved',
+            title,
+            message,
+            entityId: opts.requestId,
+            entityType: 'booking_request',
+        });
+    }
+
+    /**
+     * Notify staff that an offer has been rejected.
+     * Sends both in-app notification and email.
+     */
+    async notifyOfferDeclined(opts: {
+        requestId: string;
+        proposalId: string;
+        referenceNumber: number;
+        contactName: string;
+        destinationName: string;
+        rejectedBy: string;
+        rejectionReason: string;
+        staffEmail?: string;
+    }) {
+        const title = `Offer #${opts.referenceNumber} declined — manual action required`;
+        const message =
+            `Offer #${opts.referenceNumber} for ${opts.contactName} (${opts.destinationName}) has been declined. ` +
+            `Reason: ${opts.rejectionReason}`;
+
+        const emailHtml = `
+<h2>Offer Declined — Manual Action Required</h2>
+<p>The following offer has been declined by an admin and needs manual attention:</p>
+<ul>
+  <li><strong>Reference:</strong> #${opts.referenceNumber}</li>
+  <li><strong>Client:</strong> ${opts.contactName}</li>
+  <li><strong>Destination:</strong> ${opts.destinationName}</li>
+</ul>
+<h3>Rejection Reason</h3>
+<p>${opts.rejectionReason}</p>
+<p>Please log in to the SETT dashboard to review and create a revised offer manually.</p>
+`.trim();
+
+        await this.notify({
+            type: 'offer_declined',
+            title,
+            message,
+            entityId: opts.requestId,
+            entityType: 'booking_request',
+            email: opts.staffEmail
+                ? {
+                      to: opts.staffEmail,
+                      subject: `Offer #${opts.referenceNumber} declined — ${opts.rejectionReason}`,
+                      html: emailHtml,
+                  }
+                : undefined,
+        });
+    }
+
+    /**
+     * Send approved offer PDF to agent via email.
+     */
+    async sendOfferPdfToAgent(opts: {
+        agentEmail: string;
+        referenceNumber: number;
+        contactName: string;
+        destinationName: string;
+        pdfBuffer: Buffer;
+    }) {
+        const from = process.env.SMTP_FROM ?? 'noreply@sett.travel';
+        const transport = createTransport();
+
+        if (!transport) {
+            logger.warn({ agentEmail: opts.agentEmail }, 'SMTP not configured — offer PDF not sent');
+            return false;
+        }
+
+        const subject = `Your Group Offer #${opts.referenceNumber} — ${opts.destinationName}`;
+        const html = `
+<h2>Your Group Offer is Ready</h2>
+<p>Dear ${opts.contactName},</p>
+<p>Please find attached your group accommodation offer for <strong>${opts.destinationName}</strong>.</p>
+<p><strong>Reference:</strong> #${opts.referenceNumber}</p>
+<p><em>This is currently NO reservation. Availability is limited.</em></p>
+<p>Please contact us to confirm your booking.</p>
+<p>Best regards,<br>SETT Group Bookings Team</p>
+`.trim();
+
+        try {
+            const info = await transport.sendMail({
+                from,
+                to: opts.agentEmail,
+                subject,
+                html,
+                attachments: [
+                    {
+                        filename: `Offer_${opts.referenceNumber}.pdf`,
+                        content: opts.pdfBuffer,
+                        contentType: 'application/pdf',
+                    },
+                ],
+            });
+            logger.info({ messageId: info.messageId, to: opts.agentEmail }, 'Offer PDF sent to agent');
+            return true;
+        } catch (err) {
+            logger.error({ err, to: opts.agentEmail }, 'Failed to send offer PDF to agent');
+            return false;
+        }
+    }
 }
 
 export default new NotificationService();

@@ -25,6 +25,11 @@ coverage/
 # Prisma
 /src/generated/prisma/
 
+# Database dumps
+*.sql
+*.sql.gz
+*.dump
+
 # IDE and OS
 .vscode/
 .idea/
