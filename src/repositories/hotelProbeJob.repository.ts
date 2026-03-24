@@ -85,6 +85,13 @@ export class HotelProbeJobRepository {
         return prisma.hotelProbeJob.findUnique({ where: { id } });
     }
 
+    /** Delete all probe jobs for a search request (cleanup before re-search). */
+    async deleteBySearchRequest(searchRequestId: string) {
+        return prisma.hotelProbeJob.deleteMany({
+            where: { searchRequestId },
+        });
+    }
+
     /** Re-queue stale RUNNING/PROBING jobs after a worker crash. */
     async requeueStaleJobs(olderThanMs = 120_000) {
         const cutoff = new Date(Date.now() - olderThanMs);

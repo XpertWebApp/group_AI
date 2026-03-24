@@ -95,6 +95,9 @@ export class RequestService {
             termsAndConditions: data.termsAndConditions ?? null,
             cancellationConditions: data.cancellationConditions ?? null,
 
+            // Assign to the logged-in user (for Gmail sending)
+            assignedUserId: userId ?? null,
+
             status: (data.status as BookingRequestStatus) ?? BookingRequestStatus.pending,
         };
 

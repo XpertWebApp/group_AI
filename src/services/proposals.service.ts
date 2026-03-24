@@ -378,6 +378,7 @@ export class ProposalService {
                     contactName,
                     destinationName,
                     pdfBuffer,
+                    userId,
                 });
                 console.log(`[Step 4.2] Offer PDF ${emailSent ? 'sent' : 'failed to send'} to agent at ${agentEmail}`);
             } catch (err: any) {

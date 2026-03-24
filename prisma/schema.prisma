@@ -61,8 +61,11 @@ model User {
   lastLoginAt  DateTime? @map("last_login_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime? @updatedAt @map("updated_at")
-  refreshToken String?   @map("refresh_token")
-  role         UserRole  @relation(fields: [roleId], references: [id])
+  refreshToken       String?   @map("refresh_token")
+  googleAccessToken  String?   @map("google_access_token")
+  googleRefreshToken String?   @map("google_refresh_token")
+  googleTokenExpiry  DateTime? @map("google_token_expiry")
+  role               UserRole  @relation(fields: [roleId], references: [id])
 
   @@index([roleId])
   @@map("users")
@@ -234,10 +237,12 @@ model BookingRequest {
   customerNotes          String?                    @map("customer_notes")
   termsAndConditions     String?                    @map("terms_and_conditions")
   cancellationConditions String?                    @map("cancellation_conditions")
+  assignedUserId         String?                    @map("assigned_user_id") @db.Uuid
   attachments            BookingRequestAttachment[]
   proposals              Proposal[]
 
   @@index([destinationId])
+  @@index([assignedUserId])
   @@index([status])
   @@index([nationalityCode])
   @@index([createdAt])
@@ -282,7 +287,7 @@ model Proposal {
   rejectedAt       DateTime?         @map("rejected_at")
   rejectedBy       String?           @map("rejected_by") @db.Uuid
   rejectionReason  String?           @map("rejection_reason")
-  pdfUrl           String?           @map("pdf_url") @db.VarChar(1000)
+  pdfUrl           String?           @map("pdf_url") @db.Text
   hotels           ProposalHotel[]
   services         ProposalService[]
   bookingRequest   BookingRequest?   @relation(fields: [requestId], references: [id])

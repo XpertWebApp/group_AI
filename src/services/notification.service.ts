@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import notificationRepository, { CreateNotificationData } from '../repositories/notification.repository';
+import gmailService from './gmail.service';
 import logger from '../utils/logger';
 
 // ─── Email transport ──────────────────────────────────────────────────────────
@@ -261,7 +262,66 @@ export class NotificationService {
     }
 
     /**
+     * Send an email via Gmail API (if userId provided and connected), otherwise SMTP.
+     * Returns { method: 'gmail' | 'smtp' | 'none', sent: boolean }
+     */
+    async sendEmailWithFallback(opts: {
+        userId?: string;
+        to: string;
+        subject: string;
+        html: string;
+        attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
+    }): Promise<{ method: 'gmail' | 'smtp' | 'none'; sent: boolean }> {
+        // Try Gmail first if we have a userId
+        if (opts.userId) {
+            try {
+                const sent = await gmailService.sendEmail(opts.userId, {
+                    to: opts.to,
+                    subject: opts.subject,
+                    html: opts.html,
+                    attachments: opts.attachments,
+                });
+                if (sent) {
+                    logger.info({ to: opts.to, subject: opts.subject, method: 'gmail' }, 'Email sent via Gmail API');
+                    return { method: 'gmail', sent: true };
+                }
+                logger.info({ to: opts.to }, 'Gmail not connected for user — falling back to SMTP');
+            } catch (err) {
+                logger.warn({ err, to: opts.to }, 'Gmail API failed — falling back to SMTP');
+            }
+        }
+
+        // Fallback to SMTP
+        const transport = createTransport();
+        if (!transport) {
+            logger.warn({ to: opts.to, subject: opts.subject }, 'SMTP not configured — email not sent');
+            return { method: 'none', sent: false };
+        }
+
+        const from = process.env.SMTP_FROM ?? 'noreply@sett.travel';
+        try {
+            await transport.sendMail({
+                from,
+                to: opts.to,
+                subject: opts.subject,
+                html: opts.html,
+                attachments: opts.attachments?.map((a) => ({
+                    filename: a.filename,
+                    content: a.content,
+                    contentType: a.contentType,
+                })),
+            });
+            logger.info({ to: opts.to, subject: opts.subject, method: 'smtp' }, 'Email sent via SMTP');
+            return { method: 'smtp', sent: true };
+        } catch (err) {
+            logger.error({ err, to: opts.to, subject: opts.subject }, 'SMTP send failed');
+            return { method: 'smtp', sent: false };
+        }
+    }
+
+    /**
      * Send approved offer PDF to agent via email.
+     * Uses Gmail API if userId is provided and connected, otherwise SMTP.
      */
     async sendOfferPdfToAgent(opts: {
         agentEmail: string;
@@ -269,15 +329,8 @@ export class NotificationService {
         contactName: string;
         destinationName: string;
         pdfBuffer: Buffer;
+        userId?: string;
     }) {
-        const from = process.env.SMTP_FROM ?? 'noreply@sett.travel';
-        const transport = createTransport();
-
-        if (!transport) {
-            logger.warn({ agentEmail: opts.agentEmail }, 'SMTP not configured — offer PDF not sent');
-            return false;
-        }
-
         const subject = `Your Group Offer #${opts.referenceNumber} — ${opts.destinationName}`;
         const html = `
 <h2>Your Group Offer is Ready</h2>
@@ -289,26 +342,21 @@ export class NotificationService {
 <p>Best regards,<br>SETT Group Bookings Team</p>
 `.trim();
 
-        try {
-            const info = await transport.sendMail({
-                from,
-                to: opts.agentEmail,
-                subject,
-                html,
-                attachments: [
-                    {
-                        filename: `Offer_${opts.referenceNumber}.pdf`,
-                        content: opts.pdfBuffer,
-                        contentType: 'application/pdf',
-                    },
-                ],
-            });
-            logger.info({ messageId: info.messageId, to: opts.agentEmail }, 'Offer PDF sent to agent');
-            return true;
-        } catch (err) {
-            logger.error({ err, to: opts.agentEmail }, 'Failed to send offer PDF to agent');
-            return false;
-        }
+        const result = await this.sendEmailWithFallback({
+            userId: opts.userId,
+            to: opts.agentEmail,
+            subject,
+            html,
+            attachments: [
+                {
+                    filename: `Offer_${opts.referenceNumber}.pdf`,
+                    content: opts.pdfBuffer,
+                    contentType: 'application/pdf',
+                },
+            ],
+        });
+
+        return result.sent;
     }
 }
 

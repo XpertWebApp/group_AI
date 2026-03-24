@@ -171,6 +171,7 @@ export class OfferGenerationService {
         const destinationName = (request as any).destinationName ?? 'Unknown destination';
         const roomsNeeded = countTotalRooms((request as any).rooms);
         const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
+        const assignedUserId: string | undefined = (request as any).assignedUserId ?? undefined;
 
         await requestRepository.updateStatus(requestId, BookingRequestStatus.processing);
 

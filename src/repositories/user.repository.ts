@@ -35,6 +35,45 @@ export class UserRepository {
             data: { refreshToken: hashedToken },
         });
     }
+
+    async updateGoogleTokens(userId: string, data: {
+        googleAccessToken: string | null;
+        googleRefreshToken: string | null;
+        googleTokenExpiry: Date | null;
+    }): Promise<User> {
+        return prisma.user.update({
+            where: { id: userId },
+            data,
+        });
+    }
+
+    async getGoogleTokens(userId: string): Promise<{
+        email: string;
+        googleAccessToken: string | null;
+        googleRefreshToken: string | null;
+        googleTokenExpiry: Date | null;
+    } | null> {
+        return prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                email: true,
+                googleAccessToken: true,
+                googleRefreshToken: true,
+                googleTokenExpiry: true,
+            },
+        });
+    }
+
+    async clearGoogleTokens(userId: string): Promise<User> {
+        return prisma.user.update({
+            where: { id: userId },
+            data: {
+                googleAccessToken: null,
+                googleRefreshToken: null,
+                googleTokenExpiry: null,
+            },
+        });
+    }
 }
 
 export default new UserRepository();

@@ -804,6 +804,9 @@ export class HotelSearchService {
             };
         }
 
+        // Clean up old probe jobs from previous searches for this request
+        await hotelProbeJobRepository.deleteBySearchRequest(requestId);
+
         // Dispatch one HotelProbeJob per hotel to RabbitMQ
         const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
         const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
@@ -1070,6 +1073,9 @@ export class HotelSearchService {
             ...dbHotels.filter((h) => primaryHotelCodes.has(h.hotelCode)),
             ...dbHotels.filter((h) => !primaryHotelCodes.has(h.hotelCode)),
         ];
+
+        // Clean up old probe jobs from previous searches for this request
+        await hotelProbeJobRepository.deleteBySearchRequest(requestId);
 
         const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
         const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
