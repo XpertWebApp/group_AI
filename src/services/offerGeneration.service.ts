@@ -20,7 +20,7 @@ const DEFAULT_MARKUP_PCT = 18;
 /** Max time to wait for all probe jobs to complete (ms). */
 const JOB_WAIT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const JOB_POLL_INTERVAL_MS = 5_000; // 5 seconds
-const MIN_MEANINGFUL_CONTRIBUTION = 6;
+const DEFAULT_MIN_MEANINGFUL_CONTRIBUTION = 6;
 
 const TERMINAL_STATUSES = new Set(['COMPLETED', 'SKIPPED_INSUFFICIENT', 'FAILED']);
 
@@ -113,10 +113,13 @@ function applyAccumulationGate(
             continue;
         }
 
-        if (allocated < MIN_MEANINGFUL_CONTRIBUTION) {
-            skipped.push({ job, reason: `Allocated ${allocated} rooms < ${MIN_MEANINGFUL_CONTRIBUTION}` });
-            console.log(`[Step 3.5] SKIP ${hotelName} (${hotelCode}): rooms allocated (${allocated}) below minimum ${MIN_MEANINGFUL_CONTRIBUTION}`);
-            logger.info({ hotelCode, hotelName, allocated, min: MIN_MEANINGFUL_CONTRIBUTION }, 'Step 3.5: Hotel skipped — below minimum contribution');
+        // For small requests (< 6 rooms), accept any hotel covering at least 50% of the need.
+        // For larger requests, keep the original floor of 6.
+        const minContribution = Math.min(DEFAULT_MIN_MEANINGFUL_CONTRIBUTION, Math.max(1, Math.ceil(roomsNeeded * 0.5)));
+        if (allocated < minContribution) {
+            skipped.push({ job, reason: `Allocated ${allocated} rooms < ${minContribution}` });
+            console.log(`[Step 3.5] SKIP ${hotelName} (${hotelCode}): rooms allocated (${allocated}) below minimum ${minContribution}`);
+            logger.info({ hotelCode, hotelName, allocated, min: minContribution }, 'Step 3.5: Hotel skipped — below minimum contribution');
             continue;
         }
 
@@ -185,7 +188,7 @@ export class OfferGenerationService {
 
             if (queueResult.jobsQueued === 0) {
                 const reason = 'No candidate hotels found for this destination and star rating.';
-                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason });
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;
             }
 
@@ -198,7 +201,7 @@ export class OfferGenerationService {
             if (completedJobs.length === 0) {
                 const reason = 'No hotels with sufficient capacity found after probing.';
                 logger.warn({ requestId }, reason);
-                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason });
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;
             }
 
@@ -209,7 +212,7 @@ export class OfferGenerationService {
             if (acceptedHotels.length === 0) {
                 const reason = 'No hotels passed the accumulation gate (all had < 6 rooms or no valid supplier split).';
                 logger.warn({ requestId, completedJobs: completedJobs.length }, reason);
-                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason });
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;
             }
 
@@ -444,6 +447,7 @@ export class OfferGenerationService {
                 requestId,
                 referenceNumber: refNum,
                 reason: err?.message ?? 'Unknown error',
+                staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
             });
         }
     }

@@ -2,6 +2,13 @@ import nodemailer from 'nodemailer';
 import notificationRepository, { CreateNotificationData } from '../repositories/notification.repository';
 import gmailService from './gmail.service';
 import logger from '../utils/logger';
+import {
+    buildOfferReadyEmail,
+    buildInsufficientInventoryEmail,
+    buildOfferDeclinedEmail,
+    buildOfferPdfEmail,
+    buildOfferGenerationFailedEmail,
+} from './emailTemplate';
 
 // ─── Email transport ──────────────────────────────────────────────────────────
 
@@ -85,16 +92,11 @@ export class NotificationService {
         const title = `New group offer ready for review`;
         const message = `Offer #${opts.referenceNumber} for ${opts.contactName} (${opts.destinationName}) has been generated and is ready for staff review.`;
 
-        const emailHtml = `
-<h2>New Group Offer Ready for Review</h2>
-<p>A new AI-generated group offer is ready for your review:</p>
-<ul>
-  <li><strong>Reference:</strong> #${opts.referenceNumber}</li>
-  <li><strong>Client:</strong> ${opts.contactName}</li>
-  <li><strong>Destination:</strong> ${opts.destinationName}</li>
-</ul>
-<p>Please log in to the SETT dashboard to review and finalise the offer.</p>
-`.trim();
+        const emailHtml = buildOfferReadyEmail({
+            referenceNumber: opts.referenceNumber,
+            contactName: opts.contactName,
+            destinationName: opts.destinationName,
+        });
 
         await this.notify({
             type: 'new_offer_ready',
@@ -119,13 +121,23 @@ export class NotificationService {
         requestId: string;
         referenceNumber: number;
         reason: string;
+        staffEmail?: string;
     }) {
+        const title = `Offer generation failed — manual action required`;
+        const emailHtml = buildOfferGenerationFailedEmail({
+            referenceNumber: opts.referenceNumber,
+            reason: opts.reason,
+        });
+
         await this.notify({
             type: 'offer_generation_failed',
-            title: `Offer generation failed — manual action required`,
+            title,
             message: `Offer #${opts.referenceNumber} could not be generated automatically. Reason: ${opts.reason}. Please handle manually.`,
             entityId: opts.requestId,
             entityType: 'booking_request',
+            email: opts.staffEmail
+                ? { to: opts.staffEmail, subject: title, html: emailHtml }
+                : undefined,
         });
     }
 
@@ -152,25 +164,16 @@ export class NotificationService {
             `only ${opts.roomsFound} of ${opts.roomsNeeded} rooms found across ${opts.hotelsAccepted} hotel(s). ` +
             `${opts.roomsMissing} rooms short. Suggestion: ${opts.suggestion}`;
 
-        const emailHtml = `
-<h2>Insufficient Inventory — Manual Action Required</h2>
-<p>The AI offer generation pipeline could not fully satisfy the following group request:</p>
-<ul>
-  <li><strong>Reference:</strong> #${opts.referenceNumber}</li>
-  <li><strong>Client:</strong> ${opts.contactName}</li>
-  <li><strong>Destination:</strong> ${opts.destinationName}</li>
-</ul>
-<h3>Shortfall Details</h3>
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-  <tr><td><strong>Rooms needed</strong></td><td>${opts.roomsNeeded}</td></tr>
-  <tr><td><strong>Rooms found</strong></td><td>${opts.roomsFound}</td></tr>
-  <tr><td><strong>Rooms missing</strong></td><td>${opts.roomsMissing}</td></tr>
-  <tr><td><strong>Hotels accepted</strong></td><td>${opts.hotelsAccepted}</td></tr>
-</table>
-<h3>Suggested Action</h3>
-<p>${opts.suggestion}</p>
-<p>A partial offer has been saved with the hotels found so far. Please log in to the SETT dashboard to review, adjust, and complete the offer manually.</p>
-`.trim();
+        const emailHtml = buildInsufficientInventoryEmail({
+            referenceNumber: opts.referenceNumber,
+            contactName: opts.contactName,
+            destinationName: opts.destinationName,
+            roomsNeeded: opts.roomsNeeded,
+            roomsFound: opts.roomsFound,
+            roomsMissing: opts.roomsMissing,
+            hotelsAccepted: opts.hotelsAccepted,
+            suggestion: opts.suggestion,
+        });
 
         await this.notify({
             type: 'insufficient_inventory',
@@ -232,18 +235,12 @@ export class NotificationService {
             `Offer #${opts.referenceNumber} for ${opts.contactName} (${opts.destinationName}) has been declined. ` +
             `Reason: ${opts.rejectionReason}`;
 
-        const emailHtml = `
-<h2>Offer Declined — Manual Action Required</h2>
-<p>The following offer has been declined by an admin and needs manual attention:</p>
-<ul>
-  <li><strong>Reference:</strong> #${opts.referenceNumber}</li>
-  <li><strong>Client:</strong> ${opts.contactName}</li>
-  <li><strong>Destination:</strong> ${opts.destinationName}</li>
-</ul>
-<h3>Rejection Reason</h3>
-<p>${opts.rejectionReason}</p>
-<p>Please log in to the SETT dashboard to review and create a revised offer manually.</p>
-`.trim();
+        const emailHtml = buildOfferDeclinedEmail({
+            referenceNumber: opts.referenceNumber,
+            contactName: opts.contactName,
+            destinationName: opts.destinationName,
+            rejectionReason: opts.rejectionReason,
+        });
 
         await this.notify({
             type: 'offer_declined',
@@ -332,15 +329,11 @@ export class NotificationService {
         userId?: string;
     }) {
         const subject = `Your Group Offer #${opts.referenceNumber} — ${opts.destinationName}`;
-        const html = `
-<h2>Your Group Offer is Ready</h2>
-<p>Dear ${opts.contactName},</p>
-<p>Please find attached your group accommodation offer for <strong>${opts.destinationName}</strong>.</p>
-<p><strong>Reference:</strong> #${opts.referenceNumber}</p>
-<p><em>This is currently NO reservation. Availability is limited.</em></p>
-<p>Please contact us to confirm your booking.</p>
-<p>Best regards,<br>SETT Group Bookings Team</p>
-`.trim();
+        const html = buildOfferPdfEmail({
+            referenceNumber: opts.referenceNumber,
+            contactName: opts.contactName,
+            destinationName: opts.destinationName,
+        });
 
         const result = await this.sendEmailWithFallback({
             userId: opts.userId,

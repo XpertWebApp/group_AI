@@ -17,6 +17,8 @@ import {
     PROBE_WAIT_SECONDS,
     PROBE_POLL_INTERVAL_MS,
     PROBE_POLL_TIMEOUT_MS,
+    MULTI_SUPPLIER_OVERLAP_THRESHOLD,
+    OVERLAP_DISCOUNT_FACTOR,
 } from '../config/probeConfig';
 
 // ─── Re-use filter helpers inline (avoid circular imports) ────────────────────
@@ -519,7 +521,9 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
     const dbHotelMap = await hotelSearchRepository.getHotelsByCode([hotelCode]);
     const dbHotel = dbHotelMap.get(hotelCode);
-    const MIN_MEANINGFUL_CONTRIBUTION = 6;
+    // For small requests (< 6 rooms), accept any hotel that covers at least 50% of the need.
+    // For larger requests, keep the original floor of 6.
+    const MIN_MEANINGFUL_CONTRIBUTION = Math.min(6, Math.max(1, Math.ceil(requestedRooms * 0.5)));
 
     // ══════════════════════════════════════════════════════════════════════════
     // EC3: Per-Room-Type Filter Pipeline + Supplier Splits
@@ -592,26 +596,43 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             continue;
         }
 
-        // Step 3.2 — Overlap check per type (using per-type probed rooms)
+        // Step 3.2 — Multi-supplier overlap heuristic
         const typeProbed = typeProgressMap.get(roomType)?.roomsFound ?? roomsFound;
-        const typePhysical = dbTotalRooms > 0 ? Math.min(typeProbed, dbTotalRooms) : typeProbed;
+        const supplierCount = optionsForSplit.length; // already deduped by supplier
         const typeSupplierClaim = optionsForSplit.reduce(
             (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms), 0,
         );
 
         let typeEffective: number;
-        if (typeSupplierClaim > typePhysical) {
-            overlapDetected = true;
-            typeEffective = typePhysical;
-            console.log(`[Step 3.2:${roomType}] OVERLAP: supplierClaim=${typeSupplierClaim} > physical=${typePhysical}, capped to ${typeEffective}`);
-        } else {
+        if (supplierCount <= 1) {
+            // Single supplier — no overlap possible
             typeEffective = typeSupplierClaim;
-            console.log(`[Step 3.2:${roomType}] No overlap: supplierClaim=${typeSupplierClaim} <= physical=${typePhysical}`);
+            console.log(`[Step 3.2:${roomType}] Single supplier — no overlap. claim=${typeSupplierClaim}`);
+        } else if (dbTotalRooms > 0) {
+            // Verified DB capacity — use as authoritative ceiling
+            const typePhysical = Math.min(typeProbed, dbTotalRooms);
+            if (typeSupplierClaim > typePhysical) {
+                overlapDetected = true;
+                typeEffective = typePhysical;
+                console.log(`[Step 3.2:${roomType}] VERIFIED OVERLAP: supplierClaim=${typeSupplierClaim} > dbCapacity=${typePhysical}, capped to ${typeEffective}`);
+            } else {
+                typeEffective = typeSupplierClaim;
+                console.log(`[Step 3.2:${roomType}] No overlap (verified): supplierClaim=${typeSupplierClaim} <= dbCapacity=${typePhysical}`);
+            }
+        } else if (requestedRooms >= MULTI_SUPPLIER_OVERLAP_THRESHOLD) {
+            // Large request, multiple suppliers, no verified count — apply overlap discount
+            typeEffective = Math.floor(typeSupplierClaim * OVERLAP_DISCOUNT_FACTOR);
+            overlapDetected = true;
+            console.log(`[Step 3.2:${roomType}] OVERLAP RISK: ${supplierCount} suppliers, claim=${typeSupplierClaim}, discounted to ${typeEffective} (${OVERLAP_DISCOUNT_FACTOR * 100}%)`);
+        } else {
+            // Small/medium request, multiple suppliers — trust claims
+            typeEffective = typeSupplierClaim;
+            console.log(`[Step 3.2:${roomType}] Multiple suppliers (${supplierCount}), small request — trusting claim=${typeSupplierClaim}`);
         }
 
         totalSupplierClaim += typeSupplierClaim;
         effectiveCapacity += typeEffective;
-        physicalCapacity += typePhysical;
+        physicalCapacity += typeProbed;
 
         const typeEffectiveContribution = Math.min(typeEffective, typeRequested);
 
@@ -865,10 +886,18 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     // Build note with overlap/unverified context
     const noteLines: string[] = [];
     if (overlapDetected) {
-        noteLines.push(`Inventory overlap detected — supplier claims (${totalSupplierClaim}) exceed physical capacity (${physicalCapacity}). Effective capacity capped to ${effectiveCapacity}.`);
+        if (dbTotalRooms > 0) {
+            noteLines.push(`Inventory overlap detected — supplier claims (${totalSupplierClaim}) exceed verified hotel capacity (${dbTotalRooms}). Effective capacity capped to ${effectiveCapacity}.`);
+        } else {
+            // Count unique suppliers across all type splits
+            const uniqueSuppliers = new Set(
+                Object.values(perTypeSplits).flatMap((t) => t.supplierSplit.map((s: any) => s.supplierCode)),
+            );
+            noteLines.push(`Multiple suppliers found (${uniqueSuppliers.size}) — allocation reduced by ${Math.round((1 - OVERLAP_DISCOUNT_FACTOR) * 100)}% to account for potential inventory overlap across channels. Verify total capacity with hotel directly.`);
+        }
     }
-    if (totalRoomsUnverified) {
-        noteLines.push(`Total room count unverified for this hotel — confirm with hotel directly.`);
+    if (totalRoomsUnverified && requestedRooms >= MULTI_SUPPLIER_OVERLAP_THRESHOLD) {
+        noteLines.push(`Total room count unverified — confirm with hotel directly.`);
     }
     if (removedCount > 0) {
         noteLines.push(`${removedCount} supplier(s) removed during option detail validation — ${validatedSplit.length} remain.`);

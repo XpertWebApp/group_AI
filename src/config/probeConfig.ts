@@ -12,6 +12,12 @@ export const PROBE_WAIT_SECONDS = Number(process.env.PROBE_WAIT_SECONDS ?? 45);
 export const PROBE_POLL_INTERVAL_MS = Number(process.env.PROBE_POLL_INTERVAL_MS ?? 3000);
 export const PROBE_POLL_TIMEOUT_MS = Number(process.env.PROBE_POLL_TIMEOUT_MS ?? 60000);
 
+/** Below this room count, trust supplier claims without overlap discount (multi-supplier only). */
+export const MULTI_SUPPLIER_OVERLAP_THRESHOLD = Number(process.env.MULTI_SUPPLIER_OVERLAP_THRESHOLD ?? 15);
+
+/** For large multi-supplier requests, assume this fraction of supplier claims is unique inventory. */
+export const OVERLAP_DISCOUNT_FACTOR = Number(process.env.OVERLAP_DISCOUNT_FACTOR ?? 0.75);
+
 /** Room type → number of adults mapping for WBE search rooms. */
 export const ROOM_TYPE_ADULTS: Record<string, number> = {
     single: 1,
