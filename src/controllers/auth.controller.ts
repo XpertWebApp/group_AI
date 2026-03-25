@@ -5,7 +5,6 @@ import { sendResponse } from '../utils/response';
 export class AuthController {
     async login(req: Request, res: Response, next: NextFunction) {
         try {
-            console.log("djfhjsdfjdf------------");
             const { email, password } = req.body;
             const result = await authService.login(email, password);
             return sendResponse(res, 200, result, 'Login successful');

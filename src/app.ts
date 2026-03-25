@@ -10,6 +10,9 @@ import routes from './routes/index';
 
 const app: Application = express();
 
+// Trust proxy (needed for correct client IP behind reverse proxy / load balancer)
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet());
 app.use(
