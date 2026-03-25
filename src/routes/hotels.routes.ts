@@ -5,6 +5,8 @@ import { validate } from '../middlewares/validate.middleware';
 import { HotelSearchQuerySchema } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
 import wbeClientService from '../services/wbe.client.service';
+import hotelSearchRepository from '../repositories/hotelSearch.repository';
+import { sendResponse } from '../utils/response';
 
 const router = Router();
 
@@ -27,6 +29,40 @@ router.get(
     validate(HotelSearchQuerySchema, 'query'),
     hotelController.search,
 );
+
+/**
+ * GET /api/v1/hotels/facilities
+ *
+ * Returns all master facilities (amenities) for filter sidebar.
+ */
+router.get('/facilities', authMiddleware, searchLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const facilities = await hotelSearchRepository.getAllFacilities();
+        return sendResponse(res, 200, { facilities }, 'Facilities retrieved');
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * GET /api/v1/hotels/facilities/by-destination/:destinationId
+ *
+ * Returns facilities available for hotels in a specific destination,
+ * along with a count of how many hotels have each facility.
+ */
+router.get('/facilities/by-destination/:destinationId', authMiddleware, searchLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const destinationId = parseInt(req.params['destinationId'] as string, 10);
+        if (isNaN(destinationId)) {
+            res.status(400).json({ error: { code: 'bad_request', message: 'Invalid destinationId' } });
+            return;
+        }
+        const facilities = await hotelSearchRepository.getFacilitiesByDestination(destinationId);
+        return sendResponse(res, 200, { facilities }, 'Facilities for destination retrieved');
+    } catch (err) {
+        next(err);
+    }
+});
 
 /**
  * GET /api/v1/hotels/image?key={imageKey}

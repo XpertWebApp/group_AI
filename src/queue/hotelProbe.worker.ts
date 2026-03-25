@@ -519,8 +519,12 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     }
 
     // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
-    const dbHotelMap = await hotelSearchRepository.getHotelsByCode([hotelCode]);
+    const [dbHotelMap, facilityMap] = await Promise.all([
+        hotelSearchRepository.getHotelsByCode([hotelCode]),
+        hotelSearchRepository.getFacilitiesByHotelCodes([hotelCode]),
+    ]);
     const dbHotel = dbHotelMap.get(hotelCode);
+    const hotelFacilities = facilityMap.get(hotelCode) ?? [];
     // For small requests (< 6 rooms), accept any hotel that covers at least 50% of the need.
     // For larger requests, keep the original floor of 6.
     const MIN_MEANINGFUL_CONTRIBUTION = Math.min(6, Math.max(1, Math.ceil(requestedRooms * 0.5)));
@@ -954,6 +958,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         currency: allOptions[0]?.currency ?? currencyCode,
         supplierSplit: validatedSplit,
         perTypeAllocations,
+        facilities: hotelFacilities,
         note,
         roomTypeProgress: typeProgressArray.length > 0 ? typeProgressArray : undefined,
     };

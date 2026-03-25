@@ -22,6 +22,7 @@ export class HotelSearchController {
                 waitSeconds: body.waitSeconds,
                 currencyCode: body.currencyCode,
                 nationalityCode: body.nationalityCode,
+                facilityIds: body.facilityIds,
             });
 
             return sendResponse(res, 200, result, 'Hotel search completed');

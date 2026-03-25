@@ -101,6 +101,129 @@ export class HotelSearchRepository {
     }
 
     /**
+     * Returns a map of hotelCode → facility list (id + name) for the given hotel codes.
+     * Used to enrich hotel probe results with amenity data.
+     */
+    async getFacilitiesByHotelCodes(
+        hotelCodes: string[],
+    ): Promise<Map<string, Array<{ id: number; name: string }>>> {
+        if (hotelCodes.length === 0) return new Map();
+
+        const rows = await prisma.hotelFacility.findMany({
+            where: { hotelCode: { in: hotelCodes } },
+            select: { hotelCode: true, facilityId: true },
+        });
+
+        // Collect unique facility IDs
+        const facilityIds = [...new Set(rows.map((r) => r.facilityId))];
+        if (facilityIds.length === 0) return new Map();
+
+        const facilities = await prisma.facility.findMany({
+            where: { id: { in: facilityIds } },
+            select: { id: true, name: true },
+        });
+
+        const facilityMap = new Map<number, string>();
+        for (const f of facilities) facilityMap.set(f.id, f.name);
+
+        const result = new Map<string, Array<{ id: number; name: string }>>();
+        for (const row of rows) {
+            const name = facilityMap.get(row.facilityId);
+            if (!name) continue;
+            if (!result.has(row.hotelCode)) result.set(row.hotelCode, []);
+            result.get(row.hotelCode)!.push({ id: row.facilityId, name });
+        }
+
+        return result;
+    }
+
+    /**
+     * Returns all master facilities (for filter sidebar).
+     */
+    async getAllFacilities(): Promise<Array<{ id: number; name: string }>> {
+        return prisma.facility.findMany({
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        });
+    }
+
+    /**
+     * Returns facilities available for hotels in a given destination.
+     * Useful for showing only relevant filter options.
+     */
+    async getFacilitiesByDestination(
+        destinationId: number,
+    ): Promise<Array<{ id: number; name: string; hotelCount: number }>> {
+        // Get hotel codes for this destination
+        const hotels = await prisma.hotel.findMany({
+            where: { destinationId },
+            select: { hotelCode: true },
+        });
+        const hotelCodes = hotels.map((h) => h.hotelCode);
+        if (hotelCodes.length === 0) return [];
+
+        // Get facility IDs linked to these hotels with counts
+        const hotelFacilities = await prisma.hotelFacility.findMany({
+            where: { hotelCode: { in: hotelCodes } },
+            select: { facilityId: true, hotelCode: true },
+        });
+
+        // Count hotels per facility
+        const facilityHotelMap = new Map<number, Set<string>>();
+        for (const hf of hotelFacilities) {
+            if (!facilityHotelMap.has(hf.facilityId)) facilityHotelMap.set(hf.facilityId, new Set());
+            facilityHotelMap.get(hf.facilityId)!.add(hf.hotelCode);
+        }
+
+        const facilityIds = [...facilityHotelMap.keys()];
+        if (facilityIds.length === 0) return [];
+
+        const facilities = await prisma.facility.findMany({
+            where: { id: { in: facilityIds } },
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        });
+
+        return facilities.map((f) => ({
+            id: f.id,
+            name: f.name,
+            hotelCount: facilityHotelMap.get(f.id)?.size ?? 0,
+        }));
+    }
+
+    /**
+     * Returns hotel codes from the given list that have ALL of the specified facility IDs.
+     * Used for amenity filtering in hotel search.
+     */
+    async filterHotelCodesByFacilities(
+        hotelCodes: string[],
+        facilityIds: number[],
+    ): Promise<string[]> {
+        if (hotelCodes.length === 0 || facilityIds.length === 0) return hotelCodes;
+
+        const rows = await prisma.hotelFacility.findMany({
+            where: {
+                hotelCode: { in: hotelCodes },
+                facilityId: { in: facilityIds },
+            },
+            select: { hotelCode: true, facilityId: true },
+        });
+
+        // Group by hotel code and check each has ALL requested facilities
+        const hotelFacilityMap = new Map<string, Set<number>>();
+        for (const r of rows) {
+            if (!hotelFacilityMap.has(r.hotelCode)) hotelFacilityMap.set(r.hotelCode, new Set());
+            hotelFacilityMap.get(r.hotelCode)!.add(r.facilityId);
+        }
+
+        return hotelCodes.filter((code) => {
+            const facilities = hotelFacilityMap.get(code);
+            if (!facilities) return false;
+            return facilityIds.every((id) => facilities.has(id));
+        });
+    }
+
+    /**
      * Returns a cached option detail by TID, or null if not found / expired.
      */
     async getCachedOptionDetail(tid: string) {

@@ -314,6 +314,8 @@ export const WbeHotelSearchSchema = z.object({
     currencyCode: z.string().min(2).max(10).optional(),
     /** Nationality code override. Falls back to request nationalityCode. */
     nationalityCode: z.string().min(1).max(10).optional(),
+    /** Filter hotels by facility/amenity IDs. Only hotels with ALL listed facilities are included. */
+    facilityIds: z.array(z.number().int().positive()).optional(),
 });
 
 // ── Option Details (Step 6) ───────────────────────────────────────────────

@@ -45,6 +45,8 @@ export interface HotelSearchParams {
     currencyCode?: string;
     /** Nationality override. Falls back to request nationalityCode. */
     nationalityCode?: string;
+    /** Filter hotels by facility/amenity IDs. Only hotels with ALL listed facilities are included. */
+    facilityIds?: number[];
 }
 
 export interface ProcessedOption {
@@ -787,10 +789,19 @@ export class HotelSearchService {
             : [];
         const allSearchStars = [...new Set([...primaryStars, ...altStars])];
 
-        const dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
+        let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
             destinationId,
             allSearchStars.length > 0 ? allSearchStars : [],
         );
+
+        // Filter by facilities/amenities if requested
+        if (params.facilityIds && params.facilityIds.length > 0) {
+            const allCodes = dbHotels.map((h) => h.hotelCode);
+            const matchingCodes = await hotelSearchRepository.filterHotelCodesByFacilities(allCodes, params.facilityIds);
+            const matchingSet = new Set(matchingCodes);
+            dbHotels = dbHotels.filter((h) => matchingSet.has(h.hotelCode));
+            logger.info({ requestId, before: allCodes.length, after: dbHotels.length, facilityIds: params.facilityIds }, 'Filtered candidates by facilities');
+        }
 
         if (dbHotels.length === 0) {
             logger.warn({ requestId, destinationId, starRatings: allSearchStars }, 'No hotels found in DB for destination');
