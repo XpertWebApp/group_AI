@@ -26,9 +26,11 @@ coverage/
 /src/generated/prisma/
 
 # Database dumps
-*.sql
 *.sql.gz
 *.dump
+# Ignore SQL files except Prisma migrations
+*.sql
+!prisma/migrations/**/*.sql
 
 # IDE and OS
 .vscode/
