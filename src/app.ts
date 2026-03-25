@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import path from 'path';
 import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
@@ -25,6 +26,12 @@ app.use(express.urlencoded({ extended: true }));
 // Other Middlewares
 app.use(cookieParser());
 app.use(compression());
+
+// Static assets (email logos, brand images — no auth required)
+app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets'), {
+    maxAge: '30d',
+    immutable: true,
+}));
 
 // Health Check
 app.get('/health', (_req, res) => {

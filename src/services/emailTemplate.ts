@@ -20,18 +20,22 @@
 const SETT_NAVY = '#071c42';
 const SETT_GREEN = '#AAC737';
 const SETT_GREEN_DARK = '#7a9420';
-const SETT_GREEN_LIGHT = '#c8e050';
 const SETT_GREY = '#686868';
-const SETT_BLACK = '#0a0a0a';
 const SETT_LIGHT_BG = '#F8F9FA';
 const SETT_WHITE = '#FFFFFF';
 const SETT_BORDER = '#E0E0E0';
 
 // ─── Logo URLs (hosted — no base64 per brand guidelines) ─────────────────────
-// §4.4: SVG logo for general email headers
+// Server base URL for self-hosted assets (email logos served from /assets/)
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://localhost:4000';
+
+// §4.4: SVG logo (hosted on tools.s-e-t-t.com — verified working)
 const SVG_LOGO_URL = 'https://tools.s-e-t-t.com/ceo-dashboard/assets/setthub-logo.svg';
-// §4.2: Group Offer logo for group-specific email headers
-const GROUP_OFFER_LOGO_URL = 'https://tools.s-e-t-t.com/ceo-dashboard/assets/Group-offer--big-2.png';
+// §4.2: Group Offer logo — use self-hosted if SERVER_BASE_URL is set to a public domain,
+// otherwise fall back to the SVG logo (which is verified working)
+const GROUP_OFFER_LOGO_URL = SERVER_BASE_URL.includes('localhost')
+    ? SVG_LOGO_URL
+    : `${SERVER_BASE_URL}/assets/group-offer-header.png`;
 
 const WEBSITE_URL = 'https://www.s-e-t-t.com';
 
