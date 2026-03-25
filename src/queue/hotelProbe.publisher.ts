@@ -4,6 +4,10 @@ import logger from '../utils/logger';
 
 export async function publishHotelProbeJob(payload: HotelProbeJobPayload): Promise<void> {
     const ch = await getChannel();
+    if (!ch) {
+        logger.warn({ jobId: payload.jobId }, 'RabbitMQ not available — cannot publish probe job');
+        return;
+    }
     ch.sendToQueue(
         HOTEL_PROBE_QUEUE,
         Buffer.from(JSON.stringify(payload)),

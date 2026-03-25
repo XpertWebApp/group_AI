@@ -6,9 +6,14 @@ export const HOTEL_PROBE_QUEUE = 'hotel_probe_jobs';
 let model: amqp.ChannelModel | null = null;
 let channel: amqp.Channel | null = null;
 
-async function connect(): Promise<amqp.Channel> {
+async function connect(): Promise<amqp.Channel | null> {
     const url = process.env.RABBITMQ_URL ?? 'amqp://localhost';
-    model = await amqp.connect(url);
+    try {
+        model = await amqp.connect(url);
+    } catch (err) {
+        logger.warn({ msg: 'RabbitMQ not available — worker features disabled', error: err instanceof Error ? err.message : String(err) });
+        return null;
+    }
 
     model.on('error', (err: unknown) => {
         logger.error({ msg: 'RabbitMQ connection error', error: err instanceof Error ? err.message : String(err) });
@@ -30,7 +35,7 @@ async function connect(): Promise<amqp.Channel> {
     return channel;
 }
 
-export async function getChannel(): Promise<amqp.Channel> {
+export async function getChannel(): Promise<amqp.Channel | null> {
     if (!channel) {
         return connect();
     }

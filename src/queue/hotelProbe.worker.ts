@@ -981,6 +981,11 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 export async function startHotelProbeWorker(): Promise<void> {
     const ch = await getChannel();
 
+    if (!ch) {
+        logger.warn('Hotel probe worker skipped — RabbitMQ not available');
+        return;
+    }
+
     logger.info('Hotel probe worker started — waiting for jobs');
 
     ch.consume(
