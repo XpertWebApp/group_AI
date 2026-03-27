@@ -24,7 +24,7 @@ export const CreateBookingRequestSchema = z
         checkoutDate: dateString('check-out date').optional(),
         /** nights is derived from checkinDate + checkoutDate, but can be supplied directly */
         nights: z.number().int().min(1).optional(),
-        starRating: z.number().min(1).max(5).optional(),
+        starRating: z.number().min(1).max(6).refine((v) => v * 2 === Math.round(v * 2), { message: 'Star rating must be in 0.5 increments (e.g. 1, 1.5, 2, ... 5.5, 6)' }).optional(),
         budgetRange: z.string().max(100).optional(),
         budget: z.number().positive().optional(),
         groupType: z.string().max(100).optional(),
@@ -78,7 +78,7 @@ export const UpdateBookingRequestSchema = z.object({
     checkinDate: dateString('check-in date').optional(),
     checkoutDate: dateString('check-out date').optional(),
     nights: z.number().int().min(1).optional(),
-    starRating: z.number().min(1).max(5).optional(),
+    starRating: z.number().min(1).max(6).refine((v) => v * 2 === Math.round(v * 2), { message: 'Star rating must be in 0.5 increments (e.g. 1, 1.5, 2, ... 5.5, 6)' }).optional(),
     budgetRange: z.string().max(100).optional(),
     budget: z.number().positive().optional(),
     groupType: z.string().max(100).optional(),
