@@ -334,3 +334,33 @@ export const PriceCalculationSchema = z.object({
     buyingPrice: z.number().positive(),
     markupPercent: z.number().min(0).max(100).optional(),
 });
+
+// ── Settings: Staff Management ─────────────────────────────────────────────
+export const ListStaffQuerySchema = z.object({
+    search: z.string().optional(),
+    status: z
+        .enum(['active', 'blocked', ''])
+        .optional()
+        .transform((v) => (v === '' ? undefined : v)),
+    page: z
+        .string()
+        .optional()
+        .transform((v) => (v ? parseInt(v, 10) : 1)),
+    limit: z
+        .string()
+        .optional()
+        .transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 20)),
+});
+
+export const AddStaffSchema = z.object({
+    fullName: z.string().min(1, 'Full name is required').max(200),
+    email: z.string().email('Invalid email address'),
+});
+
+export const ToggleStaffStatusSchema = z.object({
+    action: z.enum(['block', 'unblock']),
+});
+
+export const StaffIdParamSchema = z.object({
+    id: z.string().uuid('Invalid staff ID'),
+});

@@ -1,6 +1,7 @@
 import { SettingCategory } from '@prisma/client';
 import settingsRepository from '../repositories/settings.repository';
 import supplierLimitsRepository from '../repositories/supplierLimits.repository';
+import staffRepository from '../repositories/staff.repository';
 import { refreshSupplierLimitsCache } from '../config/supplierLimits';
 
 export class SettingsService {
@@ -8,9 +9,10 @@ export class SettingsService {
      * Returns the settings overview for the main settings page (5 cards with last-updated timestamps).
      */
     async getOverview() {
-        const [categoryTimestamps, supplierLimitsUpdated] = await Promise.all([
+        const [categoryTimestamps, supplierLimitsUpdated, staffCount] = await Promise.all([
             settingsRepository.getLastUpdatedByCategory(),
             supplierLimitsRepository.getLastUpdated(),
+            staffRepository.countAll(),
         ]);
 
         return {
@@ -19,6 +21,7 @@ export class SettingsService {
             email: { updatedAt: categoryTimestamps.email },
             company: { updatedAt: categoryTimestamps.company },
             policies: { updatedAt: categoryTimestamps.policies },
+            staff: { totalStaff: staffCount },
         };
     }
 

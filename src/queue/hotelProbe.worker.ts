@@ -253,10 +253,14 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             );
 
             for (let batch = 0; batch < typeBatches; batch++) {
+                // Calculate actual batch size (may be smaller than PROBE_BATCH_SIZE for the last batch or small requests)
+                const remainingToProbe = target.probeLimit - typeRoomsFound;
+                const actualBatchSize = Math.min(PROBE_BATCH_SIZE, remainingToProbe);
+
                 const startRoomId = globalRoomId;
-                const endRoomId = startRoomId + PROBE_BATCH_SIZE - 1;
+                const endRoomId = startRoomId + actualBatchSize - 1;
                 lastProbeRange = `R${startRoomId}-R${endRoomId}`;
-                globalRoomId += PROBE_BATCH_SIZE;
+                globalRoomId += actualBatchSize;
 
                 let wbeResult: any;
                 try {
@@ -267,7 +271,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                         WaitSeconds: waitSeconds,
                         CurrencyCode: currencyCode,
                         NationalityCode: nationalityCode,
-                        Rooms: buildHomogeneousBatch(target.adults, target.children, target.childrenAges, startRoomId),
+                        Rooms: buildHomogeneousBatch(target.adults, target.children, target.childrenAges, startRoomId, actualBatchSize),
                     });
                 } catch (err: any) {
                     logger.warn({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, error: err.message }, 'WBE probe call failed');
@@ -295,7 +299,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 }
 
                 const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
-                const batchOptions = parseProbeOptions(rawOptions, nights, PROBE_BATCH_SIZE);
+                const batchOptions = parseProbeOptions(rawOptions, nights, actualBatchSize);
 
                 // Apply meal type filter
                 const mealFiltered = mealType
@@ -308,7 +312,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 );
 
                 if (roomTypeFiltered.length === 0) {
-                    logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No usable options — stopping probes for this type');
+                    logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, totalRaw: rawOptions.length, afterParse: batchOptions.length, afterMeal: mealFiltered.length }, 'No usable options — stopping probes for this type');
                     break;
                 }
 
@@ -318,8 +322,8 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                     opt.sessionId = sessionId;
                 }
 
-                typeRoomsFound += PROBE_BATCH_SIZE;
-                roomsFound += PROBE_BATCH_SIZE;
+                typeRoomsFound += actualBatchSize;
+                roomsFound += actualBatchSize;
                 allOptions.push(...roomTypeFiltered);
 
                 // Update per-type progress

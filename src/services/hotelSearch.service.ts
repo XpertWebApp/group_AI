@@ -303,10 +303,14 @@ export function buildRoomTypeTargets(rooms: any): RoomTypeProbeTarget[] {
         const n = Number(count) || 0;
         if (n <= 0) continue;
         const adults = ROOM_TYPE_ADULTS[type] ?? ADULTS_PER_ROOM;
+        // For small requests (1-2 rooms), probe exactly the requested count
+        // so WBE returns options matching the actual room count.
+        // For 3+ rooms, apply the multiplier to probe deeper.
+        const probeLimit = n < PROBE_BATCH_SIZE ? n : n * PROBE_MULTIPLIER;
         targets.push({
             roomType: type,
             requested: n,
-            probeLimit: n * PROBE_MULTIPLIER,
+            probeLimit,
             adults,
             children: 0,
             childrenAges: [],
