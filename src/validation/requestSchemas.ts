@@ -233,13 +233,8 @@ export const UpdateGeneralConfigSchema = z.object({
         }),
 });
 
-// ── Settings: Email Configuration ───────────────────────────────────────────
+// ── Settings: Email Configuration (Google OAuth) ────────────────────────────
 export const UpdateEmailConfigSchema = z.object({
-    smtpHost: z.string().min(1, 'SMTP host is required'),
-    smtpPort: z.string().regex(/^\d+$/, 'Port must be a number'),
-    smtpUsername: z.string().min(1, 'Username is required'),
-    smtpPassword: z.string().optional(),
-    fromEmail: z.string().email('Invalid from email'),
     fromName: z.string().min(1, 'From name is required'),
 });
 

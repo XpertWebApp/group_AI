@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import settingsService from '../services/settings.service';
+import gmailService from '../services/gmail.service';
+import { logAuditEvent } from '../utils/audit';
 import { sendResponse } from '../utils/response';
 
 export class SettingsController {
@@ -47,6 +49,7 @@ export class SettingsController {
 
     /**
      * GET /api/v1/settings/email
+     * Returns all users' Google connection status + sender display name.
      */
     async getEmailConfig(req: Request, res: Response, next: NextFunction) {
         try {
@@ -59,12 +62,35 @@ export class SettingsController {
 
     /**
      * PUT /api/v1/settings/email
+     * Updates the sender display name (fromName).
      */
     async updateEmailConfig(req: Request, res: Response, next: NextFunction) {
         try {
             const data = (req as any).validated.body;
             const result = await settingsService.updateEmailConfig(data);
             return sendResponse(res, 200, result, 'Email configuration updated');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/settings/email/disconnect/:userId
+     * Admin disconnects a user's Google account.
+     */
+    async disconnectUserGoogle(req: Request, res: Response, next: NextFunction) {
+        try {
+            const targetUserId = req.params.userId as string;
+            await gmailService.disconnect(targetUserId);
+
+            await logAuditEvent({
+                userId: (req as any).user.id,
+                action: 'admin_google_oauth_disconnect',
+                entity: 'user',
+                entityId: targetUserId,
+            });
+
+            return sendResponse(res, 200, null, 'Google account disconnected for user');
         } catch (error) {
             next(error);
         }

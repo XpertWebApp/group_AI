@@ -29,9 +29,10 @@ router.get('/', settingsController.overview);
 router.get('/general', settingsController.getGeneralConfig);
 router.put('/general', validate(UpdateGeneralConfigSchema), settingsController.updateGeneralConfig);
 
-// Email Configuration
+// Email Configuration (Google OAuth)
 router.get('/email', settingsController.getEmailConfig);
 router.put('/email', validate(UpdateEmailConfigSchema), settingsController.updateEmailConfig);
+router.post('/email/disconnect/:userId', settingsController.disconnectUserGoogle);
 
 // Company Details
 router.get('/company', settingsController.getCompanyDetails);

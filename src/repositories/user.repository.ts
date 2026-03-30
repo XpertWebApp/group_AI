@@ -64,6 +64,36 @@ export class UserRepository {
         });
     }
 
+    async getAllGoogleConnectionStatus(): Promise<Array<{
+        id: string;
+        email: string;
+        firstName: string | null;
+        lastName: string | null;
+        isActive: boolean;
+        googleConnected: boolean;
+    }>> {
+        const users = await prisma.user.findMany({
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                isActive: true,
+                googleRefreshToken: true,
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        return users.map((u) => ({
+            id: u.id,
+            email: u.email,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            isActive: u.isActive,
+            googleConnected: !!u.googleRefreshToken,
+        }));
+    }
+
     async clearGoogleTokens(userId: string): Promise<User> {
         return prisma.user.update({
             where: { id: userId },

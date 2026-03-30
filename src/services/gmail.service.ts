@@ -106,6 +106,28 @@ export class GmailService {
     }
 
     /**
+     * Return connection status + connected email for a single user.
+     */
+    async getConnectionStatus(userId: string): Promise<{
+        connected: boolean;
+        email: string | null;
+    }> {
+        const stored = await userRepository.getGoogleTokens(userId);
+        const connected = !!(stored?.googleRefreshToken);
+        return {
+            connected,
+            email: connected ? (stored?.email ?? null) : null,
+        };
+    }
+
+    /**
+     * Return all users with their Google connection status (admin view).
+     */
+    async getAllConnectionStatuses() {
+        return userRepository.getAllGoogleConnectionStatus();
+    }
+
+    /**
      * Disconnect — revoke token at Google and clear stored tokens.
      */
     async disconnect(userId: string): Promise<void> {

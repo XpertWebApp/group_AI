@@ -3,6 +3,7 @@ import settingsRepository from '../repositories/settings.repository';
 import supplierLimitsRepository from '../repositories/supplierLimits.repository';
 import staffRepository from '../repositories/staff.repository';
 import { refreshSupplierLimitsCache } from '../config/supplierLimits';
+import gmailService from './gmail.service';
 
 export class SettingsService {
     /**
@@ -38,40 +39,25 @@ export class SettingsService {
         return this.getGeneralConfig();
     }
 
-    // ── Email Configuration ──────────────────────────────────────────────────
+    // ── Email Configuration (Google OAuth) ─────────────────────────────────────
 
     async getEmailConfig() {
-        const settings = await settingsRepository.getByCategory(SettingCategory.email);
-        // Mask the password for read responses
-        if (settings.smtpPassword) {
-            settings.smtpPassword = '••••••••••••';
-        }
-        return settings;
+        const [users, settings] = await Promise.all([
+            gmailService.getAllConnectionStatuses(),
+            settingsRepository.getByCategory(SettingCategory.email),
+        ]);
+
+        return {
+            users,
+            fromName: settings.fromName || null,
+        };
     }
 
-    async updateEmailConfig(data: {
-        smtpHost: string;
-        smtpPort: string;
-        smtpUsername: string;
-        smtpPassword?: string;
-        fromEmail: string;
-        fromName: string;
-    }) {
-        const updates: Record<string, string> = {
-            smtpHost: data.smtpHost,
-            smtpPort: data.smtpPort,
-            smtpUsername: data.smtpUsername,
-            fromEmail: data.fromEmail,
+    async updateEmailConfig(data: { fromName: string }) {
+        await settingsRepository.upsertMany(SettingCategory.email, {
             fromName: data.fromName,
-        };
-
-        // Only update password if a new one is provided (not the masked placeholder)
-        if (data.smtpPassword && data.smtpPassword !== '••••••••••••') {
-            updates.smtpPassword = data.smtpPassword;
-        }
-
-        await settingsRepository.upsertMany(SettingCategory.email, updates);
-        return this.getEmailConfig();
+        });
+        return { fromName: data.fromName };
     }
 
     // ── Company Details ──────────────────────────────────────────────────────
