@@ -1,6 +1,46 @@
-import axios from 'axios';
+import originalAxios from 'axios';
+import Bottleneck from 'bottleneck';
 import config from '../config';
 import logger from '../utils/logger';
+import { WBE_GLOBAL_RATE_LIMIT, WORKER_JOB_CONCURRENCY } from '../config/probeConfig';
+
+const rate = Math.max(1, Number(WBE_GLOBAL_RATE_LIMIT) || 10);
+const minTime = Math.floor(1000 / rate);
+const maxConcurrent = Math.max(1, Number(WORKER_JOB_CONCURRENCY) || 5);
+
+const limiter = new Bottleneck({
+    minTime,
+    maxConcurrent,
+});
+
+limiter.on('failed', async (error: any, jobInfo) => {
+    if (error.response?.status === 429 && jobInfo.retryCount < 3) {
+        logger.warn({ msg: 'WBE API 429 Rate Limit hit, retrying', retryCount: jobInfo.retryCount });
+        return 1000; // wait 1s and retry
+    }
+});
+
+let circuitBreakerBlockedUntil = 0;
+
+const execute = async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (Date.now() < circuitBreakerBlockedUntil) {
+        throw new Error('Circuit Breaker Open: WBE API call blocked due to recent 401/403 error.');
+    }
+    try {
+        return await limiter.schedule(fn);
+    } catch (error: any) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+            circuitBreakerBlockedUntil = Date.now() + 15 * 60 * 1000;
+            logger.error({ msg: 'WBE API 401/403 Error. Trips circuit breaker for 15 mins.', status: error.response?.status });
+        }
+        throw error;
+    }
+};
+
+const axios = {
+    get: (...args: Parameters<typeof originalAxios.get>) => execute(() => originalAxios.get(...args)),
+    post: (...args: Parameters<typeof originalAxios.post>) => execute(() => originalAxios.post(...args)),
+};
 
 export class WbeClientService {
     private readonly apiKey: string;
