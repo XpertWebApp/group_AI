@@ -2,15 +2,18 @@ import originalAxios from 'axios';
 import Bottleneck from 'bottleneck';
 import config from '../config';
 import logger from '../utils/logger';
-import { WBE_GLOBAL_RATE_LIMIT, WORKER_JOB_CONCURRENCY } from '../config/probeConfig';
+import { WBE_GLOBAL_RATE_LIMIT } from '../config/probeConfig';
 
+// WBE UAT limit = 10 QPS, LIVE = 20 QPS.
+// With reservoir approach, Bottleneck enforces an exact cap per second.
 const rate = Math.max(1, Number(WBE_GLOBAL_RATE_LIMIT) || 10);
-const minTime = Math.floor(1000 / rate);
-const maxConcurrent = Math.max(1, Number(WORKER_JOB_CONCURRENCY) || 5);
 
 const limiter = new Bottleneck({
-    minTime,
-    maxConcurrent,
+    reservoir: rate,                   // tokens available per interval
+    reservoirRefreshAmount: rate,      // refill to `rate` tokens
+    reservoirRefreshInterval: 1000,    // every 1 second
+    maxConcurrent: Math.min(rate, 5),  // cap parallel HTTP connections
+    minTime: Math.floor(1000 / rate),  // minimum gap between request starts
 });
 
 limiter.on('failed', async (error: any, jobInfo) => {

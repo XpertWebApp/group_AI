@@ -1,5 +1,6 @@
 import * as amqp from 'amqplib';
 import logger from '../utils/logger';
+import { WORKER_JOB_CONCURRENCY } from '../config/probeConfig';
 
 export const HOTEL_PROBE_QUEUE = 'hotel_probe_jobs';
 
@@ -29,7 +30,7 @@ async function connect(): Promise<amqp.Channel | null> {
 
     channel = await model.createChannel();
     await channel.assertQueue(HOTEL_PROBE_QUEUE, { durable: true });
-    channel.prefetch(Number(process.env.WORKER_JOB_CONCURRENCY ?? 5));
+    channel.prefetch(WORKER_JOB_CONCURRENCY);
 
     logger.info('RabbitMQ channel ready');
     return channel;
