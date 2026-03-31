@@ -1,7 +1,8 @@
 /**
  * PDF Generation Service — Figma-Matched Quotation PDF
  *
- * Generates professional offer PDFs matching the SETT Figma design.
+ * Generates professional offer PDFs matching the SETT Figma design exactly.
+ * Uses Montserrat font, navy/grey color scheme, rounded bordered cards.
  * Agent-visible only: hotel details, unified price, terms, disclaimer.
  * Does NOT contain: supplier names, split, buying price, markup.
  */
@@ -11,19 +12,17 @@ import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger';
 
-// ─── Brand Colors (from Figma design) ────────────────────────────────────────
+// ─── Brand Colors (from Figma specs) ─────────────────────────────────────────
 
-const BRAND_GREEN = '#6B8E23';
-const BRAND_GREEN_DARK = '#4A6A10';
-const DARK_TEXT = '#333333';
-const MEDIUM_TEXT = '#555555';
-const LIGHT_TEXT = '#888888';
-const TABLE_HEADER_BG = '#F0F0F0';
-const TABLE_ALT_ROW_BG = '#FAFAFA';
-const BORDER_COLOR = '#DDDDDD';
-const RED_WARNING = '#D32F2F';
-const YELLOW_NOTE = '#F9A825';
-const GREEN_NOTE = '#2E7D32';
+const NAVY = '#071C42';
+const GREY_68 = '#686868';
+const GREY_4A = '#4A4A4A';
+const DARK_1D = '#1D1D1D';
+const SEPARATOR = '#68686866'; // 40% opacity grey — rendered as solid light grey
+const SEPARATOR_SOLID = '#C8C8C8'; // Approximate visual for 40% #686868
+const WHITE = '#FFFFFF';
+const TOTAL_BG = '#E8EBF0'; // Approximation for #071C421A (navy 10%)
+const PINK_BG = '#FFEAEB';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -96,28 +95,56 @@ function formatDate(dateStr: string | null): string {
     if (!dateStr) return 'N/A';
     try {
         const d = new Date(dateStr);
-        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     } catch {
         return dateStr;
     }
 }
 
+function formatDateLong(dateStr: string | null): string {
+    if (!dateStr) return 'N/A';
+    try {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch {
+        return dateStr;
+    }
+}
+
+function formatCheckinOut(checkin: string | null, checkout: string | null): string {
+    if (!checkin || !checkout) return 'N/A';
+    try {
+        const ci = new Date(checkin);
+        const co = new Date(checkout);
+        const monthIn = ci.toLocaleDateString('en-US', { month: 'long' });
+        const dayIn = ci.getDate();
+        const monthOut = co.toLocaleDateString('en-US', { month: 'long' });
+        const dayOut = co.getDate();
+        const year = co.getFullYear();
+        if (monthIn === monthOut) {
+            return `${monthIn} ${dayIn} - ${monthOut} ${dayOut}, ${year}`;
+        }
+        return `${monthIn} ${dayIn} - ${monthOut} ${dayOut}, ${year}`;
+    } catch {
+        return `${checkin} - ${checkout}`;
+    }
+}
+
 function formatCurrency(amount: number, currency: string): string {
-    return `${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function starString(rating: number | null): string {
-    if (!rating) return '';
-    return '\u2605'.repeat(Math.round(rating));
+function formatCurrencyWithCode(amount: number, currency: string): string {
+    return `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
-function stripHtml(html: string | null): string {
-    if (!html) return '';
-    return html
+function stripHtml(html: string | null): string[] {
+    if (!html) return [];
+    const text = html
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<\/p>/gi, '\n')
         .replace(/<\/li>/gi, '\n')
-        .replace(/<li>/gi, '  \u2022 ')
+        .replace(/<li>/gi, '\u2022 ')
         .replace(/<[^>]*>/g, '')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
@@ -125,13 +152,27 @@ function stripHtml(html: string | null): string {
         .replace(/&nbsp;/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+    return text.split('\n').map((l) => l.trim()).filter(Boolean);
 }
 
-function getLogoPath(): string | null {
+function mealLabel(code: string): string {
+    switch (code?.toUpperCase()) {
+        case 'BB': return 'Breakfast';
+        case 'HB': return 'Half Board';
+        case 'FB': return 'Full Board';
+        case 'AI': return 'All Inclusive';
+        case 'RO': return 'Room Only';
+        default: return code || '-';
+    }
+}
+
+// ─── Font Helpers ────────────────────────────────────────────────────────────
+
+function getFontPath(weight: string): string | null {
     const candidates = [
-        path.resolve(__dirname, '../publicfiles/Figma/SETT_logo.png'),
-        path.resolve(__dirname, '../../src/publicfiles/Figma/SETT_logo.png'),
-        path.resolve(process.cwd(), 'src/publicfiles/Figma/SETT_logo.png'),
+        path.resolve(__dirname, `../publicfiles/fonts/Montserrat-${weight}.ttf`),
+        path.resolve(__dirname, `../../src/publicfiles/fonts/Montserrat-${weight}.ttf`),
+        path.resolve(process.cwd(), `src/publicfiles/fonts/Montserrat-${weight}.ttf`),
     ];
     for (const p of candidates) {
         if (fs.existsSync(p)) return p;
@@ -139,70 +180,138 @@ function getLogoPath(): string | null {
     return null;
 }
 
-// ─── Page Layout Constants ───────────────────────────────────────────────────
+function getAssetPath(filename: string): string | null {
+    const candidates = [
+        path.resolve(__dirname, `../publicfiles/Figma/${filename}`),
+        path.resolve(__dirname, `../../src/publicfiles/Figma/${filename}`),
+        path.resolve(process.cwd(), `src/publicfiles/Figma/${filename}`),
+        path.resolve(__dirname, `../publicfiles/${filename}`),
+        path.resolve(__dirname, `../../src/publicfiles/${filename}`),
+        path.resolve(process.cwd(), `src/publicfiles/${filename}`),
+    ];
+    for (const p of candidates) {
+        if (fs.existsSync(p)) return p;
+    }
+    return null;
+}
 
-const MARGIN_LEFT = 50;
-const MARGIN_RIGHT = 50;
-const PAGE_WIDTH_INNER = 595.28 - MARGIN_LEFT - MARGIN_RIGHT; // A4 width
-const MAX_Y = 760; // trigger new page before this Y position
+// ─── Font Names (registered at doc creation) ────────────────────────────────
+
+const FONT_REGULAR = 'Mont-Regular';
+const FONT_MEDIUM = 'Mont-Medium';
+const FONT_SEMIBOLD = 'Mont-SemiBold';
+const FONT_BOLD = 'Mont-Bold';
+
+// Fallbacks if Montserrat files not found
+const FALLBACK_REGULAR = 'Helvetica';
+const FALLBACK_MEDIUM = 'Helvetica';
+const FALLBACK_SEMIBOLD = 'Helvetica-Bold';
+const FALLBACK_BOLD = 'Helvetica-Bold';
+
+// ─── Layout Constants ────────────────────────────────────────────────────────
+
+const ML = 20; // margin left (per Figma: left: 20px)
+const MR = 20;
+const PAGE_W = 595.28; // A4
+const CW = PAGE_W - ML - MR; // ~555 (Figma uses 710 at 96dpi ≈ 555pt at 72dpi)
+const MAX_Y = 780;
+const FOOTER_Y = 810;
+
+// Column positions (3 column layout: left, center, right)
+const COL1 = ML;
+const COL2 = ML + 185;
+const COL3 = ML + 370;
 
 // ─── Drawing Helpers ─────────────────────────────────────────────────────────
 
-function checkPageBreak(doc: PDFKit.PDFDocument, requiredSpace: number): void {
-    if (doc.y + requiredSpace > MAX_Y) {
-        doc.addPage();
+let fontReg: string;
+let fontMed: string;
+let fontSemi: string;
+let fontBold: string;
+
+function registerFonts(doc: PDFKit.PDFDocument): void {
+    const reg = getFontPath('Regular');
+    const med = getFontPath('Medium');
+    const semi = getFontPath('SemiBold');
+    const bold = getFontPath('Bold');
+
+    if (reg) {
+        doc.registerFont(FONT_REGULAR, reg);
+        fontReg = FONT_REGULAR;
+    } else {
+        fontReg = FALLBACK_REGULAR;
+    }
+    if (med) {
+        doc.registerFont(FONT_MEDIUM, med);
+        fontMed = FONT_MEDIUM;
+    } else {
+        fontMed = FALLBACK_MEDIUM;
+    }
+    if (semi) {
+        doc.registerFont(FONT_SEMIBOLD, semi);
+        fontSemi = FONT_SEMIBOLD;
+    } else {
+        fontSemi = FALLBACK_SEMIBOLD;
+    }
+    if (bold) {
+        doc.registerFont(FONT_BOLD, bold);
+        fontBold = FONT_BOLD;
+    } else {
+        fontBold = FALLBACK_BOLD;
     }
 }
 
-function drawHorizontalLine(doc: PDFKit.PDFDocument, color = BORDER_COLOR): void {
-    doc.moveTo(MARGIN_LEFT, doc.y)
-        .lineTo(MARGIN_LEFT + PAGE_WIDTH_INNER, doc.y)
-        .strokeColor(color)
+function ensureSpace(doc: PDFKit.PDFDocument, needed: number): void {
+    if (doc.y + needed > MAX_Y) {
+        doc.addPage();
+        doc.y = 30;
+    }
+}
+
+function separatorLine(doc: PDFKit.PDFDocument, y?: number): void {
+    const lineY = y ?? doc.y;
+    doc.moveTo(ML, lineY)
+        .lineTo(ML + CW, lineY)
+        .strokeColor(SEPARATOR_SOLID)
         .lineWidth(0.5)
         .stroke();
-    doc.moveDown(0.5);
+    if (!y) doc.y = lineY + 12;
 }
 
-function drawSectionHeader(doc: PDFKit.PDFDocument, title: string): void {
-    checkPageBreak(doc, 30);
-    doc.fontSize(11).font('Helvetica-Bold').fillColor(DARK_TEXT).text(title.toUpperCase());
-    doc.moveDown(0.2);
-    drawHorizontalLine(doc, BRAND_GREEN);
-    doc.moveDown(0.3);
+function sectionHeading(doc: PDFKit.PDFDocument, title: string): void {
+    ensureSpace(doc, 45);
+    doc.fontSize(12).font(fontSemi).fillColor(NAVY)
+        .text(title.toUpperCase(), ML, doc.y, { lineBreak: false });
+    doc.y += 18; // space below heading before content
 }
 
-function drawLabelValue(doc: PDFKit.PDFDocument, label: string, value: string, x: number, y: number, labelWidth = 100, valueWidth = 150): void {
-    doc.fontSize(8).font('Helvetica-Bold').fillColor(LIGHT_TEXT).text(label, x, y, { width: labelWidth });
-    doc.fontSize(9).font('Helvetica').fillColor(DARK_TEXT).text(value || '-', x, y + 10, { width: valueWidth });
+function fieldLabel(doc: PDFKit.PDFDocument, label: string, x: number, y: number): void {
+    doc.fontSize(9).font(fontReg).fillColor(NAVY)
+        .text(label.toUpperCase(), x, y, { lineBreak: false });
 }
 
-function drawCalloutBox(doc: PDFKit.PDFDocument, text: string, borderColor: string, label?: string): void {
-    checkPageBreak(doc, 40);
-    const boxY = doc.y;
-    const boxWidth = PAGE_WIDTH_INNER;
-    const textWidth = boxWidth - 20;
+function fieldValue(doc: PDFKit.PDFDocument, value: string, x: number, y: number, opts: { width?: number; color?: string; font?: string; size?: number } = {}): void {
+    doc.fontSize(opts.size ?? 10.5)
+        .font(opts.font ?? fontMed)
+        .fillColor(opts.color ?? GREY_68)
+        .text(value || '-', x, y, { width: opts.width ?? 170, lineBreak: false });
+}
 
-    // Measure text height
-    const textHeight = doc.fontSize(8).font('Helvetica').heightOfString(text, { width: textWidth - 10 });
-    const labelHeight = label ? 12 : 0;
-    const boxHeight = Math.max(textHeight + labelHeight + 16, 30);
+function labelValue(doc: PDFKit.PDFDocument, label: string, value: string, x: number, y: number, valueWidth = 170): number {
+    fieldLabel(doc, label, x, y);
+    fieldValue(doc, value, x, y + 13);
+    return 30; // height consumed
+}
 
-    // Box background
-    doc.rect(MARGIN_LEFT, boxY, boxWidth, boxHeight).fillColor('#FAFAFA').fill();
-    // Left border accent
-    doc.rect(MARGIN_LEFT, boxY, 4, boxHeight).fillColor(borderColor).fill();
+// ─── Rounded Bordered Card ──────────────────────────────────────────────────
 
-    // Label (if provided)
-    if (label) {
-        doc.fontSize(8).font('Helvetica-Bold').fillColor(borderColor)
-            .text(label, MARGIN_LEFT + 14, boxY + 6, { width: textWidth });
-    }
-
-    // Text
-    doc.fontSize(8).font('Helvetica').fillColor(DARK_TEXT)
-        .text(text, MARGIN_LEFT + 14, boxY + 6 + labelHeight, { width: textWidth - 10 });
-
-    doc.y = boxY + boxHeight + 6;
+function drawCardStart(doc: PDFKit.PDFDocument, height: number): number {
+    const startY = doc.y;
+    doc.roundedRect(ML, startY, CW, height, 10)
+        .strokeColor(SEPARATOR_SOLID)
+        .lineWidth(0.5)
+        .stroke();
+    return startY;
 }
 
 // ─── Main PDF Generator ─────────────────────────────────────────────────────
@@ -212,7 +321,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
         try {
             const doc = new PDFDocument({
                 size: 'A4',
-                margins: { top: 40, bottom: 40, left: MARGIN_LEFT, right: MARGIN_RIGHT },
+                margins: { top: 20, bottom: 20, left: ML, right: MR },
                 bufferPages: true,
             });
             const chunks: Buffer[] = [];
@@ -221,338 +330,420 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             doc.on('end', () => resolve(Buffer.concat(chunks)));
             doc.on('error', reject);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 1: HEADER — Logo + "QUOTATION"
-            // ═══════════════════════════════════════════════════════════════════
+            registerFonts(doc);
 
-            const logoPath = getLogoPath();
+            const today = formatDate(new Date().toISOString());
+
+            // ═══════════════════════════════════════════════════════════════
+            // HEADER — Logo (left) + Tax ID (right)
+            // ═══════════════════════════════════════════════════════════════
+
+            const logoPath = getAssetPath('SETT_logo.png');
             if (logoPath) {
-                doc.image(logoPath, MARGIN_LEFT, 35, { width: 120 });
+                doc.image(logoPath, ML, 20, { width: 83 }); // ~111px at 96dpi ≈ 83pt
             } else {
-                doc.fontSize(20).font('Helvetica-Bold').fillColor(BRAND_GREEN)
-                    .text('SETT', MARGIN_LEFT, 40);
+                doc.fontSize(18).font(fontBold).fillColor('#AAC737')
+                    .text('SETT', ML, 22, { lineBreak: false });
             }
 
-            doc.fontSize(18).font('Helvetica-Bold').fillColor(BRAND_GREEN)
-                .text('QUOTATION', MARGIN_LEFT, 40, { align: 'right' });
+            // Tax ID on the right
+            const taxX = ML + CW - 170;
+            doc.fontSize(9).font(fontReg).fillColor(NAVY)
+                .text('TAX ID', taxX, 22, { width: 170, align: 'right', lineBreak: false });
+            doc.fontSize(10.5).font(fontMed).fillColor(NAVY)
+                .text(data.companyTaxId || '-', taxX, 36, { width: 170, align: 'right', lineBreak: false });
 
-            // Green accent line
-            doc.y = 75;
-            doc.rect(MARGIN_LEFT, doc.y, PAGE_WIDTH_INNER, 3).fillColor(BRAND_GREEN).fill();
-            doc.y = 85;
+            // Separator line below header
+            doc.y = 60;
+            separatorLine(doc);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 2: COMPANY INFO
-            // ═══════════════════════════════════════════════════════════════════
+            // ═══════════════════════════════════════════════════════════════
+            // COMPANY INFO SECTION
+            // ═══════════════════════════════════════════════════════════════
 
-            doc.fontSize(10).font('Helvetica-Bold').fillColor(DARK_TEXT)
-                .text(data.companyName || 'S & T T WORLDWIDE RESERVATION FZE', MARGIN_LEFT, doc.y);
-            doc.moveDown(0.3);
+            doc.y += 6;
 
-            const companyInfoY = doc.y;
-            const col1X = MARGIN_LEFT;
-            const col2X = MARGIN_LEFT + 180;
-            const col3X = MARGIN_LEFT + 340;
+            // Company name heading
+            doc.fontSize(12).font(fontSemi).fillColor(NAVY)
+                .text((data.companyName || 'S-E-T-T Worldwide Reservation FZE').toUpperCase(), ML, doc.y, { lineBreak: false });
+            doc.y += 22;
 
-            drawLabelValue(doc, 'Assigned Person', data.assignedPerson || '-', col1X, companyInfoY);
-            drawLabelValue(doc, 'Phone', data.companyPhone || '-', col2X, companyInfoY);
-            drawLabelValue(doc, 'Tax ID / Reg.', data.companyTaxId || '-', col3X, companyInfoY);
+            // Row 1: Assigned Person | Phone Number | Website
+            const row1Y = doc.y;
+            labelValue(doc, 'Assigned Person', data.assignedPerson || '-', COL1, row1Y);
+            labelValue(doc, 'Phone Number', data.companyPhone || '-', COL2, row1Y);
+            labelValue(doc, 'Website', data.companyWebsite || '-', COL3, row1Y);
 
-            doc.y = companyInfoY + 28;
-            drawLabelValue(doc, 'Email', data.companyEmail || '-', col1X, doc.y);
-            drawLabelValue(doc, 'Website', data.companyWebsite || '-', col2X, doc.y);
+            // Row 2: Email Address | Address
+            const row2Y = row1Y + 38;
+            labelValue(doc, 'Email Address', data.companyEmail || '-', COL1, row2Y);
+            labelValue(doc, 'Address', data.companyAddress || '-', COL2, row2Y, CW - 185);
 
-            doc.y += 28;
-            if (data.companyAddress) {
-                doc.fontSize(7).font('Helvetica').fillColor(LIGHT_TEXT)
-                    .text(`Address: ${data.companyAddress}`, MARGIN_LEFT, doc.y, { width: PAGE_WIDTH_INNER });
-            }
+            doc.y = row2Y + 42;
+            separatorLine(doc);
 
-            doc.y += 14;
-            drawHorizontalLine(doc);
+            // ═══════════════════════════════════════════════════════════════
+            // CONTRACT SECTION
+            // ═══════════════════════════════════════════════════════════════
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 3: PREPARED FOR
-            // ═══════════════════════════════════════════════════════════════════
+            sectionHeading(doc, 'Contract');
 
-            drawSectionHeader(doc, 'Prepared For');
+            const contY = doc.y;
+            labelValue(doc, 'Company ID', `#${data.referenceNumber}`, COL1, contY);
+            labelValue(doc, 'Document Code', `OFF-${String(data.referenceNumber).padStart(6, '0')}`, COL2, contY);
+            labelValue(doc, 'Created Date', today, COL3, contY);
+
+            doc.y = contY + 40;
+            separatorLine(doc);
+
+            // ═══════════════════════════════════════════════════════════════
+            // PREPARED FOR
+            // ═══════════════════════════════════════════════════════════════
+
+            sectionHeading(doc, 'Prepared For');
 
             const prepY = doc.y;
-            drawLabelValue(doc, 'Contact Name', data.contactName, col1X, prepY);
-            drawLabelValue(doc, 'Company', data.companyNameClient || '-', col2X, prepY);
-            doc.y = prepY + 28;
-            drawLabelValue(doc, 'Email', data.contactEmail || '-', col1X, doc.y);
-            drawLabelValue(doc, 'Phone', data.contactPhone || '-', col2X, doc.y);
+            labelValue(doc, 'Customer Person', data.contactName || '-', COL1, prepY);
+            labelValue(doc, 'Email Address', data.contactEmail || '-', COL2, prepY);
+            labelValue(doc, 'Phone Number', data.contactPhone || '-', COL3, prepY);
 
-            doc.y += 32;
+            const prepY2 = prepY + 38;
+            labelValue(doc, 'Address', data.companyNameClient || '-', COL1, prepY2, CW);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 4: TRIP DETAILS
-            // ═══════════════════════════════════════════════════════════════════
+            doc.y = prepY2 + 40;
+            separatorLine(doc);
 
-            drawSectionHeader(doc, 'Trip Details');
+            // ═══════════════════════════════════════════════════════════════
+            // TRIP DETAILS
+            // ═══════════════════════════════════════════════════════════════
+
+            sectionHeading(doc, 'Trip Details');
 
             const tripY = doc.y;
-            drawLabelValue(doc, 'Destination', data.destinationName, col1X, tripY);
-            drawLabelValue(doc, 'Reference', `#${data.referenceNumber}`, col3X, tripY);
-            doc.y = tripY + 28;
-            drawLabelValue(doc, 'Check-in', formatDate(data.checkinDate), col1X, doc.y);
-            drawLabelValue(doc, 'Check-out', formatDate(data.checkoutDate), col2X, doc.y);
-            drawLabelValue(doc, 'Nights', String(data.nights), col3X, doc.y);
+            labelValue(doc, 'Destination', data.destinationName || '-', COL1, tripY);
+            labelValue(doc, 'Checkin/Out', formatCheckinOut(data.checkinDate, data.checkoutDate), COL2, tripY, 200);
+            labelValue(doc, 'Guests', String(data.totalRooms * 2), COL3, tripY);
 
-            doc.y += 32;
+            doc.y = tripY + 40;
+            separatorLine(doc);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 5: HOTEL DETAILS
-            // ═══════════════════════════════════════════════════════════════════
+            // ═══════════════════════════════════════════════════════════════
+            // HOTEL DETAILS
+            // ═══════════════════════════════════════════════════════════════
 
-            drawSectionHeader(doc, 'Hotel Details');
+            sectionHeading(doc, 'Hotel Details');
 
             for (let hi = 0; hi < data.hotels.length; hi++) {
                 const hotel = data.hotels[hi];
-                checkPageBreak(doc, 80);
+                ensureSpace(doc, 150);
 
-                // Hotel header with star rating
-                const hotelLabel = `${hi + 1}. ${hotel.hotelName}`;
-                const stars = starString(hotel.starRating);
-                doc.fontSize(10).font('Helvetica-Bold').fillColor(DARK_TEXT)
-                    .text(hotelLabel, MARGIN_LEFT, doc.y, { continued: !!stars });
-                if (stars) {
-                    doc.fillColor(YELLOW_NOTE).text(`  ${stars}`);
-                }
-                doc.fillColor(DARK_TEXT);
+                // Hotel header row: icon + name (left), Reference number (right)
+                const hotelHeaderY = doc.y;
+                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                    .text(`\u2302  ${hotel.hotelName}`, ML, hotelHeaderY, { width: CW * 0.6, lineBreak: false });
 
-                // Address
                 const addressParts = [hotel.addressCity, hotel.addressCountry].filter(Boolean);
-                if (addressParts.length > 0) {
-                    doc.fontSize(8).font('Helvetica').fillColor(LIGHT_TEXT)
-                        .text(addressParts.join(', '));
-                }
-                doc.moveDown(0.3);
-
-                // Room table header
-                const tableY = doc.y;
-                const roomCols = [170, 50, 70, 100, 100];
-                const roomHeaders = ['Room Type', 'Qty', 'Meal', 'Price/Night', 'Total'];
-
-                // Header background
-                doc.rect(MARGIN_LEFT, tableY - 2, PAGE_WIDTH_INNER, 16).fillColor(TABLE_HEADER_BG).fill();
-
-                let tx = MARGIN_LEFT + 5;
-                doc.fontSize(7).font('Helvetica-Bold').fillColor(MEDIUM_TEXT);
-                for (let c = 0; c < roomHeaders.length; c++) {
-                    const align = c >= 3 ? 'right' : 'left';
-                    doc.text(roomHeaders[c], tx, tableY + 2, { width: roomCols[c] - 10, align } as any);
-                    tx += roomCols[c];
+                if (addressParts.length) {
+                    doc.font(fontReg).fillColor(GREY_68).fontSize(9)
+                        .text(`   ${addressParts.join(', ')}`, ML, hotelHeaderY + 14, { width: CW * 0.6, lineBreak: false });
                 }
 
-                // Row
-                const rowY = tableY + 18;
-                tx = MARGIN_LEFT + 5;
-                doc.fontSize(8).font('Helvetica').fillColor(DARK_TEXT);
+                doc.fontSize(10.5).font(fontSemi).fillColor(GREY_4A)
+                    .text(`Reference number: #${data.referenceNumber}`, ML, hotelHeaderY, {
+                        width: CW,
+                        align: 'right',
+                        lineBreak: false,
+                    });
 
-                const roomTypeName = hotel.roomType.charAt(0).toUpperCase() + hotel.roomType.slice(1);
-                const rowValues = [
-                    roomTypeName,
-                    String(hotel.roomQty),
-                    hotel.mealPlan === 'BB' ? 'Breakfast' : hotel.mealPlan === 'RO' ? 'Room Only' : (hotel.mealPlan || '-'),
-                    formatCurrency(hotel.pricePerRoomPerNight, data.currency),
-                    formatCurrency(hotel.totalPrice, data.currency),
-                ];
+                doc.y = hotelHeaderY + 24;
 
-                for (let c = 0; c < rowValues.length; c++) {
-                    const align = c >= 3 ? 'right' : 'left';
-                    doc.text(rowValues[c], tx, rowY + 2, { width: roomCols[c] - 10, align } as any);
-                    tx += roomCols[c];
-                }
+                // Calculate card height based on room rows
+                const roomName = hotel.roomType.charAt(0).toUpperCase() + hotel.roomType.slice(1);
+                const cardHeight = 110; // header + 1 room row + separator + subtotal
 
-                // Subtotal line
-                doc.y = rowY + 18;
-                doc.moveTo(MARGIN_LEFT + 300, doc.y).lineTo(MARGIN_LEFT + PAGE_WIDTH_INNER, doc.y).strokeColor(BORDER_COLOR).lineWidth(0.5).stroke();
-                doc.y += 4;
+                // Draw bordered card
+                const cardY = doc.y;
+                doc.roundedRect(ML, cardY, CW, cardHeight, 10)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
 
-                doc.fontSize(8).font('Helvetica-Bold').fillColor(DARK_TEXT)
-                    .text(`Subtotal: ${formatCurrency(hotel.totalPrice, data.currency)}`, MARGIN_LEFT, doc.y, { align: 'right', width: PAGE_WIDTH_INNER });
+                // Table headers inside card
+                const hdrY = cardY + 12;
+                const tCol1 = ML + 13;
+                const tCol2 = ML + 335; // RATE
+                const tCol3 = ML + 395; // QTY
+                const tCol4 = ML + 440; // NIGHTS
+                const tCol5 = ML + CW - 13; // TOTAL (right aligned)
 
-                // Cancellation deadline
-                if (hotel.cancelDeadline) {
-                    doc.moveDown(0.2);
-                    doc.fontSize(7).font('Helvetica').fillColor(GREEN_NOTE)
-                        .text(`Free cancellation until ${formatDate(hotel.cancelDeadline)}`, MARGIN_LEFT, doc.y, { align: 'right', width: PAGE_WIDTH_INNER });
-                }
+                doc.fontSize(9).font(fontSemi).fillColor(GREY_68);
+                doc.text('DESTINATION', tCol1, hdrY, { lineBreak: false });
+                doc.text('RATE', tCol2, hdrY, { lineBreak: false });
+                doc.text('QTY', tCol3, hdrY, { lineBreak: false });
+                doc.text('NIGHTS', tCol4, hdrY, { lineBreak: false });
+                doc.text(`TOTAL(${data.currency})`, tCol5 - 70, hdrY, { width: 70, align: 'right', lineBreak: false });
 
-                doc.fillColor(DARK_TEXT);
-                doc.moveDown(1);
+                // Header separator inside card
+                const hdrLineY = hdrY + 16;
+                doc.moveTo(ML + 13, hdrLineY)
+                    .lineTo(ML + CW - 13, hdrLineY)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
 
-                // Separator between hotels
+                // Room data row
+                const rowY = hdrLineY + 10;
+                doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
+                    .text(roomName, tCol1, rowY, { width: 310, lineBreak: false });
+
+                doc.fontSize(10.5).font(fontReg).fillColor(GREY_4A);
+                doc.text(formatCurrency(hotel.pricePerRoomPerNight, data.currency), tCol2 - 10, rowY, { width: 60, lineBreak: false });
+                doc.text(String(hotel.roomQty), tCol3, rowY, { width: 40, lineBreak: false });
+                doc.text(String(data.nights), tCol4, rowY, { width: 45, lineBreak: false });
+
+                // Total value in navy bold
+                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                    .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 70, rowY, { width: 70, align: 'right', lineBreak: false });
+
+                // Separator before subtotal
+                const subLineY = rowY + 22;
+                doc.moveTo(ML + 13, subLineY)
+                    .lineTo(ML + CW - 13, subLineY)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
+
+                // Subtotal row (right aligned)
+                const subY = subLineY + 10;
+                doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
+                    .text('Subtotal', tCol5 - 150, subY, { width: 60, lineBreak: false });
+                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                    .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 70, subY, { width: 70, align: 'right', lineBreak: false });
+
+                doc.y = cardY + cardHeight + 14;
+
                 if (hi < data.hotels.length - 1) {
-                    drawHorizontalLine(doc, '#EEEEEE');
-                    doc.moveDown(0.3);
+                    doc.y += 8;
                 }
             }
 
-            doc.moveDown(0.5);
+            doc.y += 4;
+            separatorLine(doc);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 6: SERVICE DETAILS (if any)
-            // ═══════════════════════════════════════════════════════════════════
+            // ═══════════════════════════════════════════════════════════════
+            // SERVICE DETAILS
+            // ═══════════════════════════════════════════════════════════════
 
             if (data.services.length > 0) {
-                drawSectionHeader(doc, 'Service Details');
-                checkPageBreak(doc, 60);
+                sectionHeading(doc, 'Service Details');
+                ensureSpace(doc, 100);
 
-                // Table header
-                const svcTableY = doc.y;
-                const svcCols = [190, 50, 50, 100, 100];
-                const svcHeaders = ['Description', 'Qty', 'Days', 'Unit Price', 'Total'];
+                // Calculate card height
+                const svcCardHeight = 48 + data.services.length * 26 + 35;
+                const svcCardY = doc.y;
 
-                doc.rect(MARGIN_LEFT, svcTableY - 2, PAGE_WIDTH_INNER, 16).fillColor(TABLE_HEADER_BG).fill();
+                doc.roundedRect(ML, svcCardY, CW, svcCardHeight, 10)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
 
-                let sx = MARGIN_LEFT + 5;
-                doc.fontSize(7).font('Helvetica-Bold').fillColor(MEDIUM_TEXT);
-                for (let c = 0; c < svcHeaders.length; c++) {
-                    const align = c >= 3 ? 'right' : 'left';
-                    doc.text(svcHeaders[c], sx, svcTableY + 2, { width: svcCols[c] - 10, align } as any);
-                    sx += svcCols[c];
+                // Service table headers
+                const shY = svcCardY + 12;
+                const sCol1 = ML + 13;
+                const sCol2 = ML + 335;
+                const sCol3 = ML + 395;
+                const sCol4 = ML + 440;
+                const sCol5 = ML + CW - 13;
+
+                doc.fontSize(9).font(fontSemi).fillColor(NAVY);
+                doc.text('DESTINATION', sCol1, shY, { lineBreak: false });
+                doc.text('RATE', sCol2, shY, { lineBreak: false });
+                doc.text('QTY', sCol3, shY, { lineBreak: false });
+                doc.text('NIGHTS', sCol4, shY, { lineBreak: false });
+                doc.text(`TOTAL(${data.currency})`, sCol5 - 70, shY, { width: 70, align: 'right', lineBreak: false });
+
+                // Header separator
+                const shLineY = shY + 16;
+                doc.moveTo(ML + 13, shLineY)
+                    .lineTo(ML + CW - 13, shLineY)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
+
+                // Service rows
+                let sRowY = shLineY + 10;
+                let svcSubtotal = 0;
+
+                for (const svc of data.services) {
+                    doc.fontSize(10.5).font(fontReg).fillColor(NAVY)
+                        .text(svc.serviceName, sCol1, sRowY, { width: 310, lineBreak: false });
+
+                    doc.fontSize(10.5).font(fontReg).fillColor(GREY_68);
+                    doc.text(formatCurrency(svc.unitPrice, data.currency), sCol2 - 10, sRowY, { width: 60, lineBreak: false });
+                    doc.text(String(svc.quantity), sCol3, sRowY, { width: 40, lineBreak: false });
+                    doc.text(String(svc.days), sCol4, sRowY, { width: 45, lineBreak: false });
+
+                    doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                        .text(formatCurrency(svc.totalPrice, data.currency), sCol5 - 70, sRowY, { width: 70, align: 'right', lineBreak: false });
+
+                    svcSubtotal += svc.totalPrice;
+                    sRowY += 26;
                 }
 
-                let svcRowY = svcTableY + 18;
-                for (let si = 0; si < data.services.length; si++) {
-                    const svc = data.services[si];
-                    checkPageBreak(doc, 20);
+                // Separator before subtotal
+                doc.moveTo(ML + 13, sRowY - 4)
+                    .lineTo(ML + CW - 13, sRowY - 4)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
 
-                    // Alternating row background
-                    if (si % 2 === 1) {
-                        doc.rect(MARGIN_LEFT, svcRowY - 2, PAGE_WIDTH_INNER, 16).fillColor(TABLE_ALT_ROW_BG).fill();
-                    }
+                // Subtotal
+                const sSubY = sRowY + 6;
+                doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
+                    .text('Subtotal', sCol5 - 150, sSubY, { width: 60, lineBreak: false });
+                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                    .text(formatCurrency(svcSubtotal, data.currency), sCol5 - 70, sSubY, { width: 70, align: 'right', lineBreak: false });
 
-                    sx = MARGIN_LEFT + 5;
-                    doc.fontSize(8).font('Helvetica').fillColor(DARK_TEXT);
-
-                    const svcValues = [
-                        svc.serviceName,
-                        String(svc.quantity),
-                        String(svc.days),
-                        formatCurrency(svc.unitPrice, data.currency),
-                        formatCurrency(svc.totalPrice, data.currency),
-                    ];
-                    for (let c = 0; c < svcValues.length; c++) {
-                        const align = c >= 3 ? 'right' : 'left';
-                        doc.text(svcValues[c], sx, svcRowY + 2, { width: svcCols[c] - 10, align } as any);
-                        sx += svcCols[c];
-                    }
-                    svcRowY += 18;
-                }
-                doc.y = svcRowY + 5;
-                doc.moveDown(0.5);
+                doc.y = svcCardY + svcCardHeight + 12;
+                separatorLine(doc);
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 7: SERVICE NOTES
-            // ═══════════════════════════════════════════════════════════════════
+            // ═══════════════════════════════════════════════════════════════
+            // SERVICE NOTES
+            // ═══════════════════════════════════════════════════════════════
 
-            drawSectionHeader(doc, 'Service Notes');
+            sectionHeading(doc, 'Service Notes');
 
-            drawCalloutBox(doc,
-                'This is currently NO reservation. Availability is limited. Prices and availability may change until confirmed.',
-                RED_WARNING, 'Important');
-
-            drawCalloutBox(doc,
-                'City tax payable by guest directly at hotel upon arrival. The city tax is not included in the quoted price.',
-                YELLOW_NOTE, 'City Tax');
-
-            // Earliest cancellation deadline across all hotels
-            const deadlines = data.hotels.map((h) => h.cancelDeadline).filter(Boolean) as string[];
-            if (deadlines.length > 0) {
-                const earliest = deadlines.sort()[0];
-                drawCalloutBox(doc,
-                    `Free cancellation available until ${formatDate(earliest)}. After this date, cancellation charges will apply as per the cancellation conditions below.`,
-                    GREEN_NOTE, 'Cancellation');
-            }
-
+            const noteLines: string[] = [];
             if (data.specialRequirements) {
-                drawCalloutBox(doc, data.specialRequirements, '#7B1FA2', 'Special Requirements');
+                noteLines.push(data.specialRequirements);
             }
-
             if (data.customerNotes) {
-                drawCalloutBox(doc, data.customerNotes, LIGHT_TEXT, 'Customer Notes');
+                noteLines.push(data.customerNotes);
+            }
+            // Default service notes
+            noteLines.push('This is currently NO reservation. Availability is limited. Prices and availability may change until confirmed.');
+            noteLines.push('City tax payable by guest directly at hotel upon arrival. The city tax is not included in the quoted price.');
+
+            for (const note of noteLines) {
+                ensureSpace(doc, 22);
+                doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
+                    .text(`\u2022  ${note}`, ML, doc.y, { width: CW, lineGap: 3 });
+                doc.y += 8;
             }
 
-            doc.moveDown(0.5);
+            doc.y += 6;
+            separatorLine(doc);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 8: CANCELLATION CONDITIONS
-            // ═══════════════════════════════════════════════════════════════════
+            // ═══════════════════════════════════════════════════════════════
+            // TOTAL BAR (rounded, light navy background)
+            // ═══════════════════════════════════════════════════════════════
 
-            if (data.cancellationConditions) {
-                drawSectionHeader(doc, 'Cancellation Conditions');
-                const cxlText = stripHtml(data.cancellationConditions);
-                doc.fontSize(8).font('Helvetica').fillColor(DARK_TEXT)
-                    .text(cxlText, MARGIN_LEFT, doc.y, { width: PAGE_WIDTH_INNER });
-                doc.moveDown(1);
-            }
+            ensureSpace(doc, 50);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 9: TERMS & CONDITIONS
-            // ═══════════════════════════════════════════════════════════════════
+            const totalBarY = doc.y;
+            doc.roundedRect(ML, totalBarY, CW, 35, 10)
+                .fillColor(TOTAL_BG).fill();
 
-            if (data.termsAndConditions) {
-                drawSectionHeader(doc, 'Terms & Conditions');
-                checkPageBreak(doc, 60);
-                const termsText = stripHtml(data.termsAndConditions);
-                doc.fontSize(7).font('Helvetica').fillColor(MEDIUM_TEXT)
-                    .text(termsText, MARGIN_LEFT, doc.y, { width: PAGE_WIDTH_INNER });
-                doc.moveDown(1);
-            }
-
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 10: TOTAL PRICE BAR
-            // ═══════════════════════════════════════════════════════════════════
-
-            checkPageBreak(doc, 50);
-
-            const totalBarY = doc.y + 5;
-            doc.rect(MARGIN_LEFT, totalBarY, PAGE_WIDTH_INNER, 35).fillColor(BRAND_GREEN).fill();
-            doc.fontSize(10).font('Helvetica').fillColor('#FFFFFF')
-                .text('Total Price', MARGIN_LEFT + 15, totalBarY + 10);
-            doc.fontSize(14).font('Helvetica-Bold').fillColor('#FFFFFF')
-                .text(formatCurrency(data.totalPrice, data.currency), MARGIN_LEFT, totalBarY + 8, {
-                    align: 'right',
-                    width: PAGE_WIDTH_INNER - 15,
-                });
+            // TOTAL label + value (right aligned within the bar)
+            doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
+                .text('TOTAL', ML + CW - 160, totalBarY + 11, { width: 50, lineBreak: false });
+            doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                .text(formatCurrencyWithCode(data.totalPrice, data.currency), ML + CW - 100, totalBarY + 10, { width: 86, align: 'right', lineBreak: false });
 
             doc.y = totalBarY + 45;
+            separatorLine(doc);
 
-            // Price breakdown note
-            doc.fontSize(7).font('Helvetica').fillColor(LIGHT_TEXT)
-                .text(
-                    `${formatCurrency(data.sellingPricePerRoomPerNight, data.currency)} per room per night \u00D7 ${data.totalRooms} rooms \u00D7 ${data.nights} nights`,
-                    { align: 'right', width: PAGE_WIDTH_INNER },
-                );
+            // ═══════════════════════════════════════════════════════════════
+            // CANCELLATION CONDITIONS
+            // ═══════════════════════════════════════════════════════════════
 
-            // ═══════════════════════════════════════════════════════════════════
-            // SECTION 11: FOOTER (on every page)
-            // ═══════════════════════════════════════════════════════════════════
+            if (data.cancellationConditions) {
+                sectionHeading(doc, 'Cancellation Conditions');
 
-            const totalPages = doc.bufferedPageRange().count;
-            for (let i = 0; i < totalPages; i++) {
+                const cxlLines = stripHtml(data.cancellationConditions);
+                for (const line of cxlLines) {
+                    ensureSpace(doc, 18);
+                    const bullet = line.startsWith('\u2022') ? line : `\u2022  ${line}`;
+                    doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
+                        .text(bullet, ML, doc.y, { width: CW, lineGap: 3 });
+                    doc.y += 4;
+                }
+
+                doc.y += 4;
+                separatorLine(doc);
+            }
+
+            // ═══════════════════════════════════════════════════════════════
+            // TERMS & CONDITIONS
+            // ═══════════════════════════════════════════════════════════════
+
+            if (data.termsAndConditions) {
+                sectionHeading(doc, 'Terms & Conditions');
+
+                const termsLines = stripHtml(data.termsAndConditions);
+
+                for (let ti = 0; ti < termsLines.length; ti++) {
+                    ensureSpace(doc, 18);
+                    const line = termsLines[ti];
+                    const bullet = line.startsWith('\u2022') ? line : `\u2022  ${line}`;
+                    doc.fontSize(10.5).font(fontReg).fillColor(NAVY)
+                        .text(bullet, ML, doc.y, { width: CW, lineGap: 3 });
+                    doc.y += 4;
+
+                    // After 5th bullet, insert payment callout box (pink)
+                    if (ti === 4) {
+                        ensureSpace(doc, 40);
+                        const payY = doc.y + 4;
+
+                        // Find earliest cancellation deadline for payment date
+                        const deadlines = data.hotels.map((h) => h.cancelDeadline).filter(Boolean) as string[];
+                        const payDate = deadlines.length > 0 ? formatDate(deadlines.sort()[0]) : today;
+                        const payText = `Please pay ${formatCurrencyWithCode(data.totalPrice, data.currency)} until ${payDate}.`;
+
+                        doc.roundedRect(ML, payY, CW, 35, 10)
+                            .fillColor(PINK_BG).fill();
+
+                        doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
+                            .text(payText, ML + 14, payY + 11, { width: CW - 28, lineBreak: false });
+
+                        doc.y = payY + 42;
+                    }
+                }
+
+                doc.y += 4;
+                separatorLine(doc);
+            }
+
+            // ═══════════════════════════════════════════════════════════════
+            // ISSUED BY
+            // ═══════════════════════════════════════════════════════════════
+
+            ensureSpace(doc, 50);
+
+            doc.fontSize(12).font(fontSemi).fillColor(NAVY)
+                .text('ISSUED BY', ML, doc.y, { width: CW, align: 'right' });
+            doc.y += 16;
+            doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
+                .text(data.assignedPerson || data.companyName || '-', ML, doc.y, {
+                    width: CW,
+                    align: 'right',
+                });
+
+            // ═══════════════════════════════════════════════════════════════
+            // FOOTER — line only on every page (no doc.text to avoid ghost pages)
+            // ═══════════════════════════════════════════════════════════════
+
+            const range = doc.bufferedPageRange();
+            for (let i = 0; i < range.count; i++) {
                 doc.switchToPage(i);
-
-                // Green footer bar
-                doc.rect(MARGIN_LEFT, 800, PAGE_WIDTH_INNER, 2).fillColor(BRAND_GREEN).fill();
-
-                // Footer text
-                doc.fontSize(7).font('Helvetica').fillColor(LIGHT_TEXT);
-                doc.text(
-                    data.companyName || 'SETT — Sport & Events Tours & Travel',
-                    MARGIN_LEFT, 806,
-                    { width: PAGE_WIDTH_INNER / 2 },
-                );
-                doc.text(
-                    `Page ${i + 1} of ${totalPages}`,
-                    MARGIN_LEFT, 806,
-                    { width: PAGE_WIDTH_INNER, align: 'right' },
-                );
+                doc.save();
+                doc.moveTo(ML, FOOTER_Y)
+                    .lineTo(ML + CW, FOOTER_Y)
+                    .strokeColor(SEPARATOR_SOLID)
+                    .lineWidth(0.5)
+                    .stroke();
+                doc.restore();
             }
 
             doc.end();
