@@ -1,6 +1,49 @@
-import axios from 'axios';
+import originalAxios from 'axios';
+import Bottleneck from 'bottleneck';
 import config from '../config';
 import logger from '../utils/logger';
+import { WBE_GLOBAL_RATE_LIMIT } from '../config/probeConfig';
+
+// WBE UAT limit = 10 QPS, LIVE = 20 QPS.
+// With reservoir approach, Bottleneck enforces an exact cap per second.
+const rate = Math.max(1, Number(WBE_GLOBAL_RATE_LIMIT) || 10);
+
+const limiter = new Bottleneck({
+    reservoir: rate,                   // tokens available per interval
+    reservoirRefreshAmount: rate,      // refill to `rate` tokens
+    reservoirRefreshInterval: 1000,    // every 1 second
+    maxConcurrent: Math.min(rate, 5),  // cap parallel HTTP connections
+    minTime: Math.floor(1000 / rate),  // minimum gap between request starts
+});
+
+limiter.on('failed', async (error: any, jobInfo) => {
+    if (error.response?.status === 429 && jobInfo.retryCount < 3) {
+        logger.warn({ msg: 'WBE API 429 Rate Limit hit, retrying', retryCount: jobInfo.retryCount });
+        return 1000; // wait 1s and retry
+    }
+});
+
+let circuitBreakerBlockedUntil = 0;
+
+const execute = async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (Date.now() < circuitBreakerBlockedUntil) {
+        throw new Error('Circuit Breaker Open: WBE API call blocked due to recent 401/403 error.');
+    }
+    try {
+        return await limiter.schedule(fn);
+    } catch (error: any) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+            circuitBreakerBlockedUntil = Date.now() + 15 * 60 * 1000;
+            logger.error({ msg: 'WBE API 401/403 Error. Trips circuit breaker for 15 mins.', status: error.response?.status });
+        }
+        throw error;
+    }
+};
+
+const axios = {
+    get: (...args: Parameters<typeof originalAxios.get>) => execute(() => originalAxios.get(...args)),
+    post: (...args: Parameters<typeof originalAxios.post>) => execute(() => originalAxios.post(...args)),
+};
 
 export class WbeClientService {
     private readonly apiKey: string;

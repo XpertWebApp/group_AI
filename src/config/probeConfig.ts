@@ -6,7 +6,7 @@
 
 export const PROBE_BATCH_SIZE = Number(process.env.PROBE_BATCH_SIZE ?? 3);
 export const PROBE_MULTIPLIER = Number(process.env.PROBE_MULTIPLIER ?? 2);
-export const WORKER_JOB_CONCURRENCY = Number(process.env.WORKER_JOB_CONCURRENCY ?? 5);
+export const WORKER_JOB_CONCURRENCY = Number(process.env.WORKER_JOB_CONCURRENCY ?? 2);
 export const WBE_GLOBAL_RATE_LIMIT = Number(process.env.WBE_GLOBAL_RATE_LIMIT ?? 10); // calls/sec
 export const PROBE_WAIT_SECONDS = Number(process.env.PROBE_WAIT_SECONDS ?? 45);
 export const PROBE_POLL_INTERVAL_MS = Number(process.env.PROBE_POLL_INTERVAL_MS ?? 3000);
