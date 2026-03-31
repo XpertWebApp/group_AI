@@ -33,7 +33,33 @@ function mapToListItem(row: StaffRow): StaffListItem {
 }
 
 function generateSecurePassword(): string {
-    return crypto.randomBytes(16).toString('base64url');
+    const length = 12;
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const digits = '0123456789';
+    const symbols = '!@#$%&*?';
+    const all = upper + lower + digits + symbols;
+
+    // Guarantee at least one from each category
+    const guaranteed = [
+        upper[crypto.randomInt(upper.length)],
+        lower[crypto.randomInt(lower.length)],
+        digits[crypto.randomInt(digits.length)],
+        symbols[crypto.randomInt(symbols.length)],
+    ];
+
+    // Fill the rest randomly from all characters
+    for (let i = guaranteed.length; i < length; i++) {
+        guaranteed.push(all[crypto.randomInt(all.length)]);
+    }
+
+    // Shuffle using Fisher-Yates
+    for (let i = guaranteed.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(i + 1);
+        [guaranteed[i], guaranteed[j]] = [guaranteed[j], guaranteed[i]];
+    }
+
+    return guaranteed.join('');
 }
 
 function parseFullName(fullName: string): { firstName: string; lastName: string | null } {

@@ -64,6 +64,13 @@ export class UserRepository {
         });
     }
 
+    async updateLastLogin(userId: string): Promise<void> {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { lastLoginAt: new Date() },
+        });
+    }
+
     async getAllGoogleConnectionStatus(): Promise<Array<{
         id: string;
         email: string;
