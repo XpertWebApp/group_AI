@@ -7,6 +7,9 @@ import { logAuditEvent } from '../utils/audit';
 import { ProposalStatus } from '@prisma/client';
 import { countTotalRooms } from '../utils/roomUtils';
 import logger from '../utils/logger';
+import storageService from './storage.service';
+import { PdfLanguage } from '../i18n/pdfTranslations';
+import { translateBatch } from './translation.service';
 
 const MODIFIABLE_STATUSES: ProposalStatus[] = [ProposalStatus.draft];
 const APPROVABLE_STATUSES: ProposalStatus[] = [ProposalStatus.pending_admin_approval, ProposalStatus.draft];
@@ -311,12 +314,12 @@ export class ProposalService {
         };
     }
 
-    async previewPdf(id: string) {
+    async previewPdf(id: string, language?: PdfLanguage) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
-        // Generate a preview PDF buffer (same as approval PDF but not persisted)
-        const pdfData = await this.buildPdfData(existing);
+        const lang = language ?? 'en';
+        const pdfData = await this.buildPdfData(existing, lang);
         const pdfBuffer = await generateOfferPdf(pdfData);
 
         return { pdfBuffer, note: 'Preview PDF generated' };
@@ -333,7 +336,7 @@ export class ProposalService {
      * If PDF generation or email fails, the proposal is still approved
      * (admin can resend later). We never silently discard.
      */
-    async approveProposal(id: string, data: { agentEmail?: string; adminNotes?: string }, userId: string, ip?: string) {
+    async approveProposal(id: string, data: { agentEmail?: string; adminNotes?: string; language?: PdfLanguage }, userId: string, ip?: string) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
@@ -345,14 +348,24 @@ export class ProposalService {
             };
         }
 
-        // Generate PDF
+        // Generate PDF and upload to S3
+        const lang = data.language ?? 'en';
         let pdfBuffer: Buffer | null = null;
         let pdfUrl: string | null = null;
         try {
-            const pdfData = await this.buildPdfData(existing);
+            const pdfData = await this.buildPdfData(existing, lang);
             pdfBuffer = await generateOfferPdf(pdfData);
-            // Store PDF as a data URI for now (in production, upload to S3/GCS and store URL)
-            pdfUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+
+            if (storageService.isConfigured()) {
+                const pdfKey = storageService.buildProposalPdfKey(id);
+                await storageService.upload(pdfKey, pdfBuffer);
+                pdfUrl = pdfKey;
+                logger.info({ proposalId: id, pdfKey }, 'PDF uploaded to S3');
+            } else {
+                // Fallback: store as base64 data URI if S3 not configured
+                pdfUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+                logger.warn({ proposalId: id }, 'S3 not configured — PDF stored as base64 in DB');
+            }
             console.log(`[Step 4.2] PDF generated for proposal ${id} (${pdfBuffer.length} bytes)`);
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'Step 4.2: PDF generation failed — approving without PDF');
@@ -501,7 +514,7 @@ export class ProposalService {
     /**
      * Build PDF data from a proposal + its booking request.
      */
-    private async buildPdfData(proposal: any): Promise<OfferPdfData> {
+    private async buildPdfData(proposal: any, language: PdfLanguage = 'en'): Promise<OfferPdfData> {
         const request = proposal.bookingRequest;
 
         // ── Company details from settings ────────────────────────────────
@@ -528,8 +541,8 @@ export class ProposalService {
         const nights = (request as any)?.nights ?? 1;
         const totalRooms = countTotalRooms((request as any)?.rooms);
         const mealPlan = (request as any)?.breakfastPreference ?? 'RO';
-        const specialRequirements = (request as any)?.specialRequirements ?? null;
-        const customerNotes = (request as any)?.customerNotes ?? null;
+        let specialRequirements = (request as any)?.specialRequirements ?? null;
+        let customerNotes = (request as any)?.customerNotes ?? null;
         const cancellationConditions = (request as any)?.cancellationConditions ?? null;
         const termsAndConditions = (request as any)?.termsAndConditions ?? null;
 
@@ -583,24 +596,52 @@ export class ProposalService {
             totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1) * (s.days ?? 1),
         }));
 
-        // ── Fallback terms from settings if not on the request ───────────
+        // ── Fallback terms from settings — pick correct language variant ─
         let finalTerms = termsAndConditions;
-        if (!finalTerms) {
+        let finalCxl = cancellationConditions;
+
+        if (!finalTerms || !finalCxl) {
             try {
                 const policies = await settingsService.getPolicies() as Record<string, string>;
-                finalTerms = policies?.termsConditionsEn ?? null;
+                if (!finalTerms) {
+                    finalTerms = (language === 'de'
+                        ? policies?.termsConditionsDe || policies?.termsConditionsEn
+                        : policies?.termsConditionsEn) ?? null;
+                }
+                if (!finalCxl) {
+                    finalCxl = (language === 'de'
+                        ? policies?.cancellationConditionsDe || policies?.cancellationConditionsEn
+                        : policies?.cancellationConditionsEn) ?? null;
+                }
             } catch {
                 // ignore
             }
         }
 
-        let finalCxl = cancellationConditions;
-        if (!finalCxl) {
+        // ── Translate dynamic user-entered text if target language ≠ source ─
+        // Source is assumed English (staff/webhook input). Only translate when
+        // the PDF language is German and the text is originally in English.
+        if (language !== 'en') {
+            const dynamicTexts = [specialRequirements, customerNotes];
+            const serviceNames = services.map((s: any) => s.serviceName as string | null);
+
             try {
-                const policies = await settingsService.getPolicies() as Record<string, string>;
-                finalCxl = policies?.cancellationConditionsEn ?? null;
-            } catch {
-                // ignore
+                const translated = await translateBatch(
+                    [...dynamicTexts, ...serviceNames],
+                    language,
+                    'en',
+                );
+
+                // Re-assign translated values
+                specialRequirements = translated[0] || specialRequirements;
+                customerNotes = translated[1] || customerNotes;
+
+                // Update service names with translations
+                for (let si = 0; si < services.length; si++) {
+                    services[si].serviceName = translated[2 + si] || services[si].serviceName;
+                }
+            } catch (err: any) {
+                logger.warn({ err, language }, 'Dynamic text translation failed — using original text');
             }
         }
 
@@ -644,11 +685,36 @@ export class ProposalService {
             totalPrice,
             sellingPricePerRoomPerNight: sellingPrice,
             totalRooms,
+
+            // Language
+            language,
         };
     }
 
     async updateProposalStatus(id: string, status: string) {
         return proposalRepository.update(id, { status });
+    }
+
+    async downloadPdf(id: string): Promise<{ pdfBuffer: Buffer; filename: string }> {
+        const existing = await proposalRepository.findById(id);
+        if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+
+        if (!existing.pdfUrl) {
+            throw { status: 404, message: 'No PDF available for this proposal', code: 'PDF_NOT_FOUND' };
+        }
+
+        // Legacy base64 data URI (backward compatibility)
+        if (existing.pdfUrl.startsWith('data:')) {
+            const base64Data = existing.pdfUrl.split(',')[1];
+            return {
+                pdfBuffer: Buffer.from(base64Data, 'base64'),
+                filename: `offer-${id}.pdf`,
+            };
+        }
+
+        // S3 key — download from object storage
+        const pdfBuffer = await storageService.download(existing.pdfUrl);
+        return { pdfBuffer, filename: `offer-${id}.pdf` };
     }
 }
 

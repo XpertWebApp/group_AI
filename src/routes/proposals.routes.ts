@@ -8,6 +8,7 @@ import {
     AdjustHotelPricingSchema,
     AddProposalServiceSchema,
     UpdateProposalServiceSchema,
+    PreviewPdfSchema,
     SendProposalSchema,
     ApproveProposalSchema,
     DeclineProposalSchema,
@@ -82,7 +83,14 @@ router.post(
     proposalsController.send,
 );
 
-router.post('/:id/actions/preview-pdf', authMiddleware, proposalsController.previewPdf);
+router.post(
+    '/:id/actions/preview-pdf',
+    authMiddleware,
+    validate(PreviewPdfSchema, 'body'),
+    proposalsController.previewPdf,
+);
+
+router.get('/:id/pdf', authMiddleware, proposalsController.downloadPdf);
 
 router.post(
     '/:id/actions/approve',

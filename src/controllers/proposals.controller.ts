@@ -196,13 +196,25 @@ export class ProposalsController {
 
     async previewPdf(req: Request, res: Response, next: NextFunction) {
         try {
-            const result = await proposalsService.previewPdf(req.params['id'] as string);
+            const body = (req as any).validated?.body ?? req.body;
+            const result = await proposalsService.previewPdf(req.params['id'] as string, body.language);
             if (result.pdfBuffer) {
                 res.setHeader('Content-Type', 'application/pdf');
                 res.setHeader('Content-Disposition', 'inline; filename="offer-preview.pdf"');
                 return res.send(result.pdfBuffer);
             }
             return sendResponse(res, 200, { previewUrl: null }, 'PDF preview not available');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async downloadPdf(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { pdfBuffer, filename } = await proposalsService.downloadPdf(req.params['id'] as string);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.send(pdfBuffer);
         } catch (error) {
             next(error);
         }
@@ -216,7 +228,7 @@ export class ProposalsController {
             const ip = req.ip;
             const result = await proposalsService.approveProposal(
                 req.params['id'] as string,
-                { agentEmail: body.agentEmail, adminNotes: body.adminNotes },
+                { agentEmail: body.agentEmail, adminNotes: body.adminNotes, language: body.language },
                 userId,
                 ip,
             );

@@ -208,6 +208,11 @@ export const UpdateProposalServiceSchema = z.object({
     notes: z.string().max(2000).optional(),
 });
 
+// ── Preview PDF ──────────────────────────────────────────────────────────
+export const PreviewPdfSchema = z.object({
+    language: z.enum(['en', 'de']).optional(),
+});
+
 // ── Send Proposal ─────────────────────────────────────────────────────────
 export const SendProposalSchema = z.object({
     sendToEmail: z.string().email().optional(),
@@ -217,6 +222,7 @@ export const SendProposalSchema = z.object({
 export const ApproveProposalSchema = z.object({
     agentEmail: z.string().email().optional(),
     adminNotes: z.string().max(2000).optional(),
+    language: z.enum(['en', 'de']).optional(),
 });
 
 export const DeclineProposalSchema = z.object({

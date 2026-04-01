@@ -11,6 +11,7 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger';
+import { PdfLanguage, PdfTranslations, getPdfTranslations } from '../i18n/pdfTranslations';
 
 // ─── Brand Colors (from Figma specs) ─────────────────────────────────────────
 
@@ -87,6 +88,9 @@ export interface OfferPdfData {
     totalPrice: number;
     sellingPricePerRoomPerNight: number;
     totalRooms: number;
+
+    // Language (defaults to 'en')
+    language?: PdfLanguage;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -155,13 +159,13 @@ function stripHtml(html: string | null): string[] {
     return text.split('\n').map((l) => l.trim()).filter(Boolean);
 }
 
-function mealLabel(code: string): string {
+function mealLabel(code: string, t: PdfTranslations): string {
     switch (code?.toUpperCase()) {
-        case 'BB': return 'Breakfast';
-        case 'HB': return 'Half Board';
-        case 'FB': return 'Full Board';
-        case 'AI': return 'All Inclusive';
-        case 'RO': return 'Room Only';
+        case 'BB': return t.mealBreakfast;
+        case 'HB': return t.mealHalfBoard;
+        case 'FB': return t.mealFullBoard;
+        case 'AI': return t.mealAllInclusive;
+        case 'RO': return t.mealRoomOnly;
         default: return code || '-';
     }
 }
@@ -332,6 +336,8 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
 
             registerFonts(doc);
 
+            const lang = data.language ?? 'en';
+            const t = getPdfTranslations(lang);
             const today = formatDate(new Date().toISOString());
 
             // ═══════════════════════════════════════════════════════════════
@@ -349,7 +355,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // Tax ID on the right
             const taxX = ML + CW - 170;
             doc.fontSize(9).font(fontReg).fillColor(NAVY)
-                .text('TAX ID', taxX, 22, { width: 170, align: 'right', lineBreak: false });
+                .text(t.taxId, taxX, 22, { width: 170, align: 'right', lineBreak: false });
             doc.fontSize(10.5).font(fontMed).fillColor(NAVY)
                 .text(data.companyTaxId || '-', taxX, 36, { width: 170, align: 'right', lineBreak: false });
 
@@ -370,14 +376,14 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
 
             // Row 1: Assigned Person | Phone Number | Website
             const row1Y = doc.y;
-            labelValue(doc, 'Assigned Person', data.assignedPerson || '-', COL1, row1Y);
-            labelValue(doc, 'Phone Number', data.companyPhone || '-', COL2, row1Y);
-            labelValue(doc, 'Website', data.companyWebsite || '-', COL3, row1Y);
+            labelValue(doc, t.assignedPerson, data.assignedPerson || '-', COL1, row1Y);
+            labelValue(doc, t.phoneNumber, data.companyPhone || '-', COL2, row1Y);
+            labelValue(doc, t.website, data.companyWebsite || '-', COL3, row1Y);
 
             // Row 2: Email Address | Address
             const row2Y = row1Y + 38;
-            labelValue(doc, 'Email Address', data.companyEmail || '-', COL1, row2Y);
-            labelValue(doc, 'Address', data.companyAddress || '-', COL2, row2Y, CW - 185);
+            labelValue(doc, t.emailAddress, data.companyEmail || '-', COL1, row2Y);
+            labelValue(doc, t.address, data.companyAddress || '-', COL2, row2Y, CW - 185);
 
             doc.y = row2Y + 42;
             separatorLine(doc);
@@ -386,12 +392,12 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // CONTRACT SECTION
             // ═══════════════════════════════════════════════════════════════
 
-            sectionHeading(doc, 'Contract');
+            sectionHeading(doc, t.contract);
 
             const contY = doc.y;
-            labelValue(doc, 'Company ID', `#${data.referenceNumber}`, COL1, contY);
-            labelValue(doc, 'Document Code', `OFF-${String(data.referenceNumber).padStart(6, '0')}`, COL2, contY);
-            labelValue(doc, 'Created Date', today, COL3, contY);
+            labelValue(doc, t.companyId, `#${data.referenceNumber}`, COL1, contY);
+            labelValue(doc, t.documentCode, `OFF-${String(data.referenceNumber).padStart(6, '0')}`, COL2, contY);
+            labelValue(doc, t.createdDate, today, COL3, contY);
 
             doc.y = contY + 40;
             separatorLine(doc);
@@ -400,15 +406,15 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // PREPARED FOR
             // ═══════════════════════════════════════════════════════════════
 
-            sectionHeading(doc, 'Prepared For');
+            sectionHeading(doc, t.preparedFor);
 
             const prepY = doc.y;
-            labelValue(doc, 'Customer Person', data.contactName || '-', COL1, prepY);
-            labelValue(doc, 'Email Address', data.contactEmail || '-', COL2, prepY);
-            labelValue(doc, 'Phone Number', data.contactPhone || '-', COL3, prepY);
+            labelValue(doc, t.customerPerson, data.contactName || '-', COL1, prepY);
+            labelValue(doc, t.emailAddress, data.contactEmail || '-', COL2, prepY);
+            labelValue(doc, t.phoneNumber, data.contactPhone || '-', COL3, prepY);
 
             const prepY2 = prepY + 38;
-            labelValue(doc, 'Address', data.companyNameClient || '-', COL1, prepY2, CW);
+            labelValue(doc, t.address, data.companyNameClient || '-', COL1, prepY2, CW);
 
             doc.y = prepY2 + 40;
             separatorLine(doc);
@@ -417,12 +423,12 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // TRIP DETAILS
             // ═══════════════════════════════════════════════════════════════
 
-            sectionHeading(doc, 'Trip Details');
+            sectionHeading(doc, t.tripDetails);
 
             const tripY = doc.y;
-            labelValue(doc, 'Destination', data.destinationName || '-', COL1, tripY);
-            labelValue(doc, 'Checkin/Out', formatCheckinOut(data.checkinDate, data.checkoutDate), COL2, tripY, 200);
-            labelValue(doc, 'Guests', String(data.totalRooms * 2), COL3, tripY);
+            labelValue(doc, t.destination, data.destinationName || '-', COL1, tripY);
+            labelValue(doc, t.checkinOut, formatCheckinOut(data.checkinDate, data.checkoutDate), COL2, tripY, 200);
+            labelValue(doc, t.guests, String(data.totalRooms * 2), COL3, tripY);
 
             doc.y = tripY + 40;
             separatorLine(doc);
@@ -431,7 +437,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // HOTEL DETAILS
             // ═══════════════════════════════════════════════════════════════
 
-            sectionHeading(doc, 'Hotel Details');
+            sectionHeading(doc, t.hotelDetails);
 
             for (let hi = 0; hi < data.hotels.length; hi++) {
                 const hotel = data.hotels[hi];
@@ -449,7 +455,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 }
 
                 doc.fontSize(10.5).font(fontSemi).fillColor(GREY_4A)
-                    .text(`Reference number: #${data.referenceNumber}`, ML, hotelHeaderY, {
+                    .text(`${t.referenceNumber}: #${data.referenceNumber}`, ML, hotelHeaderY, {
                         width: CW,
                         align: 'right',
                         lineBreak: false,
@@ -477,11 +483,11 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 const tCol5 = ML + CW - 13; // TOTAL (right aligned)
 
                 doc.fontSize(9).font(fontSemi).fillColor(GREY_68);
-                doc.text('DESTINATION', tCol1, hdrY, { lineBreak: false });
-                doc.text('RATE', tCol2, hdrY, { lineBreak: false });
-                doc.text('QTY', tCol3, hdrY, { lineBreak: false });
-                doc.text('NIGHTS', tCol4, hdrY, { lineBreak: false });
-                doc.text(`TOTAL(${data.currency})`, tCol5 - 70, hdrY, { width: 70, align: 'right', lineBreak: false });
+                doc.text(t.destinationCol, tCol1, hdrY, { lineBreak: false });
+                doc.text(t.rate, tCol2, hdrY, { lineBreak: false });
+                doc.text(t.qty, tCol3, hdrY, { lineBreak: false });
+                doc.text(t.nights, tCol4, hdrY, { lineBreak: false });
+                doc.text(`${t.total}(${data.currency})`, tCol5 - 70, hdrY, { width: 70, align: 'right', lineBreak: false });
 
                 // Header separator inside card
                 const hdrLineY = hdrY + 16;
@@ -516,7 +522,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 // Subtotal row (right aligned)
                 const subY = subLineY + 10;
                 doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
-                    .text('Subtotal', tCol5 - 150, subY, { width: 60, lineBreak: false });
+                    .text(t.subtotal, tCol5 - 150, subY, { width: 80, lineBreak: false });
                 doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
                     .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 70, subY, { width: 70, align: 'right', lineBreak: false });
 
@@ -535,7 +541,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // ═══════════════════════════════════════════════════════════════
 
             if (data.services.length > 0) {
-                sectionHeading(doc, 'Service Details');
+                sectionHeading(doc, t.serviceDetails);
                 ensureSpace(doc, 100);
 
                 // Calculate card height
@@ -556,11 +562,11 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 const sCol5 = ML + CW - 13;
 
                 doc.fontSize(9).font(fontSemi).fillColor(NAVY);
-                doc.text('DESTINATION', sCol1, shY, { lineBreak: false });
-                doc.text('RATE', sCol2, shY, { lineBreak: false });
-                doc.text('QTY', sCol3, shY, { lineBreak: false });
-                doc.text('NIGHTS', sCol4, shY, { lineBreak: false });
-                doc.text(`TOTAL(${data.currency})`, sCol5 - 70, shY, { width: 70, align: 'right', lineBreak: false });
+                doc.text(t.destinationCol, sCol1, shY, { lineBreak: false });
+                doc.text(t.rate, sCol2, shY, { lineBreak: false });
+                doc.text(t.qty, sCol3, shY, { lineBreak: false });
+                doc.text(t.nights, sCol4, shY, { lineBreak: false });
+                doc.text(`${t.total}(${data.currency})`, sCol5 - 70, shY, { width: 70, align: 'right', lineBreak: false });
 
                 // Header separator
                 const shLineY = shY + 16;
@@ -600,7 +606,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 // Subtotal
                 const sSubY = sRowY + 6;
                 doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
-                    .text('Subtotal', sCol5 - 150, sSubY, { width: 60, lineBreak: false });
+                    .text(t.subtotal, sCol5 - 150, sSubY, { width: 80, lineBreak: false });
                 doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
                     .text(formatCurrency(svcSubtotal, data.currency), sCol5 - 70, sSubY, { width: 70, align: 'right', lineBreak: false });
 
@@ -612,7 +618,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // SERVICE NOTES
             // ═══════════════════════════════════════════════════════════════
 
-            sectionHeading(doc, 'Service Notes');
+            sectionHeading(doc, t.serviceNotes);
 
             const noteLines: string[] = [];
             if (data.specialRequirements) {
@@ -621,9 +627,9 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             if (data.customerNotes) {
                 noteLines.push(data.customerNotes);
             }
-            // Default service notes
-            noteLines.push('This is currently NO reservation. Availability is limited. Prices and availability may change until confirmed.');
-            noteLines.push('City tax payable by guest directly at hotel upon arrival. The city tax is not included in the quoted price.');
+            // Default service notes (translated)
+            noteLines.push(t.disclaimerNoReservation);
+            noteLines.push(t.disclaimerCityTax);
 
             for (const note of noteLines) {
                 ensureSpace(doc, 22);
@@ -647,7 +653,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
 
             // TOTAL label + value (right aligned within the bar)
             doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
-                .text('TOTAL', ML + CW - 160, totalBarY + 11, { width: 50, lineBreak: false });
+                .text(t.totalLabel, ML + CW - 160, totalBarY + 11, { width: 50, lineBreak: false });
             doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
                 .text(formatCurrencyWithCode(data.totalPrice, data.currency), ML + CW - 100, totalBarY + 10, { width: 86, align: 'right', lineBreak: false });
 
@@ -659,7 +665,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // ═══════════════════════════════════════════════════════════════
 
             if (data.cancellationConditions) {
-                sectionHeading(doc, 'Cancellation Conditions');
+                sectionHeading(doc, t.cancellationConditions);
 
                 const cxlLines = stripHtml(data.cancellationConditions);
                 for (const line of cxlLines) {
@@ -679,7 +685,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             // ═══════════════════════════════════════════════════════════════
 
             if (data.termsAndConditions) {
-                sectionHeading(doc, 'Terms & Conditions');
+                sectionHeading(doc, t.termsAndConditions);
 
                 const termsLines = stripHtml(data.termsAndConditions);
 
@@ -699,7 +705,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                         // Find earliest cancellation deadline for payment date
                         const deadlines = data.hotels.map((h) => h.cancelDeadline).filter(Boolean) as string[];
                         const payDate = deadlines.length > 0 ? formatDate(deadlines.sort()[0]) : today;
-                        const payText = `Please pay ${formatCurrencyWithCode(data.totalPrice, data.currency)} until ${payDate}.`;
+                        const payText = `${t.paymentPrefix} ${formatCurrencyWithCode(data.totalPrice, data.currency)} ${t.paymentUntil} ${payDate}.`;
 
                         doc.roundedRect(ML, payY, CW, 35, 10)
                             .fillColor(PINK_BG).fill();
@@ -722,7 +728,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             ensureSpace(doc, 50);
 
             doc.fontSize(12).font(fontSemi).fillColor(NAVY)
-                .text('ISSUED BY', ML, doc.y, { width: CW, align: 'right' });
+                .text(t.issuedBy, ML, doc.y, { width: CW, align: 'right' });
             doc.y += 16;
             doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
                 .text(data.assignedPerson || data.companyName || '-', ML, doc.y, {
