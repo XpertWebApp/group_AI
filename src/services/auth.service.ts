@@ -5,7 +5,8 @@ import userRepository from '../repositories/user.repository';
 
 export class AuthService {
     async login(email: string, password: string) {
-        const user = await userRepository.findByEmail(email);
+        const normalizedEmail = email.toLowerCase();
+        const user = await userRepository.findByEmail(normalizedEmail);
 
         if (!user || !user.isActive) {
             throw { status: 401, message: 'Invalid credentials', code: 'UNAUTHORIZED' };

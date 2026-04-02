@@ -417,6 +417,7 @@ enum BookingRequestStatus {
   completed
   cancelled
   ai_generated
+  sent
 
   @@schema("app")
 }

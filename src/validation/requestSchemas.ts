@@ -104,7 +104,7 @@ export const UpdateBookingRequestSchema = z.object({
     cancellationConditions: z.string().optional(),
     // System
     source: z.string().optional(),
-    status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled']).optional(),
+    status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent']).optional(),
 });
 
 // ── Group Requests list (pagination + search + filter) ─────────────────────
@@ -113,7 +113,7 @@ export const ListRequestsQuerySchema = z.object({
     limit: z.string().optional().transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 20)),
     search: z.string().optional(),
     status: z
-        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', ''])
+        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', ''])
         .optional()
         .transform((v) => v || undefined),
     dateFrom: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid dateFrom' }),

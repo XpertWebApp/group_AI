@@ -293,6 +293,11 @@ export class ProposalService {
 
         const updated = await proposalRepository.setSent(id, userId, data.sendToEmail);
 
+        // Update parent booking request status to 'sent'
+        if (existing.requestId) {
+            await requestRepository.updateStatus(existing.requestId, 'sent' as any);
+        }
+
         await logAuditEvent({
             userId,
             action: 'send_proposal',
