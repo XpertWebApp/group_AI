@@ -10,7 +10,7 @@ import logger from '../utils/logger';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
 import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
 import type { ExpandedRoom, RoomTypeProbeTarget } from '../queue/hotelProbeJob.types';
-import { countTotalRooms } from '../utils/roomUtils';
+import { countTotalRooms, hasNewDoubleBreakdown, normalizeRoomCounts } from '../utils/roomUtils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -277,9 +277,12 @@ export interface OptionDetailsResponse {
  */
 export function expandRequestRooms(rooms: any): ExpandedRoom[] {
     if (!rooms || typeof rooms !== 'object') return [{ adults: ADULTS_PER_ROOM, children: 0, childrenAges: [] }];
+    // Normalize to avoid double-counting double/twin when new breakdown fields are present
+    const normalized = normalizeRoomCounts(rooms);
     const expanded: ExpandedRoom[] = [];
-    for (const [type, count] of Object.entries(rooms)) {
+    for (const [type, count] of Object.entries(normalized)) {
         const n = Number(count) || 0;
+        if (n <= 0) continue;
         const adults = ROOM_TYPE_ADULTS[type as string] ?? ADULTS_PER_ROOM;
         for (let i = 0; i < n; i++) {
             expanded.push({ adults, children: 0, childrenAges: [] });
@@ -298,8 +301,10 @@ export function expandRequestRooms(rooms: any): ExpandedRoom[] {
  */
 export function buildRoomTypeTargets(rooms: any): RoomTypeProbeTarget[] {
     if (!rooms || typeof rooms !== 'object') return [];
+    // Normalize to avoid double-counting double/twin when new breakdown fields are present
+    const normalized = normalizeRoomCounts(rooms);
     const targets: RoomTypeProbeTarget[] = [];
-    for (const [type, count] of Object.entries(rooms)) {
+    for (const [type, count] of Object.entries(normalized)) {
         const n = Number(count) || 0;
         if (n <= 0) continue;
         const adults = ROOM_TYPE_ADULTS[type] ?? ADULTS_PER_ROOM;
@@ -452,13 +457,21 @@ function buildSupplierSplit(
  */
 function getDominantRoomType(rooms: any): string | null {
     if (!rooms || typeof rooms !== 'object') return null;
+
+    const useNewBreakdown = hasNewDoubleBreakdown(rooms);
+
     const types = [
-        { type: 'double',    count: rooms.double    ?? 0 },
-        { type: 'single',    count: rooms.single    ?? 0 },
-        { type: 'twin',      count: rooms.twin      ?? 0 },
-        { type: 'triple',    count: rooms.triple    ?? 0 },
-        { type: 'quadruple', count: rooms.quadruple ?? 0 },
-        { type: 'suite',     count: rooms.suites    ?? 0 },
+        // Legacy double/twin — only counted when new breakdown fields are absent
+        { type: 'double',            count: useNewBreakdown ? 0 : (rooms.double ?? 0) },
+        { type: 'twin',              count: useNewBreakdown ? 0 : (rooms.twin ?? 0) },
+        // New breakdown fields
+        { type: 'standardDoubleBeds', count: rooms.standardDoubleBeds ?? 0 },
+        { type: 'twinBeds',          count: rooms.twinBeds ?? 0 },
+        // Other types — always counted
+        { type: 'single',            count: rooms.single ?? 0 },
+        { type: 'triple',            count: rooms.triple ?? 0 },
+        { type: 'quadruple',         count: rooms.quadruple ?? 0 },
+        { type: 'suite',             count: rooms.suites ?? 0 },
     ];
     const max = types.reduce((a, b) => (b.count > a.count ? b : a), { type: null as string | null, count: 0 });
     return max.count > 0 ? max.type : null;

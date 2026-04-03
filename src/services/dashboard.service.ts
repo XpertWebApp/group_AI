@@ -1,5 +1,6 @@
 import { PrismaClient, BookingRequestStatus, ProposalStatus } from '@prisma/client';
 import requestRepository from '../repositories/request.repository';
+import { countTotalRooms } from '../utils/roomUtils';
 
 const prisma = new PrismaClient();
 
@@ -129,14 +130,7 @@ export class DashboardService {
                     : null;
 
             // Total room count from rooms JSON
-            const rooms: any = r.rooms ?? {};
-            const totalRooms =
-                (rooms.single ?? 0) +
-                (rooms.double ?? 0) +
-                (rooms.twin ?? 0) +
-                (rooms.triple ?? 0) +
-                (rooms.quadruple ?? 0) +
-                (rooms.suites ?? 0);
+            const totalRooms = countTotalRooms(r.rooms);
 
             return {
                 id: r.id,

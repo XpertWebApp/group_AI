@@ -63,6 +63,9 @@ function matchesRoomType(roomDescriptions: string[], requestedType: string | nul
     if (type === 'single') acceptable.push('twin');
     if (type === 'double') acceptable.push('twin');
     if (type === 'triple') acceptable.push('quad');
+    // New breakdown types: standardDoubleBeds → match "double"/"twin", twinBeds → match "twin"/"double"
+    if (type === 'standarddoublebeds') { acceptable.push('double', 'twin'); }
+    if (type === 'twinbeds') { acceptable.push('twin', 'double'); }
     return descs.some((d) => acceptable.some((kw) => d.includes(kw)));
 }
 

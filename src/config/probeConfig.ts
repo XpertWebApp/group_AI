@@ -26,4 +26,6 @@ export const ROOM_TYPE_ADULTS: Record<string, number> = {
     triple: 3,
     quadruple: 4,
     suites: 2,
+    standardDoubleBeds: 2,
+    twinBeds: 2,
 };

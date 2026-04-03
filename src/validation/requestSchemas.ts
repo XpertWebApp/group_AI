@@ -8,6 +8,8 @@ export const RoomsSchema = z.object({
     triple: z.number().int().min(0).default(0),
     quadruple: z.number().int().min(0).default(0),
     suites: z.number().int().min(0).default(0),
+    standardDoubleBeds: z.number().int().min(0).default(0),
+    twinBeds: z.number().int().min(0).default(0),
     extraRoomsNote: z.string().trim().max(2000).nullable().optional(),
 });
 

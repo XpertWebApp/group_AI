@@ -7,7 +7,7 @@ export interface ExpandedRoom {
 
 /** Per-room-type probe target — how many of each type to probe (requested × PROBE_MULTIPLIER). */
 export interface RoomTypeProbeTarget {
-    roomType: string;       // 'single' | 'double' | 'twin' | 'triple' | 'quadruple' | 'suites'
+    roomType: string;       // 'single' | 'double' | 'twin' | 'triple' | 'quadruple' | 'suites' | 'standardDoubleBeds' | 'twinBeds'
     requested: number;      // original count from booking request
     probeLimit: number;     // requested * PROBE_MULTIPLIER
     adults: number;         // from ROOM_TYPE_ADULTS config
