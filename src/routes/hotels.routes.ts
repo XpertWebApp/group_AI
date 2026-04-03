@@ -95,4 +95,13 @@ router.get('/image', imageLimiter, async (req: Request, res: Response, next: Nex
     }
 });
 
+/**
+ * GET /api/v1/hotels/details?code={hotelCode}
+ *
+ * Returns full hotel details (description, all images, facilities, contact info).
+ * Data is sourced from the metadata JSON column (synced from WBE CDN).
+ * Uses query param instead of path param because hotelCode contains "/" and "=" characters.
+ */
+router.get('/details', authMiddleware, searchLimiter, hotelController.getDetails);
+
 export default router;

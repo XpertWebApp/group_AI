@@ -942,6 +942,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         hotelName: dbHotel?.name ?? hotelCode,
         starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
         imageUrl,
+        description: dbHotel?.description ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,
         latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,

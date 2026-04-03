@@ -18,6 +18,19 @@ export class HotelController {
             next(error);
         }
     }
+
+    async getDetails(req: Request, res: Response, next: NextFunction) {
+        try {
+            const hotelCode = (req.query.code as string ?? '').trim();
+            if (!hotelCode) {
+                return sendResponse(res, 400, null, 'code query parameter is required', 'BAD_REQUEST');
+            }
+            const result = await hotelService.getHotelDetails(hotelCode);
+            return sendResponse(res, 200, result, 'Hotel details retrieved');
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export default new HotelController();

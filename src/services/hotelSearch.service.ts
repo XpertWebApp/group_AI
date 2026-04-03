@@ -102,6 +102,7 @@ export interface HotelBestOption {
 export interface HotelResult {
     hotelCode: string;
     hotelName: string;
+    description?: string | null;
     starRating?: number | null;
     imageUrl?: string | null;
     address?: string | null;

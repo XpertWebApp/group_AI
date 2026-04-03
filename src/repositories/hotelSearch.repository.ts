@@ -16,6 +16,8 @@ export interface HotelCodeRow {
     totalRooms?: number | null;
     /** Primary image key (displayOrder=0) from HotelImage table, if available. */
     primaryImageKey?: string | null;
+    /** Short description extracted from metadata.Location (or metadata.Description fallback). */
+    description?: string | null;
 }
 
 export class HotelSearchRepository {
@@ -76,6 +78,7 @@ export class HotelSearchRepository {
                     latitude: true,
                     longitude: true,
                     totalRooms: true,
+                    metadata: true,
                 },
             }),
             prisma.hotelImage.findMany({
@@ -92,9 +95,15 @@ export class HotelSearchRepository {
 
         const map = new Map<string, HotelCodeRow>();
         for (const h of hotels) {
+            // Extract short description from metadata JSON (Location is a brief summary, Description is often empty/long)
+            const meta = h.metadata as Record<string, any> | null;
+            const description = meta?.Location || meta?.Description || null;
+
+            const { metadata: _meta, ...hotelFields } = h;
             map.set(h.hotelCode, {
-                ...h,
+                ...hotelFields,
                 primaryImageKey: imageMap.get(h.hotelCode) ?? null,
+                description,
             });
         }
         return map;
