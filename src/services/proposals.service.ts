@@ -596,26 +596,24 @@ export class ProposalService {
             totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1) * (s.days ?? 1),
         }));
 
-        // ── Fallback terms from settings — pick correct language variant ─
-        let finalTerms = termsAndConditions;
-        let finalCxl = cancellationConditions;
+        // ── Terms & Cancellation from settings — pick correct language variant ─
+        // When language is 'de', always prefer the German policy from settings.
+        // Only fall back to the booking request's stored value (English) if no German version exists.
+        let finalTerms: string | null = null;
+        let finalCxl: string | null = null;
 
-        if (!finalTerms || !finalCxl) {
-            try {
-                const policies = await settingsService.getPolicies() as Record<string, string>;
-                if (!finalTerms) {
-                    finalTerms = (language === 'de'
-                        ? policies?.termsConditionsDe || policies?.termsConditionsEn
-                        : policies?.termsConditionsEn) ?? null;
-                }
-                if (!finalCxl) {
-                    finalCxl = (language === 'de'
-                        ? policies?.cancellationConditionsDe || policies?.cancellationConditionsEn
-                        : policies?.cancellationConditionsEn) ?? null;
-                }
-            } catch {
-                // ignore
+        try {
+            const policies = await settingsService.getPolicies() as Record<string, string>;
+            if (language === 'de') {
+                finalTerms = policies?.termsConditionsDe || termsAndConditions || policies?.termsConditionsEn || null;
+                finalCxl = policies?.cancellationConditionsDe || cancellationConditions || policies?.cancellationConditionsEn || null;
+            } else {
+                finalTerms = termsAndConditions || policies?.termsConditionsEn || null;
+                finalCxl = cancellationConditions || policies?.cancellationConditionsEn || null;
             }
+        } catch {
+            finalTerms = termsAndConditions;
+            finalCxl = cancellationConditions;
         }
 
         // ── Translate dynamic user-entered text if target language ≠ source ─
