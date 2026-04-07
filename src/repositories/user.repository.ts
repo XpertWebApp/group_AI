@@ -43,6 +43,7 @@ export class UserRepository {
         googleAccessToken: string | null;
         googleRefreshToken: string | null;
         googleTokenExpiry: Date | null;
+        googleEmail?: string | null;
     }): Promise<User> {
         return prisma.user.update({
             where: { id: userId },
@@ -51,7 +52,7 @@ export class UserRepository {
     }
 
     async getGoogleTokens(userId: string): Promise<{
-        email: string;
+        googleEmail: string | null;
         googleAccessToken: string | null;
         googleRefreshToken: string | null;
         googleTokenExpiry: Date | null;
@@ -59,7 +60,7 @@ export class UserRepository {
         return prisma.user.findUnique({
             where: { id: userId },
             select: {
-                email: true,
+                googleEmail: true,
                 googleAccessToken: true,
                 googleRefreshToken: true,
                 googleTokenExpiry: true,
@@ -74,6 +75,7 @@ export class UserRepository {
                 googleAccessToken: null,
                 googleRefreshToken: null,
                 googleTokenExpiry: null,
+                googleEmail: null,
             },
         });
     }

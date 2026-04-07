@@ -66,8 +66,8 @@ export class GoogleAuthController {
     async status(req: Request, res: Response, next: NextFunction) {
         try {
             const userId = (req as any).user.id;
-            const connected = await gmailService.isConnected(userId);
-            return sendResponse(res, 200, { connected }, 'Google connection status');
+            const status = await gmailService.getConnectionStatus(userId);
+            return sendResponse(res, 200, status, 'Google connection status');
         } catch (error) {
             next(error);
         }

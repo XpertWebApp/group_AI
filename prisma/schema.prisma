@@ -65,6 +65,7 @@ model User {
   googleAccessToken  String?   @map("google_access_token")
   googleRefreshToken String?   @map("google_refresh_token")
   googleTokenExpiry  DateTime? @map("google_token_expiry")
+  googleEmail        String?   @map("google_email") @db.VarChar(255)
   role               UserRole  @relation(fields: [roleId], references: [id])
 
   @@index([roleId])

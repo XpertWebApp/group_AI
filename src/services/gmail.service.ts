@@ -4,7 +4,8 @@ import userRepository from '../repositories/user.repository';
 import { encryptToken, decryptToken } from '../utils/tokenEncryption';
 import logger from '../utils/logger';
 
-const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+const USERINFO_EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email';
 
 export class GmailService {
     private createOAuth2Client() {
@@ -18,19 +19,25 @@ export class GmailService {
     /**
      * Generate the Google consent URL for a user to connect their Gmail account.
      * The state parameter carries the userId so the callback knows who to store tokens for.
+     *
+     * Scopes:
+     *  - gmail.send       — required to send emails on behalf of the user
+     *  - userinfo.email   — required to fetch the connected Google account email address
      */
     getAuthUrl(state: string): string {
         const client = this.createOAuth2Client();
         return client.generateAuthUrl({
             access_type: 'offline',
             prompt: 'consent',
-            scope: [GMAIL_SCOPE],
+            scope: [GMAIL_SEND_SCOPE, USERINFO_EMAIL_SCOPE],
             state,
         });
     }
 
     /**
      * Exchange authorization code for tokens, encrypt and store them for the user.
+     * Also fetches the connected Gmail address via gmail.users.getProfile and stores it,
+     * so the frontend can display which Google account is connected.
      */
     async handleCallback(code: string, userId: string): Promise<void> {
         const client = this.createOAuth2Client();
@@ -44,13 +51,25 @@ export class GmailService {
             };
         }
 
+        // Fetch the connected Google account email (best-effort — don't fail the connect flow if this errors)
+        let googleEmail: string | null = null;
+        try {
+            client.setCredentials(tokens);
+            const oauth2 = google.oauth2({ version: 'v2', auth: client });
+            const userinfo = await oauth2.userinfo.get();
+            googleEmail = userinfo.data.email ?? null;
+        } catch (err: any) {
+            logger.warn({ err: err?.message, userId }, 'Failed to fetch connected Google email — continuing without it');
+        }
+
         await userRepository.updateGoogleTokens(userId, {
             googleAccessToken: tokens.access_token ? encryptToken(tokens.access_token) : null,
             googleRefreshToken: encryptToken(tokens.refresh_token),
             googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+            googleEmail,
         });
 
-        logger.info({ userId }, 'Google OAuth tokens stored successfully');
+        logger.info({ userId, googleEmail }, 'Google OAuth tokens stored successfully');
     }
 
     /**
@@ -94,7 +113,7 @@ export class GmailService {
             }
         }
 
-        return { client, email: stored.email };
+        return { client, email: stored.googleEmail };
     }
 
     /**
@@ -103,6 +122,19 @@ export class GmailService {
     async isConnected(userId: string): Promise<boolean> {
         const stored = await userRepository.getGoogleTokens(userId);
         return !!(stored?.googleRefreshToken);
+    }
+
+    /**
+     * Get the connection status + connected Gmail address for a user.
+     * Used by GET /api/v1/auth/google/status to populate the frontend display.
+     */
+    async getConnectionStatus(userId: string): Promise<{ connected: boolean; email: string | null }> {
+        const stored = await userRepository.getGoogleTokens(userId);
+        const connected = !!(stored?.googleRefreshToken);
+        return {
+            connected,
+            email: connected ? (stored?.googleEmail ?? null) : null,
+        };
     }
 
     /**
@@ -139,7 +171,10 @@ export class GmailService {
         const gmail = google.gmail({ version: 'v1', auth: client });
 
         const raw = this.buildRawEmail({
-            from: senderEmail,
+            // Gmail API will use the authorized account regardless of From header,
+            // but we set it explicitly to the connected Gmail address for clarity.
+            // Fallback to 'me' which Gmail interprets as the authorized account.
+            from: senderEmail ?? 'me',
             to: opts.to,
             subject: opts.subject,
             html: opts.html,
