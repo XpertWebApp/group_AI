@@ -291,9 +291,93 @@ export class ProposalService {
             throw { status: 409, message: 'Cannot send a declined proposal', code: 'PROPOSAL_NOT_MODIFIABLE' };
         }
 
-        const updated = await proposalRepository.setSent(id, userId, data.sendToEmail);
+        // Resolve recipient address — explicit override > booking request contact email
+        const request = existing.bookingRequest as any;
+        const recipientEmail = data.sendToEmail ?? request?.contactEmail ?? null;
+        if (!recipientEmail) {
+            throw {
+                status: 400,
+                message: 'No recipient email — provide sendToEmail or set contactEmail on the booking request.',
+                code: 'NO_RECIPIENT_EMAIL',
+            };
+        }
 
-        // Update parent booking request status to 'sent'
+        // Generate the PDF (re-use the same flow as approve/preview)
+        let pdfBuffer: Buffer;
+        try {
+            const pdfData = await this.buildPdfData(existing);
+            pdfBuffer = await generateOfferPdf(pdfData);
+        } catch (err: any) {
+            logger.error({ err, proposalId: id }, 'sendProposal: PDF generation failed');
+            throw {
+                status: 500,
+                message: 'Failed to generate the offer PDF — cannot send email.',
+                code: 'PDF_GENERATION_FAILED',
+            };
+        }
+
+        // Attempt to send the email (Gmail API → SMTP fallback handled by notification service)
+        const refNum = request?.referenceNumber ?? 0;
+        const contactName = request?.contactName ?? request?.firstName ?? 'Guest';
+        const destinationName = request?.destinationName ?? 'Unknown';
+
+        // notification.sendOfferPdfToAgent does NOT throw for normal failures — it returns
+        // a discriminated union (EmailSendResult). Inspect ok/failure to decide what to do.
+        const sendResult = await notificationService.sendOfferPdfToAgent({
+            agentEmail: recipientEmail,
+            referenceNumber: refNum,
+            contactName,
+            destinationName,
+            pdfBuffer,
+            userId,
+        });
+
+        // CRITICAL: only mark proposal as 'sent' if the email actually went through.
+        // Otherwise the status stays unchanged so the user can retry.
+        if (!sendResult.ok) {
+            await logAuditEvent({
+                userId,
+                action: 'send_proposal_failed',
+                entity: 'proposal',
+                entityId: id,
+                details: {
+                    sentToEmail: recipientEmail,
+                    emailError: sendResult.failure.message,
+                    emailErrorCode: sendResult.failure.code,
+                    emailErrorDetail: sendResult.failure.detail,
+                    method: sendResult.method,
+                },
+                ipAddress: ip,
+            });
+
+            // Throw a structured error so the controller can map it to the right HTTP
+            // status code and surface the failure.code to the frontend.
+            throw {
+                status: sendResult.failure.httpStatus,
+                code: 'EMAIL_SEND_FAILED',
+                message: sendResult.failure.message,
+                failure: {
+                    code: sendResult.failure.code,
+                    message: sendResult.failure.message,
+                    retryable: sendResult.failure.retryable,
+                    userActionRequired: sendResult.failure.userActionRequired,
+                    method: sendResult.method,
+                },
+                // Backward-compat shape under data.* so existing frontend reading these
+                // fields continues to work.
+                data: {
+                    sent: false,
+                    emailSent: false,
+                    emailError: sendResult.failure.message,
+                    emailErrorCode: sendResult.failure.code,
+                    proposal: existing,
+                },
+            };
+        }
+
+        // Email succeeded — update status, audit log, and return success
+        const updated = await proposalRepository.setSent(id, userId, recipientEmail);
+
         if (existing.requestId) {
             await requestRepository.updateStatus(existing.requestId, 'sent' as any);
         }
@@ -303,15 +387,15 @@ export class ProposalService {
             action: 'send_proposal',
             entity: 'proposal',
             entityId: id,
-            details: { sentToEmail: data.sendToEmail ?? null },
+            details: { sentToEmail: recipientEmail, method: sendResult.method },
             ipAddress: ip,
         });
 
         return {
             sent: true,
-            emailSent: false,
-            previewUrl: null,
-            sendPlaceholder: true,
+            emailSent: true,
+            emailError: null,
+            emailErrorCode: null,
             proposal: updated,
         };
     }
@@ -374,10 +458,13 @@ export class ProposalService {
         const destinationName = (request as any)?.destinationName ?? 'Unknown';
         const agentEmail = data.agentEmail ?? (request as any)?.contactEmail;
 
+        // Approve flow tries to send the email but does NOT fail the approval if it fails.
+        // The proposal stays in 'approved' state and the staff can retry via the send endpoint.
         let emailSent = false;
+        let emailFailureCode: string | null = null;
         if (agentEmail && pdfBuffer) {
             try {
-                emailSent = await notificationService.sendOfferPdfToAgent({
+                const sendResult = await notificationService.sendOfferPdfToAgent({
                     agentEmail,
                     referenceNumber: refNum,
                     contactName,
@@ -385,9 +472,19 @@ export class ProposalService {
                     pdfBuffer,
                     userId,
                 });
-                console.log(`[Step 4.2] Offer PDF ${emailSent ? 'sent' : 'failed to send'} to agent at ${agentEmail}`);
+                emailSent = sendResult.ok;
+                if (!sendResult.ok) {
+                    emailFailureCode = sendResult.failure.code;
+                    logger.warn(
+                        { proposalId: id, agentEmail, code: sendResult.failure.code, detail: sendResult.failure.detail },
+                        'Step 4.2: Offer email failed during approve — proposal still approved, staff can retry via send endpoint',
+                    );
+                }
+                console.log(
+                    `[Step 4.2] Offer PDF ${emailSent ? 'sent' : `failed to send (${emailFailureCode})`} to agent at ${agentEmail}`,
+                );
             } catch (err: any) {
-                logger.error({ err, agentEmail, proposalId: id }, 'Step 4.2: Failed to send PDF to agent');
+                logger.error({ err, agentEmail, proposalId: id }, 'Step 4.2: Failed to send PDF to agent (unexpected throw)');
                 console.log(`[Step 4.2] WARNING: Failed to send PDF to agent: ${err.message}`);
             }
         }

@@ -14,7 +14,17 @@ export class GoogleAuthController {
     async connect(req: Request, res: Response, next: NextFunction) {
         try {
             const userId = (req as any).user.id;
-            const url = gmailService.getAuthUrl(userId);
+
+            // Optional `returnTo` query param — frontend can pass the path it wants
+            // the user to land on after the OAuth flow completes.
+            // e.g. GET /api/v1/auth/google/connect?returnTo=/connect-google
+            const returnToRaw = (req.query.returnTo as string | undefined)?.trim();
+            const returnTo = (returnToRaw && returnToRaw.startsWith('/') && !returnToRaw.includes('|'))
+                ? returnToRaw
+                : null;
+
+            const state = returnTo ? `${userId}|${returnTo}` : userId;
+            const url = gmailService.getAuthUrl(state);
             return sendResponse(res, 200, { url }, 'Google OAuth URL generated');
         } catch (error) {
             next(error);
@@ -33,16 +43,26 @@ export class GoogleAuthController {
             const { code, state, error: oauthError } = req.query;
             const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
+            // The state param is encoded as either:
+            //   - userId only (legacy)               → e.g. "abc-123"
+            //   - userId|returnTo (current)          → e.g. "abc-123|/connect-google"
+            // returnTo lets the frontend send the user back to whichever page they
+            // started the connect flow from (instead of always /settings).
+            const stateStr = (state as string) ?? '';
+            const [userId, returnToRaw] = stateStr.split('|');
+            const returnTo = (returnToRaw && returnToRaw.startsWith('/'))
+                ? returnToRaw
+                : '/settings'; // safe default
+
             if (oauthError) {
                 logger.warn({ oauthError }, 'User denied Google OAuth consent');
-                return res.redirect(`${frontendUrl}/settings?google=denied`);
+                return res.redirect(`${frontendUrl}${returnTo}?google=denied`);
             }
 
-            if (!code || !state) {
+            if (!code || !userId) {
                 throw { status: 400, message: 'Missing code or state parameter', code: 'INVALID_CALLBACK' };
             }
 
-            const userId = state as string;
             await gmailService.handleCallback(code as string, userId);
 
             await logAuditEvent({
@@ -52,7 +72,7 @@ export class GoogleAuthController {
                 entityId: userId,
             });
 
-            return res.redirect(`${frontendUrl}/settings?google=connected`);
+            return res.redirect(`${frontendUrl}${returnTo}?google=connected`);
         } catch (error) {
             next(error);
         }

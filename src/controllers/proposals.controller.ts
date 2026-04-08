@@ -183,11 +183,31 @@ export class ProposalsController {
             if (!userId) return sendResponse(res, 401, null, 'Unauthorized', 'UNAUTHORIZED');
             const ip = req.ip;
             const result = await proposalsService.sendProposal(req.params['id'] as string, body, userId, ip);
+
             return sendResponse(res, 200, result, 'Proposal sent');
         } catch (error: any) {
             if (error.code === 'PROPOSAL_LOCKED') {
                 return res.status(409).json({
                     error: { code: error.code, message: error.message, owner: error.owner },
+                });
+            }
+            // Email send failures from sendProposal — these now carry a structured `failure` object
+            // with a specific code (NOT_CONNECTED, GMAIL_FORBIDDEN, etc.) and a per-failure HTTP status.
+            if (error.code === 'EMAIL_SEND_FAILED' && error.failure) {
+                return res.status(error.status ?? 502).json({
+                    success: false,
+                    data: error.data,           // backward-compat: { sent, emailSent, emailError, emailErrorCode, proposal }
+                    message: error.message,
+                    error: 'EMAIL_SEND_FAILED',
+                    failure: error.failure,     // NEW: { code, message, retryable, userActionRequired, method }
+                });
+            }
+            if (error.code === 'NO_RECIPIENT_EMAIL' || error.code === 'PDF_GENERATION_FAILED') {
+                return res.status(error.status ?? 400).json({
+                    success: false,
+                    data: null,
+                    message: error.message,
+                    error: error.code,
                 });
             }
             next(error);

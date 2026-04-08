@@ -9,6 +9,7 @@ import {
     buildOfferPdfEmail,
     buildOfferGenerationFailedEmail,
 } from './emailTemplate';
+import { EmailFailureCode, EmailSendResult, failure } from './email/emailErrors';
 
 // ─── Email transport ──────────────────────────────────────────────────────────
 
@@ -260,7 +261,12 @@ export class NotificationService {
 
     /**
      * Send an email via Gmail API (if userId provided and connected), otherwise SMTP.
-     * Returns { method: 'gmail' | 'smtp' | 'none', sent: boolean }
+     * Returns an `EmailSendResult` discriminated union.
+     *
+     * On Gmail failures that require user action (NOT_CONNECTED, TOKEN_REVOKED,
+     * GMAIL_FORBIDDEN, etc.), this method does NOT fall back to SMTP — those errors
+     * wouldn't be solved by SMTP and we want the real cause surfaced to the caller.
+     * For other Gmail failures (network, upstream 5xx), SMTP fallback is attempted.
      */
     async sendEmailWithFallback(opts: {
         userId?: string;
@@ -268,31 +274,50 @@ export class NotificationService {
         subject: string;
         html: string;
         attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
-    }): Promise<{ method: 'gmail' | 'smtp' | 'none'; sent: boolean }> {
+    }): Promise<EmailSendResult> {
+        let primary: EmailSendResult | null = null;
+
         // Try Gmail first if we have a userId
         if (opts.userId) {
-            try {
-                const sent = await gmailService.sendEmail(opts.userId, {
-                    to: opts.to,
-                    subject: opts.subject,
-                    html: opts.html,
-                    attachments: opts.attachments,
-                });
-                if (sent) {
-                    logger.info({ to: opts.to, subject: opts.subject, method: 'gmail' }, 'Email sent via Gmail API');
-                    return { method: 'gmail', sent: true };
-                }
-                logger.info({ to: opts.to }, 'Gmail not connected for user — falling back to SMTP');
-            } catch (err) {
-                logger.warn({ err, to: opts.to }, 'Gmail API failed — falling back to SMTP');
+            primary = await gmailService.sendEmail(opts.userId, {
+                to: opts.to,
+                subject: opts.subject,
+                html: opts.html,
+                attachments: opts.attachments,
+            });
+            if (primary.ok) {
+                return primary;
             }
+            logger.info(
+                { to: opts.to, code: primary.failure.code },
+                'Gmail send failed — considering SMTP fallback',
+            );
+        }
+
+        // Skip SMTP fallback for failures that require user action — SMTP can't fix
+        // those, and falling back would mask the real reason from the caller.
+        const SKIP_SMTP_FOR: ReadonlySet<EmailFailureCode> = new Set<EmailFailureCode>([
+            EmailFailureCode.NOT_CONNECTED,
+            EmailFailureCode.TOKEN_DECRYPT_FAILED,
+            EmailFailureCode.TOKEN_REVOKED,
+            EmailFailureCode.GMAIL_UNAUTHORIZED,
+            EmailFailureCode.GMAIL_FORBIDDEN,
+        ]);
+        if (primary && !primary.ok && SKIP_SMTP_FOR.has(primary.failure.code)) {
+            return primary;
         }
 
         // Fallback to SMTP
         const transport = createTransport();
         if (!transport) {
+            // No SMTP configured. If Gmail also failed, prefer Gmail's specific reason;
+            // otherwise return SMTP_NOT_CONFIGURED.
+            if (primary && !primary.ok) {
+                logger.warn({ to: opts.to, code: primary.failure.code }, 'SMTP not configured — surfacing Gmail failure');
+                return primary;
+            }
             logger.warn({ to: opts.to, subject: opts.subject }, 'SMTP not configured — email not sent');
-            return { method: 'none', sent: false };
+            return { ok: false, method: 'none', failure: failure('SMTP_NOT_CONFIGURED') };
         }
 
         const from = process.env.SMTP_FROM ?? 'noreply@sett.travel';
@@ -309,16 +334,20 @@ export class NotificationService {
                 })),
             });
             logger.info({ to: opts.to, subject: opts.subject, method: 'smtp' }, 'Email sent via SMTP');
-            return { method: 'smtp', sent: true };
-        } catch (err) {
+            return { ok: true, method: 'smtp' };
+        } catch (err: any) {
             logger.error({ err, to: opts.to, subject: opts.subject }, 'SMTP send failed');
-            return { method: 'smtp', sent: false };
+            return {
+                ok: false,
+                method: 'smtp',
+                failure: failure('SMTP_FAILED', { detail: err?.message }),
+            };
         }
     }
 
     /**
      * Send approved offer PDF to agent via email.
-     * Uses Gmail API if userId is provided and connected, otherwise SMTP.
+     * Returns the underlying EmailSendResult so callers can inspect the failure code.
      */
     async sendOfferPdfToAgent(opts: {
         agentEmail: string;
@@ -327,7 +356,7 @@ export class NotificationService {
         destinationName: string;
         pdfBuffer: Buffer;
         userId?: string;
-    }) {
+    }): Promise<EmailSendResult> {
         const subject = `Your Group Offer #${opts.referenceNumber} — ${opts.destinationName}`;
         const html = buildOfferPdfEmail({
             referenceNumber: opts.referenceNumber,
@@ -335,7 +364,7 @@ export class NotificationService {
             destinationName: opts.destinationName,
         });
 
-        const result = await this.sendEmailWithFallback({
+        return this.sendEmailWithFallback({
             userId: opts.userId,
             to: opts.agentEmail,
             subject,
@@ -348,8 +377,6 @@ export class NotificationService {
                 },
             ],
         });
-
-        return result.sent;
     }
 }
 
