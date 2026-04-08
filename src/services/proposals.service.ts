@@ -568,6 +568,19 @@ export class ProposalService {
 
         const updated = await proposalRepository.setDeclined(id, userId, data.rejectionReason.trim());
 
+        // Update parent booking request status to 'declined' so the requests list
+        // reflects the client's decision instead of still showing 'sent'.
+        if (existing.requestId) {
+            try {
+                await requestRepository.updateStatus(existing.requestId, 'declined' as any);
+            } catch (err: any) {
+                logger.error(
+                    { err, requestId: existing.requestId, proposalId: id },
+                    'Failed to update parent BookingRequest status to declined — proposal is still declined',
+                );
+            }
+        }
+
         // Notify staff via in-app + email
         const request = existing.bookingRequest;
         const refNum = (request as any)?.referenceNumber ?? 0;
