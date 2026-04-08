@@ -10,6 +10,14 @@ import logger from '../utils/logger';
 
 const MODIFIABLE_STATUSES: ProposalStatus[] = [ProposalStatus.draft];
 const APPROVABLE_STATUSES: ProposalStatus[] = [ProposalStatus.pending_admin_approval, ProposalStatus.draft];
+// Decline is allowed at more stages than approve — including after the offer was sent,
+// because clients may reject the offer after receiving it.
+const DECLINABLE_STATUSES: ProposalStatus[] = [
+    ProposalStatus.draft,
+    ProposalStatus.pending_admin_approval,
+    ProposalStatus.approved,
+    ProposalStatus.sent,
+];
 
 function assertModifiable(proposal: any) {
     if (!MODIFIABLE_STATUSES.includes(proposal.status)) {
@@ -542,11 +550,11 @@ export class ProposalService {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
-        if (!APPROVABLE_STATUSES.includes(existing.status)) {
+        if (!DECLINABLE_STATUSES.includes(existing.status)) {
             throw {
                 status: 409,
-                message: `Proposal cannot be declined in status '${existing.status}'. Must be 'pending_admin_approval' or 'draft'.`,
-                code: 'PROPOSAL_NOT_APPROVABLE',
+                message: `Proposal cannot be declined in status '${existing.status}'. It is already declined or in a terminal state.`,
+                code: 'PROPOSAL_NOT_DECLINABLE',
             };
         }
 

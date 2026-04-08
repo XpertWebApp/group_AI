@@ -263,7 +263,11 @@ export class ProposalsController {
             );
             return sendResponse(res, 200, result, 'Proposal declined');
         } catch (error: any) {
-            if (error.code === 'PROPOSAL_NOT_APPROVABLE' || error.code === 'REJECTION_REASON_REQUIRED') {
+            if (
+                error.code === 'PROPOSAL_NOT_APPROVABLE' ||
+                error.code === 'PROPOSAL_NOT_DECLINABLE' ||
+                error.code === 'REJECTION_REASON_REQUIRED'
+            ) {
                 return res.status(error.status ?? 409).json({ error: { code: error.code, message: error.message } });
             }
             next(error);
