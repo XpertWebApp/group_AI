@@ -425,10 +425,13 @@ export class ProposalService {
      * Guards:
      * - Proposal must exist
      * - Status must be pending_admin_approval or draft
-     * - Generates PDF → sends to agent email → updates status to approved
      *
-     * If PDF generation or email fails, the proposal is still approved
-     * (admin can resend later). We never silently discard.
+     * Generates the PDF, stores it on the proposal, and updates status to `approved`.
+     *
+     * IMPORTANT: This endpoint does NOT send the email. The actual email send is
+     * handled by the subsequent POST /actions/send call. Sending here would result
+     * in DUPLICATE emails when the frontend's "Approve and Send" button calls both
+     * endpoints in sequence.
      */
     async approveProposal(id: string, data: { agentEmail?: string; adminNotes?: string }, userId: string, ip?: string) {
         const existing = await proposalRepository.findById(id);
@@ -459,45 +462,13 @@ export class ProposalService {
         // Update status to approved
         const updated = await proposalRepository.setApproved(id, userId, pdfUrl ?? undefined);
 
-        // Send PDF to agent via email (if email provided and PDF generated)
         const request = existing.bookingRequest;
         const refNum = (request as any)?.referenceNumber ?? 0;
         const contactName = (request as any)?.contactName ?? (request as any)?.firstName ?? 'Guest';
         const destinationName = (request as any)?.destinationName ?? 'Unknown';
         const agentEmail = data.agentEmail ?? (request as any)?.contactEmail;
 
-        // Approve flow tries to send the email but does NOT fail the approval if it fails.
-        // The proposal stays in 'approved' state and the staff can retry via the send endpoint.
-        let emailSent = false;
-        let emailFailureCode: string | null = null;
-        if (agentEmail && pdfBuffer) {
-            try {
-                const sendResult = await notificationService.sendOfferPdfToAgent({
-                    agentEmail,
-                    referenceNumber: refNum,
-                    contactName,
-                    destinationName,
-                    pdfBuffer,
-                    userId,
-                });
-                emailSent = sendResult.ok;
-                if (!sendResult.ok) {
-                    emailFailureCode = sendResult.failure.code;
-                    logger.warn(
-                        { proposalId: id, agentEmail, code: sendResult.failure.code, detail: sendResult.failure.detail },
-                        'Step 4.2: Offer email failed during approve — proposal still approved, staff can retry via send endpoint',
-                    );
-                }
-                console.log(
-                    `[Step 4.2] Offer PDF ${emailSent ? 'sent' : `failed to send (${emailFailureCode})`} to agent at ${agentEmail}`,
-                );
-            } catch (err: any) {
-                logger.error({ err, agentEmail, proposalId: id }, 'Step 4.2: Failed to send PDF to agent (unexpected throw)');
-                console.log(`[Step 4.2] WARNING: Failed to send PDF to agent: ${err.message}`);
-            }
-        }
-
-        // In-app notification for staff
+        // In-app notification for staff (no email — that comes from /send)
         try {
             await notificationService.notifyOfferApproved({
                 requestId: existing.requestId ?? '',
@@ -519,20 +490,23 @@ export class ProposalService {
                 action: 'approve_proposal',
                 entity: 'proposal',
                 entityId: id,
-                details: { agentEmail, emailSent, pdfGenerated: !!pdfBuffer, adminNotes: data.adminNotes },
+                details: { agentEmail, pdfGenerated: !!pdfBuffer, adminNotes: data.adminNotes },
                 ipAddress: ip,
             });
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'Step 4.2: Audit log failed — proposal is still approved');
         }
 
-        console.log(`[Step 4.2] Proposal ${id} APPROVED by ${userId}. PDF=${!!pdfBuffer}, emailSent=${emailSent}`);
-        logger.info({ proposalId: id, userId, emailSent, pdfGenerated: !!pdfBuffer }, 'Step 4.2: Proposal approved');
+        console.log(`[Step 4.2] Proposal ${id} APPROVED by ${userId}. PDF=${!!pdfBuffer}`);
+        logger.info({ proposalId: id, userId, pdfGenerated: !!pdfBuffer }, 'Step 4.2: Proposal approved');
 
+        // Return shape preserved for backward compatibility:
+        //  - emailSent is always false here (the /send endpoint handles email)
+        //  - agentEmail still returned so the frontend knows which address /send will target
         return {
             proposal: updated,
             pdfGenerated: !!pdfBuffer,
-            emailSent,
+            emailSent: false,
             agentEmail: agentEmail ?? null,
         };
     }
