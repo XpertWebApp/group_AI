@@ -320,6 +320,7 @@ model ProposalHotel {
   createdAt            DateTime  @default(now()) @map("created_at")
   deletedAt            DateTime? @map("deleted_at")
   optionDetailsFetched Boolean   @default(false) @map("option_details_fetched")
+  includedInTotal      Boolean   @default(true) @map("included_in_total")
   proposal             Proposal  @relation(fields: [proposalId], references: [id])
 
   @@index([proposalId])
@@ -344,6 +345,7 @@ model ProposalService {
   days        Int?
   notes       String?
   createdAt   DateTime  @default(now()) @map("created_at")
+  includedInTotal Boolean @default(true) @map("included_in_total")
   proposal    Proposal  @relation(fields: [proposalId], references: [id])
 
   @@index([proposalId])

@@ -180,6 +180,38 @@ export class ProposalService {
         return result;
     }
 
+    async toggleHotelIncluded(
+        proposalId: string,
+        hotelId: string,
+        includedInTotal: boolean,
+        userId?: string,
+        ip?: string,
+    ) {
+        const existing = await proposalRepository.findById(proposalId);
+        if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        assertModifiable(existing);
+        assertNotLocked(existing, userId);
+
+        // Verify the hotel actually belongs to this proposal and isn't deleted
+        const hotel = existing.hotels.find((h: any) => h.id === hotelId);
+        if (!hotel) {
+            throw { status: 404, message: 'Hotel not found on this proposal', code: 'NOT_FOUND' };
+        }
+
+        const result = await proposalRepository.toggleHotelIncluded(proposalId, hotelId, includedInTotal);
+
+        await logAuditEvent({
+            userId,
+            action: 'toggle_hotel_included',
+            entity: 'proposal_hotel',
+            entityId: hotelId,
+            details: { proposalId, includedInTotal },
+            ipAddress: ip,
+        });
+
+        return result;
+    }
+
     async addServiceToProposal(id: string, serviceData: any, userId?: string, ip?: string) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
@@ -632,7 +664,11 @@ export class ProposalService {
         const termsAndConditions = (request as any)?.termsAndConditions ?? null;
 
         // ── Hotels ───────────────────────────────────────────────────────
-        const activeHotels = (proposal.hotels ?? []).filter((h: any) => !h.deletedAt);
+        // Show only non-deleted hotels that are marked for inclusion in the total.
+        // Excluded hotels (Oliver's "options") don't appear in the customer-facing PDF.
+        const activeHotels = (proposal.hotels ?? []).filter(
+            (h: any) => !h.deletedAt && h.includedInTotal !== false,
+        );
         let sellingPrice = 0;
         let currency = 'EUR';
         let totalPrice = 0;
@@ -673,13 +709,16 @@ export class ProposalService {
         });
 
         // ── Services ─────────────────────────────────────────────────────
-        const services = (proposal.services ?? []).map((s: any) => ({
-            serviceName: s.serviceName ?? 'Service',
-            quantity: s.quantity ?? 1,
-            days: s.days ?? 1,
-            unitPrice: Number(s.sellPrice ?? 0),
-            totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1) * (s.days ?? 1),
-        }));
+        // Show only services marked for inclusion in the total (Oliver's "options" feature).
+        const services = (proposal.services ?? [])
+            .filter((s: any) => s.includedInTotal !== false)
+            .map((s: any) => ({
+                serviceName: s.serviceName ?? 'Service',
+                quantity: s.quantity ?? 1,
+                days: s.days ?? 1,
+                unitPrice: Number(s.sellPrice ?? 0),
+                totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1) * (s.days ?? 1),
+            }));
 
         // ── Fallback terms from settings if not on the request ───────────
         let finalTerms = termsAndConditions;

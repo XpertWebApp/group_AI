@@ -218,6 +218,12 @@ export const UpdateProposalServiceSchema = z.object({
     quantity: z.number().int().nonnegative().optional(),
     days: z.number().int().nonnegative().optional(),
     notes: z.string().max(2000).optional(),
+    includedInTotal: z.boolean().optional(),
+});
+
+// ── Toggle Hotel Inclusion in Proposal Total ───────────────────────────────
+export const ToggleProposalHotelSchema = z.object({
+    includedInTotal: z.boolean(),
 });
 
 // ── Send Proposal ─────────────────────────────────────────────────────────

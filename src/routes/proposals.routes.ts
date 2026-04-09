@@ -6,6 +6,7 @@ import {
     UpdateProposalSchema,
     AddProposalHotelSchema,
     AdjustHotelPricingSchema,
+    ToggleProposalHotelSchema,
     AddProposalServiceSchema,
     UpdateProposalServiceSchema,
     SendProposalSchema,
@@ -51,6 +52,13 @@ router.post(
     authMiddleware,
     validate(AdjustHotelPricingSchema, 'body'),
     proposalsController.adjustHotelPricing,
+);
+
+router.patch(
+    '/:id/hotels/:hotelId',
+    authMiddleware,
+    validate(ToggleProposalHotelSchema, 'body'),
+    proposalsController.toggleHotelIncluded,
 );
 
 // Services on proposal

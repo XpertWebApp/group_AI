@@ -92,6 +92,24 @@ export class ProposalsController {
         }
     }
 
+    async toggleHotelIncluded(req: Request, res: Response, next: NextFunction) {
+        try {
+            const body = (req as any).validated?.body ?? req.body;
+            const userId = (req as any).user?.id;
+            const ip = req.ip;
+            const result = await proposalsService.toggleHotelIncluded(
+                req.params['id'] as string,
+                req.params['hotelId'] as string,
+                body.includedInTotal,
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Hotel inclusion updated');
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async addService(req: Request, res: Response, next: NextFunction) {
         try {
             const body = (req as any).validated?.body ?? req.body;
