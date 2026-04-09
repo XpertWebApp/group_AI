@@ -10,6 +10,7 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger';
+import { formatPhoneWithCountryCode } from '../utils/phoneParser';
 
 // ─── Brand Colors (from Figma design) ────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export interface OfferPdfData {
     companyName: string;
     companyAddress: string;
     companyPhone: string;
+    companyPhoneCountryCode?: string | null;
     companyEmail: string;
     companyWebsite: string;
     companyTaxId: string;
@@ -64,6 +66,7 @@ export interface OfferPdfData {
     companyNameClient: string;
     contactEmail: string;
     contactPhone: string;
+    contactPhoneCountryCode?: string | null;
 
     // Trip
     destinationName: string;
@@ -255,7 +258,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             const col3X = MARGIN_LEFT + 340;
 
             drawLabelValue(doc, 'Assigned Person', data.assignedPerson || '-', col1X, companyInfoY);
-            drawLabelValue(doc, 'Phone', data.companyPhone || '-', col2X, companyInfoY);
+            drawLabelValue(doc, 'Phone', formatPhoneWithCountryCode(data.companyPhoneCountryCode, data.companyPhone), col2X, companyInfoY);
             drawLabelValue(doc, 'Tax ID / Reg.', data.companyTaxId || '-', col3X, companyInfoY);
 
             doc.y = companyInfoY + 28;
@@ -282,7 +285,7 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             drawLabelValue(doc, 'Company', data.companyNameClient || '-', col2X, prepY);
             doc.y = prepY + 28;
             drawLabelValue(doc, 'Email', data.contactEmail || '-', col1X, doc.y);
-            drawLabelValue(doc, 'Phone', data.contactPhone || '-', col2X, doc.y);
+            drawLabelValue(doc, 'Phone', formatPhoneWithCountryCode(data.contactPhoneCountryCode, data.contactPhone), col2X, doc.y);
 
             doc.y += 32;
 

@@ -42,6 +42,7 @@ const FULL_SELECT = {
     contactName: true,
     contactEmail: true,
     contactPhone: true,
+    contactPhoneCountryCode: true,
     guestListFileKey: true,
     customerNotes: true,
     // Step 4 – Policies

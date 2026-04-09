@@ -211,6 +211,7 @@ model BookingRequest {
   contactName            String?                    @map("contact_name") @db.VarChar(255)
   contactEmail           String?                    @map("contact_email") @db.VarChar(255)
   contactPhone           String?                    @map("contact_phone") @db.VarChar(50)
+  contactPhoneCountryCode String?                   @map("contact_phone_country_code") @db.VarChar(8)
   currencyCode           String?                    @map("currency_code") @db.VarChar(10)
   destinationName        String?                    @map("destination_name") @db.VarChar(255)
   destinationId          Int                        @map("destination_id")

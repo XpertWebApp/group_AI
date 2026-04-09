@@ -47,6 +47,11 @@ export const CreateBookingRequestSchema = z
         contactName: z.string().optional(),
         contactEmail: z.string().email(),
         contactPhone: z.string().min(5),
+        contactPhoneCountryCode: z.string()
+            .regex(/^\+\d{1,5}$/, 'Country code must start with + followed by 1-5 digits')
+            .max(8)
+            .optional()
+            .nullable(),
         guestListFileKey: z.string().optional(),
         customerNotes: z.string().max(5000).nullable().optional(),
 
@@ -99,6 +104,11 @@ export const UpdateBookingRequestSchema = z.object({
     contactName: z.string().optional(),
     contactEmail: z.string().email().optional(),
     contactPhone: z.string().min(5).optional(),
+    contactPhoneCountryCode: z.string()
+        .regex(/^\+\d{1,5}$/, 'Country code must start with + followed by 1-5 digits')
+        .max(8)
+        .optional()
+        .nullable(),
     guestListFileKey: z.string().optional(),
     customerNotes: z.string().max(5000).nullable().optional(),
     // Step 4
@@ -251,6 +261,11 @@ export const UpdateCompanyDetailsSchema = z.object({
     assignedPerson: z.string().min(1, 'Assigned person is required'),
     emailAddress: z.string().email('Invalid email address'),
     phoneNumber: z.string().min(5, 'Phone number is required'),
+    phoneCountryCode: z.string()
+        .regex(/^\+\d{1,5}$/, 'Country code must start with + followed by 1-5 digits')
+        .max(8)
+        .optional()
+        .nullable(),
     website: z.string().min(1, 'Website is required'),
     taxId: z.string().min(1, 'Tax ID is required'),
     address: z.string().min(1, 'Address is required'),

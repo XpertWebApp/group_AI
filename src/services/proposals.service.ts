@@ -615,6 +615,7 @@ export class ProposalService {
         const companyNameClient = (request as any)?.companyName ?? '';
         const contactEmail = (request as any)?.contactEmail ?? '';
         const contactPhone = (request as any)?.contactPhone ?? '';
+        const contactPhoneCountryCode = (request as any)?.contactPhoneCountryCode ?? null;
         const destinationName = (request as any)?.destinationName ?? 'Unknown';
         const checkinDate = (request as any)?.checkinDate
             ? new Date((request as any).checkinDate).toISOString().split('T')[0]
@@ -706,6 +707,7 @@ export class ProposalService {
             companyName: companyDetails.companyName ?? 'S & T T WORLDWIDE RESERVATION FZE',
             companyAddress: companyDetails.address ?? '',
             companyPhone: companyDetails.phoneNumber ?? '',
+            companyPhoneCountryCode: (companyDetails as any).phoneCountryCode ?? null,
             companyEmail: companyDetails.emailAddress ?? '',
             companyWebsite: companyDetails.website ?? '',
             companyTaxId: companyDetails.taxId ?? '',
@@ -717,6 +719,7 @@ export class ProposalService {
             companyNameClient,
             contactEmail,
             contactPhone,
+            contactPhoneCountryCode,
 
             // Trip
             destinationName,

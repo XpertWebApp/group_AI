@@ -18,6 +18,7 @@ import offerGenerationService from './offerGeneration.service';
 import userRepository from '../repositories/user.repository';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
+import { parsePhoneWithCountryCode } from '../utils/phoneParser';
 
 const prisma = new PrismaClient();
 
@@ -187,7 +188,13 @@ export class WebhookService {
             lastName: lastName || null,
             contactName,
             contactEmail: data.email ?? data.contactEmail ?? null,
-            contactPhone: data.phone ?? data.contactPhone ?? null,
+            ...(() => {
+                const parsed = parsePhoneWithCountryCode(data.phone ?? data.contactPhone);
+                return {
+                    contactPhone: parsed.number || null,
+                    contactPhoneCountryCode: parsed.countryCode,
+                };
+            })(),
             guestListFileKey:
                 data.name_list && typeof data.name_list === 'string' ? data.name_list : null,
 

@@ -88,6 +88,7 @@ export class RequestService {
             contactName,
             contactEmail: data.contactEmail,
             contactPhone: data.contactPhone,
+            contactPhoneCountryCode: data.contactPhoneCountryCode ?? null,
             guestListFileKey: data.guestListFileKey ?? null,
             customerNotes: data.customerNotes ?? null,
 
@@ -157,7 +158,8 @@ export class RequestService {
         // Step 3 – Customer Details
         for (const f of [
             'companyName', 'firstName', 'lastName',
-            'contactEmail', 'contactPhone', 'guestListFileKey', 'customerNotes',
+            'contactEmail', 'contactPhone', 'contactPhoneCountryCode',
+            'guestListFileKey', 'customerNotes',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];
         }
