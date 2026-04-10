@@ -147,7 +147,7 @@ export class DashboardService {
                 totalBuy,
                 margin,
                 marginPct,
-                status: proposal?.status ?? r.status,
+                status: r.status,
                 proposalId: proposal?.id ?? null,
                 createdAt: r.createdAt,
             };
