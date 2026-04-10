@@ -7,6 +7,8 @@ import { logAuditEvent } from '../utils/audit';
 import { ProposalStatus } from '@prisma/client';
 import { countTotalRooms } from '../utils/roomUtils';
 import logger from '../utils/logger';
+import storageService from './storage.service';
+import config from '../config';
 
 const MODIFIABLE_STATUSES: ProposalStatus[] = [ProposalStatus.draft];
 const APPROVABLE_STATUSES: ProposalStatus[] = [ProposalStatus.pending_admin_approval, ProposalStatus.draft];
@@ -314,10 +316,10 @@ export class ProposalService {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
-        const updated = await proposalRepository.setDraft(id);
+        await proposalRepository.setDraft(id);
         await logAuditEvent({ userId, action: 'save_draft', entity: 'proposal', entityId: id });
 
-        return updated;
+        return proposalRepository.findById(id);
     }
 
     async sendProposal(id: string, data: { sendToEmail?: string }, userId: string, ip?: string) {
@@ -483,8 +485,14 @@ export class ProposalService {
         try {
             const pdfData = await this.buildPdfData(existing);
             pdfBuffer = await generateOfferPdf(pdfData);
-            // Store PDF as a data URI for now (in production, upload to S3/GCS and store URL)
-            pdfUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+            // Upload to S3 if configured, otherwise fall back to data URI (local dev)
+            if (config.s3.endpoint && config.s3.accessKeyId) {
+                const filename = `offer-${Date.now()}`;
+                pdfUrl = await storageService.uploadPdf(id, filename, pdfBuffer);
+            } else {
+                pdfUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+                logger.warn({ proposalId: id }, 'S3 not configured — storing PDF as data URI');
+            }
             console.log(`[Step 4.2] PDF generated for proposal ${id} (${pdfBuffer.length} bytes)`);
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'Step 4.2: PDF generation failed — approving without PDF');

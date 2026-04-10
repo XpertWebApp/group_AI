@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import requestsController from '../controllers/requests.controller';
 import hotelSearchController from '../controllers/hotelSearch.controller';
+import attachmentsController, { upload } from '../controllers/attachments.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
@@ -111,6 +112,19 @@ router.post(
     validate(PriceCalculationSchema, 'body'),
     hotelSearchController.calculatePrice,
 );
+
+// ── Guest List / Attachments ──────────────────────────────────────────────
+
+router.post(
+    '/:id/attachments',
+    authMiddleware,
+    upload.array('files', 5),
+    attachmentsController.upload,
+);
+
+router.get('/:id/attachments', authMiddleware, attachmentsController.list);
+
+router.delete('/:id/attachments/:attachmentId', authMiddleware, attachmentsController.delete);
 
 // ── Create Proposal on a Request ───────────────────────────────────────────
 
