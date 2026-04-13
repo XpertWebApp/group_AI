@@ -38,14 +38,9 @@ async function recalcTotals(
 
     // totalSell = apply globalMarkupPercent to totalBuy (hotel side) then add service sell prices
     let totalSell: Decimal;
-    const globalMarkupPercent = markupSettings?.globalMarkupPercent;
-    if (typeof globalMarkupPercent === 'number' && globalMarkupPercent >= 0) {
-        const hotelSell = hotelBuy.mul(new Decimal(1).plus(new Decimal(globalMarkupPercent).div(100)));
-        totalSell = hotelSell.plus(serviceSell);
-    } else {
-        // Fallback: totalSell = sum(hotel buy) + sum(service sellPrice * qty)
-        totalSell = hotelBuy.plus(serviceSell);
-    }
+    const globalMarkupPercent = markupSettings?.globalMarkupPercent ?? 18; // default 18% until settings feature (milestone 5)
+    const hotelSell = hotelBuy.mul(new Decimal(1).plus(new Decimal(globalMarkupPercent).div(100)));
+    totalSell = hotelSell.plus(serviceSell);
 
     return { totalBuy, totalSell };
 }
