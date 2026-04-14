@@ -494,6 +494,59 @@ export class ProposalRepository {
             data: { ...serviceData, proposalId },
         });
     }
+
+    // ─── Proposal Offer History ─────────────────────────────────────────
+
+    /** Count how many offers have been sent for this proposal. */
+    async countOffers(proposalId: string): Promise<number> {
+        return prisma.proposalOffer.count({ where: { proposalId } });
+    }
+
+    /** Create a new ProposalOffer history row. */
+    async createOffer(data: {
+        proposalId: string;
+        offerNumber: number;
+        type: string;
+        pdfKey: string;
+        pdfUrl: string;
+        sentBy: string;
+        sentToEmails: string[];
+        hotelSnapshot?: any;
+        serviceSnapshot?: any;
+        totalPrice?: number | null;
+        currency?: string | null;
+        method?: string | null;
+    }) {
+        return prisma.proposalOffer.create({
+            data: {
+                proposalId: data.proposalId,
+                offerNumber: data.offerNumber,
+                type: data.type,
+                pdfKey: data.pdfKey,
+                pdfUrl: data.pdfUrl,
+                sentBy: data.sentBy,
+                sentToEmails: data.sentToEmails,
+                hotelSnapshot: data.hotelSnapshot ?? null,
+                serviceSnapshot: data.serviceSnapshot ?? null,
+                totalPrice: data.totalPrice ?? null,
+                currency: data.currency ?? null,
+                method: data.method ?? null,
+            },
+        });
+    }
+
+    /** List all offers for a proposal (oldest first by offerNumber). */
+    async listOffers(proposalId: string) {
+        return prisma.proposalOffer.findMany({
+            where: { proposalId },
+            orderBy: { offerNumber: 'asc' },
+        });
+    }
+
+    /** Fetch a single offer by id. */
+    async getOfferById(offerId: string) {
+        return prisma.proposalOffer.findUnique({ where: { id: offerId } });
+    }
 }
 
 export default new ProposalRepository();

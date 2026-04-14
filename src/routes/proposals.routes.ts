@@ -106,4 +106,8 @@ router.post(
     proposalsController.decline,
 );
 
+// Offer history (initial / final / revisions)
+router.get('/:id/offers', authMiddleware, proposalsController.listOffers);
+router.get('/:id/offers/:offerId/pdf', authMiddleware, proposalsController.downloadOfferPdf);
+
 export default router;

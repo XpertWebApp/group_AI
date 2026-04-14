@@ -11,7 +11,20 @@ import storageService from './storage.service';
 import config from '../config';
 
 const MODIFIABLE_STATUSES: ProposalStatus[] = [ProposalStatus.draft];
-const APPROVABLE_STATUSES: ProposalStatus[] = [ProposalStatus.pending_admin_approval, ProposalStatus.draft];
+// Selection toggles (includedInTotal) are also allowed on sent proposals,
+// because after the initial offer is sent the staff needs to pick the client's
+// chosen hotel/services and re-send a final offer.
+const SELECTION_MODIFIABLE_STATUSES: ProposalStatus[] = [
+    ProposalStatus.draft,
+    ProposalStatus.sent,
+];
+// `sent` is approvable too — after the initial offer goes out, staff toggles hotels
+// and re-approves before sending the final offer.
+const APPROVABLE_STATUSES: ProposalStatus[] = [
+    ProposalStatus.pending_admin_approval,
+    ProposalStatus.draft,
+    ProposalStatus.sent,
+];
 // Decline is allowed at more stages than approve — including after the offer was sent,
 // because clients may reject the offer after receiving it.
 const DECLINABLE_STATUSES: ProposalStatus[] = [
@@ -26,6 +39,22 @@ function assertModifiable(proposal: any) {
         throw {
             status: 409,
             message: `Proposal cannot be modified in status '${proposal.status}'`,
+            code: 'PROPOSAL_NOT_MODIFIABLE',
+        };
+    }
+}
+
+/**
+ * Selection-only guard: allows `includedInTotal` toggling even after the
+ * proposal was sent, so staff can pick the client's chosen hotel/services
+ * and trigger the final offer. Destructive edits (price/content changes)
+ * still go through `assertModifiable`.
+ */
+function assertSelectionEditable(proposal: any) {
+    if (!SELECTION_MODIFIABLE_STATUSES.includes(proposal.status)) {
+        throw {
+            status: 409,
+            message: `Proposal selection cannot be changed in status '${proposal.status}'`,
             code: 'PROPOSAL_NOT_MODIFIABLE',
         };
     }
@@ -191,7 +220,9 @@ export class ProposalService {
     ) {
         const existing = await proposalRepository.findById(proposalId);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
-        assertModifiable(existing);
+        // Selection-only guard: allowed on draft AND sent (so staff can pick the client's
+        // final choice after the initial offer was sent)
+        assertSelectionEditable(existing);
         assertNotLocked(existing, userId);
 
         // Verify the hotel actually belongs to this proposal and isn't deleted
@@ -241,7 +272,17 @@ export class ProposalService {
     async updateServiceInProposal(proposalId: string, serviceId: string, serviceData: any, userId?: string, ip?: string) {
         const existing = await proposalRepository.findById(proposalId);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
-        assertModifiable(existing);
+
+        // If the ONLY field being updated is `includedInTotal`, use the lenient selection guard
+        // (allows toggling after send, so staff can drop/re-include services for the final offer).
+        // Any other change (price, quantity, name, etc.) still requires draft status.
+        const keys = Object.keys(serviceData ?? {});
+        const selectionOnly = keys.length === 1 && keys[0] === 'includedInTotal';
+        if (selectionOnly) {
+            assertSelectionEditable(existing);
+        } else {
+            assertModifiable(existing);
+        }
         assertNotLocked(existing, userId);
 
         const result = await proposalRepository.updateServiceTx(proposalId, serviceId, serviceData);
@@ -326,9 +367,9 @@ export class ProposalService {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
-        if (existing.status === ProposalStatus.sent) {
-            throw { status: 409, message: 'Proposal already sent', code: 'PROPOSAL_ALREADY_SENT' };
-        }
+        // Re-sending a `sent` proposal is now allowed — the second send becomes
+        // the final offer (after the client picks a hotel). The backend auto-detects
+        // type via offerNumber count.
         if (existing.status === ProposalStatus.declined) {
             throw { status: 409, message: 'Cannot send a declined proposal', code: 'PROPOSAL_NOT_MODIFIABLE' };
         }
@@ -358,8 +399,9 @@ export class ProposalService {
 
         // Generate the PDF (re-use the same flow as approve/preview)
         let pdfBuffer: Buffer;
+        let pdfData: OfferPdfData;
         try {
-            const pdfData = await this.buildPdfData(existing);
+            pdfData = await this.buildPdfData(existing);
             pdfBuffer = await generateOfferPdf(pdfData);
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'sendProposal: PDF generation failed');
@@ -368,6 +410,38 @@ export class ProposalService {
                 message: 'Failed to generate the offer PDF — cannot send email.',
                 code: 'PDF_GENERATION_FAILED',
             };
+        }
+
+        // Determine offer type based on send history:
+        //   0 prior sends → "initial"
+        //   1 prior send  → "final"
+        //   2+ prior sends → "revision"
+        const offerCount = await proposalRepository.countOffers(id);
+        const offerNumber = offerCount + 1;
+        const offerType =
+            offerCount === 0 ? 'initial' :
+            offerCount === 1 ? 'final' :
+            'revision';
+
+        // Upload the PDF to S3 (if configured) BEFORE attempting the email send.
+        // This way we have a stored artifact even if the email fails — and we can
+        // clean up orphans later if needed.
+        let pdfKey = '';
+        let pdfUrl = '';
+        try {
+            if (config.s3.endpoint && config.s3.accessKeyId) {
+                const filename = `offer-${offerNumber}-${offerType}-${Date.now()}`;
+                pdfUrl = await storageService.uploadPdf(id, filename, pdfBuffer);
+                // Rebuild the S3 key (uploadPdf uses this pattern internally)
+                pdfKey = `proposals/${id}/${filename}.pdf`;
+            } else {
+                // Fallback: data URI for local dev without S3
+                pdfUrl = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
+                pdfKey = `data-uri-offer-${offerNumber}`;
+                logger.warn({ proposalId: id }, 'S3 not configured — offer PDF stored as data URI');
+            }
+        } catch (err: any) {
+            logger.error({ err, proposalId: id }, 'sendProposal: PDF upload to S3 failed — will still attempt to send email');
         }
 
         // Attempt to send the email (Gmail API → SMTP fallback handled by notification service)
@@ -430,11 +504,50 @@ export class ProposalService {
             };
         }
 
-        // Email succeeded — update status, audit log, and return success
+        // Email succeeded — update status, create offer history row, audit log, return success
         const updated = await proposalRepository.setSent(id, userId, recipientEmail);
 
         if (existing.requestId) {
             await requestRepository.updateStatus(existing.requestId, 'sent' as any);
+        }
+
+        // Build hotel & service snapshots so we can later reconstruct what was in each offer
+        const activeHotels = (existing.hotels ?? []).filter((h: any) => !h.deletedAt);
+        const hotelSnapshot = activeHotels.map((h: any) => ({
+            hotelCode: h.hotelCode,
+            hotelName: h.hotelName ?? null,
+            includedInTotal: h.includedInTotal !== false,
+            totalPrice: h.totalPrice ? Number(h.totalPrice) : null,
+            currency: h.currency ?? null,
+        }));
+        const serviceSnapshot = (existing.services ?? []).map((s: any) => ({
+            serviceName: s.serviceName,
+            includedInTotal: s.includedInTotal !== false,
+            sellPrice: s.sellPrice ? Number(s.sellPrice) : null,
+            quantity: s.quantity ?? 1,
+            days: s.days ?? 1,
+            currency: s.currency ?? null,
+        }));
+
+        let offerRow = null;
+        try {
+            offerRow = await proposalRepository.createOffer({
+                proposalId: id,
+                offerNumber,
+                type: offerType,
+                pdfKey,
+                pdfUrl,
+                sentBy: userId,
+                sentToEmails: recipients,
+                hotelSnapshot,
+                serviceSnapshot,
+                totalPrice: pdfData.totalPrice ?? null,
+                currency: pdfData.currency ?? null,
+                method: sendResult.method,
+            });
+        } catch (err: any) {
+            // Don't fail the whole send if history row fails — the email went out successfully.
+            logger.error({ err, proposalId: id }, 'sendProposal: failed to create ProposalOffer history row');
         }
 
         await logAuditEvent({
@@ -442,7 +555,15 @@ export class ProposalService {
             action: 'send_proposal',
             entity: 'proposal',
             entityId: id,
-            details: { sentToEmail: recipientEmail, sentToEmails: recipients, method: sendResult.method },
+            details: {
+                sentToEmail: recipientEmail,
+                sentToEmails: recipients,
+                method: sendResult.method,
+                offerNumber,
+                offerType,
+                offerId: offerRow?.id ?? null,
+                includedHotels: activeHotels.filter((h: any) => h.includedInTotal !== false).length,
+            },
             ipAddress: ip,
         });
 
@@ -453,6 +574,13 @@ export class ProposalService {
             emailErrorCode: null,
             sentToEmails: recipients,
             proposal: updated,
+            offer: offerRow ? {
+                id: offerRow.id,
+                offerNumber: offerRow.offerNumber,
+                type: offerRow.type,
+                pdfUrl: offerRow.pdfUrl,
+                sentAt: offerRow.sentAt,
+            } : null,
         };
     }
 
@@ -465,6 +593,55 @@ export class ProposalService {
         const pdfBuffer = await generateOfferPdf(pdfData);
 
         return { pdfBuffer, note: 'Preview PDF generated' };
+    }
+
+    /** List all offers sent for a proposal (history). */
+    async listOffers(proposalId: string) {
+        const proposal = await proposalRepository.findById(proposalId);
+        if (!proposal) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+
+        const offers = await proposalRepository.listOffers(proposalId);
+        return offers.map((o: any) => ({
+            id: o.id,
+            offerNumber: o.offerNumber,
+            type: o.type,
+            sentAt: o.sentAt,
+            sentBy: o.sentBy,
+            sentToEmails: o.sentToEmails,
+            totalPrice: o.totalPrice ? Number(o.totalPrice) : null,
+            currency: o.currency,
+            method: o.method,
+            pdfUrl: o.pdfUrl,
+            hotelCount: Array.isArray(o.hotelSnapshot)
+                ? o.hotelSnapshot.filter((h: any) => h.includedInTotal).length
+                : 0,
+            serviceCount: Array.isArray(o.serviceSnapshot)
+                ? o.serviceSnapshot.filter((s: any) => s.includedInTotal).length
+                : 0,
+        }));
+    }
+
+    /** Download the PDF for a specific offer (by offer id). */
+    async downloadOfferPdf(
+        proposalId: string,
+        offerId: string,
+    ): Promise<{ pdfBuffer: Buffer; filename: string }> {
+        const offer = await proposalRepository.getOfferById(offerId);
+        if (!offer || offer.proposalId !== proposalId) {
+            throw { status: 404, message: 'Offer not found', code: 'OFFER_NOT_FOUND' };
+        }
+
+        const filename = `offer-${offer.offerNumber}-${offer.type}.pdf`;
+
+        // Legacy base64 data URI (S3 not configured at the time of sending)
+        if (offer.pdfUrl.startsWith('data:')) {
+            const base64 = offer.pdfUrl.split(',')[1] ?? '';
+            return { pdfBuffer: Buffer.from(base64, 'base64'), filename };
+        }
+
+        // S3 key — download from object storage
+        const pdfBuffer = await storageService.downloadPdf(offer.pdfKey);
+        return { pdfBuffer, filename };
     }
 
     /**

@@ -246,6 +246,30 @@ export class ProposalsController {
         }
     }
 
+    /** GET /:id/offers — list offer history for a proposal */
+    async listOffers(req: Request, res: Response, next: NextFunction) {
+        try {
+            const offers = await proposalsService.listOffers(req.params['id'] as string);
+            return sendResponse(res, 200, { offers, count: offers.length }, 'Offer history retrieved');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /** GET /:id/offers/:offerId/pdf — download the PDF for a specific offer */
+    async downloadOfferPdf(req: Request, res: Response, next: NextFunction) {
+        try {
+            const proposalId = req.params['id'] as string;
+            const offerId = req.params['offerId'] as string;
+            const { pdfBuffer, filename } = await proposalsService.downloadOfferPdf(proposalId, offerId);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.send(pdfBuffer);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async approve(req: Request, res: Response, next: NextFunction) {
         try {
             const userId = (req as any).user?.id;
