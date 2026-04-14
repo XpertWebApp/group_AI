@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import settingsController from '../controllers/settings.controller';
+import giataSyncController from '../controllers/giataSync.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
@@ -38,5 +39,14 @@ router.put('/policies', validate(UpdatePoliciesSchema), settingsController.updat
 // Supplier Limits
 router.get('/supplier-limits', validate(SupplierLimitsQuerySchema, 'query'), settingsController.getSupplierLimits);
 router.patch('/supplier-limits/:supplierCode', validate(UpdateSupplierLimitSchema), settingsController.updateSupplierLimit);
+
+// GIATA Sync (admin)
+// Order matters: specific routes BEFORE parameterized routes
+router.post('/giata/sync-full', giataSyncController.triggerFullSync);
+router.post('/giata/sync-incremental', giataSyncController.triggerIncrementalSync);
+router.post('/giata/sync-hotel', giataSyncController.syncSingleHotel);  // hotelCode via query or body
+router.post('/giata/resolve', giataSyncController.resolveGiataCodes);
+router.get('/giata/status', giataSyncController.getStatus);
+router.get('/giata/missing', giataSyncController.getMissingHotels);
 
 export default router;

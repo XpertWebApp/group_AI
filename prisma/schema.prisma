@@ -140,6 +140,8 @@ model Hotel {
   createdAt        DateTime  @default(now()) @map("created_at")
   lastSyncedAt     DateTime? @map("last_synced_at")
   detailsFetchedAt DateTime? @map("details_fetched_at")
+  giataSyncedAt    DateTime? @map("giata_synced_at")
+  giataStatus      String?   @map("giata_status") @db.VarChar(20)
 
   @@index([destinationId, name])
   @@index([destinationId])
@@ -197,6 +199,84 @@ model HotelFacilityGroup {
   @@index([hotelCode])
   @@index([groupType])
   @@map("hotel_facility_groups")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Multilingual hotel text sections ─────────────────────────────
+model HotelGiataText {
+  id          String    @id @default(uuid()) @db.Uuid
+  hotelCode   String    @map("hotel_code") @db.VarChar(255)
+  giataId     String    @map("giata_id") @db.VarChar(50)
+  lang        String    @db.VarChar(10)
+  sectionType String    @map("section_type") @db.VarChar(20)
+  title       String    @db.VarChar(255)
+  content     String    @db.Text
+  lastUpdate  DateTime? @map("last_update")
+  syncedAt    DateTime  @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, lang, sectionType])
+  @@index([hotelCode])
+  @@index([giataId])
+  @@map("hotel_giata_texts")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Structured fact sheet data ───────────────────────────────────
+model HotelGiataFact {
+  id          String   @id @default(uuid()) @db.Uuid
+  hotelCode   String   @map("hotel_code") @db.VarChar(255)
+  giataId     String   @map("giata_id") @db.VarChar(50)
+  sectionType String   @map("section_type") @db.VarChar(20)
+  sectionName String   @map("section_name") @db.VarChar(100)
+  factId      Int      @map("fact_id")
+  factName    String   @map("fact_name") @db.VarChar(100)
+  typeHint    String   @map("type_hint") @db.VarChar(20)
+  value       String   @db.VarChar(500)
+  unit        String?  @db.VarChar(20)
+  fee         Boolean? @default(false)
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, factId])
+  @@index([hotelCode])
+  @@index([sectionType])
+  @@map("hotel_giata_facts")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Hotel image URLs ─────────────────────────────────────────────
+model HotelGiataImage {
+  id           String    @id @default(uuid()) @db.Uuid
+  hotelCode    String    @map("hotel_code") @db.VarChar(255)
+  giataId      String    @map("giata_id") @db.VarChar(50)
+  imageType    String    @map("image_type") @db.VarChar(5)
+  displayOrder Int       @default(0) @map("display_order")
+  urlSmall     String?   @map("url_small")
+  urlMedium    String?   @map("url_medium")
+  urlLarge     String?   @map("url_large")
+  lastUpdate   DateTime? @map("last_update")
+  syncedAt     DateTime  @default(now()) @map("synced_at")
+
+  @@index([hotelCode])
+  @@index([hotelCode, displayOrder])
+  @@map("hotel_giata_images")
+  @@schema("master")
+}
+
+// ─── GIATA Multicodes: Supplier/GDS mapping codes ────────────────────────────
+model HotelGiataMapping {
+  id           String   @id @default(uuid()) @db.Uuid
+  hotelCode    String   @map("hotel_code") @db.VarChar(255)
+  giataId      String   @map("giata_id") @db.VarChar(50)
+  providerCode String   @map("provider_code") @db.VarChar(50)
+  providerType String   @map("provider_type") @db.VarChar(20)
+  codeValue    String   @map("code_value") @db.VarChar(255)
+  syncedAt     DateTime @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, providerCode, codeValue])
+  @@index([hotelCode])
+  @@index([giataId])
+  @@index([providerCode])
+  @@map("hotel_giata_mappings")
   @@schema("master")
 }
 

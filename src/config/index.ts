@@ -27,6 +27,12 @@ const config = {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/v1/auth/google/callback',
     },
+    giata: {
+        mhgBaseUrl: process.env.GIATA_MHG_BASE_URL || 'http://ghgml.giatamedia.com/webservice/rest/1.0',
+        multicodesBaseUrl: process.env.GIATA_MULTICODES_BASE_URL || 'https://multicodes.giatamedia.com/webservice/rest/1.latest',
+        username: process.env.GIATA_USERNAME || '',
+        password: process.env.GIATA_PASSWORD || '',
+    },
     s3: {
         endpoint: process.env.S3_ENDPOINT || '',
         region: process.env.S3_REGION || 'fsn1',

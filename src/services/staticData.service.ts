@@ -3,6 +3,7 @@ import logger from '../utils/logger';
 import { JobStatus } from '@prisma/client';
 import pLimit from 'p-limit';
 import wbeClientService from './wbe.client.service';
+import giataSyncService from './giataSync.service';
 
 export class StaticDataService {
     constructor() {
@@ -266,6 +267,15 @@ export class StaticDataService {
                 // Batch Create
                 if (toCreate.length > 0) {
                     await staticDataRepository.createManyHotels(toCreate);
+
+                    // Auto-queue GIATA sync for newly created hotels with a giataCode
+                    for (const h of toCreate) {
+                        if (h.giataCode) {
+                            giataSyncService.syncHotel(h.hotelCode, h.giataCode).catch((err) =>
+                                logger.warn({ err: err.message, hotelCode: h.hotelCode }, 'Auto GIATA sync after WBE create failed'),
+                            );
+                        }
+                    }
                 }
 
                 // Sequential Update for existing (Prisma doesn't have updateMany by unique key yet)
