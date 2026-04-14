@@ -322,7 +322,7 @@ export class ProposalService {
         return proposalRepository.findById(id);
     }
 
-    async sendProposal(id: string, data: { sendToEmail?: string }, userId: string, ip?: string) {
+    async sendProposal(id: string, data: { sendToEmail?: string; sendToEmails?: string[] }, userId: string, ip?: string) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
@@ -333,16 +333,28 @@ export class ProposalService {
             throw { status: 409, message: 'Cannot send a declined proposal', code: 'PROPOSAL_NOT_MODIFIABLE' };
         }
 
-        // Resolve recipient address — explicit override > booking request contact email
+        // Resolve recipients — sendToEmails (array) > sendToEmail (single) > booking request contact email
         const request = existing.bookingRequest as any;
-        const recipientEmail = data.sendToEmail ?? request?.contactEmail ?? null;
-        if (!recipientEmail) {
+        let recipients: string[] = [];
+        if (data.sendToEmails && data.sendToEmails.length > 0) {
+            recipients = data.sendToEmails;
+        } else if (data.sendToEmail) {
+            recipients = [data.sendToEmail];
+        } else if (request?.contactEmail) {
+            recipients = [request.contactEmail];
+        }
+        // Deduplicate and normalize
+        recipients = Array.from(new Set(recipients.map((e) => e.trim().toLowerCase()).filter(Boolean)));
+
+        if (recipients.length === 0) {
             throw {
                 status: 400,
-                message: 'No recipient email — provide sendToEmail or set contactEmail on the booking request.',
+                message: 'No recipient email — provide sendToEmail/sendToEmails or set contactEmail on the booking request.',
                 code: 'NO_RECIPIENT_EMAIL',
             };
         }
+
+        const recipientEmail = recipients.join(', ');
 
         // Generate the PDF (re-use the same flow as approve/preview)
         let pdfBuffer: Buffer;
@@ -384,6 +396,7 @@ export class ProposalService {
                 entityId: id,
                 details: {
                     sentToEmail: recipientEmail,
+                    sentToEmails: recipients,
                     emailError: sendResult.failure.message,
                     emailErrorCode: sendResult.failure.code,
                     emailErrorDetail: sendResult.failure.detail,
@@ -429,7 +442,7 @@ export class ProposalService {
             action: 'send_proposal',
             entity: 'proposal',
             entityId: id,
-            details: { sentToEmail: recipientEmail, method: sendResult.method },
+            details: { sentToEmail: recipientEmail, sentToEmails: recipients, method: sendResult.method },
             ipAddress: ip,
         });
 
@@ -438,6 +451,7 @@ export class ProposalService {
             emailSent: true,
             emailError: null,
             emailErrorCode: null,
+            sentToEmails: recipients,
             proposal: updated,
         };
     }

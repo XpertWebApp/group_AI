@@ -1,0 +1,6870 @@
+id,destination,country_code,hotel_count
+1842893,"Rome",IT,3172
+23813,"Istanbul",TR,3046
+4347,"Bangkok",TH,2511
+4016,"Bali",ID,2347
+30279,"London",GB,2117
+39707,"Paris",FR,1891
+53964,"Tokyo",JP,1876
+40604,"Phuket",TH,1762
+27246,"Kyoto",JP,1671
+36666,"New Delhi",IN,1504
+32378,"Marrakech",MA,1439
+22212,"Ho Chi Minh",VN,1419
+14978,"Dubai",AE,1341
+11102,"Chiang Mai",TH,1305
+38741,"Osaka",JP,1289
+49137,"Seoul",KR,1279
+39905,"Pattaya",TH,1277
+49383,"Shanghai",CN,1261
+24068,"Jakarta",ID,1260
+48083,"Santorini",GR,1237
+21149,"Hanoi",VN,1199
+24235,"Jeju",KR,1194
+46284,"Saint Petersburg",RU,1183
+4336,"Bangalore",IN,1166
+48170,"Sao Paulo",BR,1046
+26991,"Kuala Lumpur",MY,1035
+9254,"Cape Town",ZA,1030
+35103,"Moscow",RU,1011
+1842497,"Naples",IT,967
+13470,"Da Nang",VN,945
+13108,"Crete",GR,928
+52496,"Taipei",TW,926
+5191,"Beijing",CN,926
+36754,"New York City-NY",US,913
+4503,"Barcelona",ES,911
+26420,"Koh Samui",TH,879
+1842997,"Florence",IT,875
+3845875,"Ubud",ID,816
+33100,"Melbourne",AU,815
+1842568,"Venice",IT,806
+31172,"Madrid",ES,801
+29851,"Lisbon",PT,801
+35574,"Mumbai",IN,799
+27892,"Lagos",NG,775
+20467,"Guangzhou",CN,772
+44021,"Rhodes",GR,767
+35935,"Nairobi",KE,765
+42241,"Prague",CZ,762
+1842948,"Milan",IT,759
+2995,"Athens",GR,747
+38647,"Orlando-Fl",US,744
+5666,"Berlin",DE,722
+44258,"Rio De Janeiro",BR,704
+59576,"Yogyakarta",ID,704
+22325,"Hoi An",VN,697
+12624,"Corfu",GR,694
+13447,"Cuzco",PE,694
+24063,"Jaipur",IN,691
+4308,"Bandung",ID,688
+1842868,"Rimini",IT,683
+19453,"Goa",IN,678
+26839,"Krabi",TH,675
+8227,"Busan",KR,671
+6612,"Bogota",CO,671
+30460,"Los Angeles-Ca",US,661
+53008,"Tbilisi",GE,659
+33476,"Mexico City",MX,656
+10967,"Chennai",IN,631
+22688,"Houston-Tx",US,631
+3845848,"Seminyak",ID,629
+36914,"Nha Trang",VN,624
+52289,"Sydney",AU,624
+3816497,"Playa del Carmen",MX,601
+49836,"Siem Reap",KH,597
+22741,"Hua Hin",TH,589
+23025,"Hyderabad",IN,588
+31766,"Manila",PH,582
+24478,"Johannesburg",ZA,576
+22487,"Hong Kong",HK,574
+6570,"Bodrum",TR,573
+35785,"Mykonos",GR,571
+56478,"Vienna",AT,568
+7955,"Buenos Aires",AR,566
+59795,"Zakynthos",GR,559
+10645,"Chania",GR,552
+17218,"Fethiye",TR,549
+2059,"Antalya",TR,532
+25344,"Kathmandu",NP,530
+29633,"Lima",PE,524
+42023,"Porto",PT,518
+3947948,"Alanya",TR,517
+8632,"Kolkata (Calcutta)",IN,514
+49522,"Shenzhen",CN,512
+31498,"Maldives",MV,511
+1729,"Amsterdam",NL,510
+26851,"Krakow",PL,507
+14997,"Dubrovnik",HR,507
+1863660,"Cesme",TR,505
+21129,"Hangzhou",CN,488
+35603,"Munich",DE,487
+50020,"Singapore",SG,485
+23328,"Incheon",KR,482
+52490,"Tainan",TW,477
+19518,"Gold Coast",AU,473
+51038,"Split",HR,472
+48018,"Santiago",CL,469
+18295,"Fukuoka",JP,468
+7918,"Budapest",HU,466
+32326,"Marmaris",TR,464
+3816499,"Tulum",MX,462
+22762,"Hualien",TW,462
+3802739,"Blackpool",GB,452
+9636,"Cartagena",CO,450
+24218,"Jeddah",SA,444
+24991,"Kampala",UG,439
+44460,"Riyadh",SA,429
+54149,"Toronto",CA,425
+39339,"Palermo",IT,425
+10217,"Cebu",PH,424
+13576,"Dalat",VN,421
+10962,"Chengdu",CN,417
+25048,"Kandy",LK,417
+42803,"Pune",IN,414
+52186,"Suzhou",CN,410
+3815722,"Edinburgh",GB,409
+9035,"Cancun",MX,405
+33531,"Miami-Fl",US,405
+52106,"Surabaya",ID,400
+55154,"Udaipur",IN,400
+20671,"Gurgaon",IN,396
+32983,"Medellin",CO,396
+17516,"Florianopolis",BR,394
+176,"Abuja",NG,393
+52482,"Taichung",TW,382
+21022,"Hamburg",DE,381
+21768,"Hengchun",TW,372
+207,"Accra",GH,372
+40596,"Phu Quoc",VN,372
+3941,"Baku",AZ,369
+3128,"Auckland",NZ,356
+46886,"San Antonio-Tx",US,356
+10066,"Catania",IT,355
+31630,"Manali",IN,355
+3845790,"Kuta",ID,350
+7537,"Brisbane",AU,346
+40567,"Phnom Penh",KH,344
+49291,"Seville",ES,343
+8311,"Buzios",BR,341
+25106,"Kaohsiung",TW,341
+3947968,"Side",TR,340
+52505,"Taitung",TW,340
+36295,"Naxos",GR,336
+14986,"Dublin",IE,336
+12169,"Colombo",LK,334
+1842569,"Verona",IT,329
+592,"Ahmedabad",IN,326
+50444,"Sochi",RU,325
+48209,"Sapporo",JP,321
+47028,"San Francisco-Ca",US,321
+32978,"Medan",ID,320
+59557,"Yilan",TW,319
+31447,"Malacca",MY,319
+20408,"Guadalajara",MX,317
+14102,"Denpasar",ID,316
+40142,"Penang",MY,316
+46972,"San Diego-Ca",US,315
+35911,"Naha",JP,311
+7828,"Brussels",BE,311
+3947962,"Kemer",TR,308
+2749576,"Rethimno",GR,307
+43181,"Quito",EC,305
+3585774,"North Goa",IN,303
+3030,"Atlanta-Ga",US,302
+17998,"Frankfurt",DE,300
+35932,"Nainital",IN,299
+17231,"Fes",MA,299
+1842509,"Sorrento",IT,298
+59221,"Xian",CN,298
+3945792,"Sunny Beach",BG,297
+36047,"Nanjing",CN,297
+57683,"Warsaw",PL,295
+1675,"Amman",JO,294
+59397,"Yangon",MM,294
+41408,"Pokhara",NP,291
+26771,"Kota Kinabalu",MY,291
+39768,"Paros",GR,290
+26407,"Ko Lanta",TH,285
+980,"Albufeira",PT,284
+35794,"Myrtle Beach-Sc",US,282
+31272,"Magong",TW,280
+1940,"Ankara",TR,278
+24504,"Johor Bahru",MY,277
+25482,"Kefalonia",GR,277
+26512,"Koh Phangan",TH,277
+34799,"Montreal",CA,276
+8520,"Cairo",EG,276
+36376,"Negombo",LK,276
+12153,"Cologne",DE,275
+23058,"Ibiza",ES,271
+11128,"Chicago-Il",US,271
+19856,"Granada",ES,270
+28353,"Langkawi Island/Kedah",MY,269
+1612050,"Boracay Island",PH,267
+3223,"Austin-Tx",US,266
+20908,"Hakuba",JP,265
+53082,"Tel Aviv",IL,263
+28547,"Las Vegas-Nv",US,263
+2454,"Arequipa",PE,262
+1842970,"Turin",IT,262
+1722,"Amritsar",IN,261
+1842582,"Lecce",IT,260
+5277,"Belgrade",RS,259
+47909,"Santa Marta",CO,259
+49612,"Shimla",IN,257
+52320,"Syracuse",IT,257
+25889,"Kiev",UA,255
+55745,"Valencia",ES,254
+54374,"Trabzon",TR,254
+31467,"Malang",ID,253
+11418,"Christchurch",NZ,253
+36716,"New Orleans-La",US,252
+37774,"Nuwara Eliya",LK,251
+26732,"Kos",GR,250
+18787,"Gdansk",PL,249
+37197,"Noida",IN,249
+3846416,"Ayvalik",TR,249
+321,"Adelaide",AU,247
+5523,"Benidorm",ES,246
+30686,"Lucknow",IN,246
+3947838,"Lido di Jesolo",IT,245
+7875,"Bucharest",RO,243
+15216,"Dusseldorf",DE,242
+25277,"Kas",TR,241
+29026,"Lefkada",GR,240
+3574310,"Makkah",SA,238
+51563,"Stockholm",SE,236
+22167,"Hiroshima",JP,236
+59530,"Yerevan",AM,236
+42007,"Porto Seguro",BR,236
+60125,"Zurich",CH,234
+6692,"Bologna",IT,234
+11104,"Chiang Rai",TH,232
+36194,"Nashville-Tn",US,232
+40350,"Perth",AU,232
+39471,"Panama City",PA,231
+33303,"Merida",MX,230
+35903,"Nagoya",JP,228
+309,"Addis Ababa",ET,228
+20580,"Guilin",CN,226
+31453,"Malaga",ES,226
+8695,"Cali",CO,225
+522567,"Swiss Alps",CH,225
+528,"Agra",IN,224
+10601,"Chandigarh",IN,224
+57252,"Vung Tau",VN,223
+59766,"Zadar",HR,223
+22963,"Hurghada",EG,221
+23617,"Ischia",IT,221
+19288,"Glasgow",GB,221
+2192997,"Miami Beach-Fl",US,221
+23961,"Izmir",TR,220
+3786295,"Liverpool",GB,220
+31405,"Makassar",ID,219
+47137,"San Jose",CR,219
+3802690,"York",GB,219
+42723,"Puerto Vallarta",MX,218
+3944908,"Budva",ME,217
+38051,"Odessa",UA,217
+37882,"Oaxaca",MX,217
+13604,"Dallas-Tx",US,216
+24264,"Jeonju",KR,216
+49422,"Sharm El Sheikh",EG,216
+3786110,"Manchester",GB,215
+17873,"Fortaleza",BR,214
+19835,"Gramado",BR,213
+674186,"Four Corners-Fl",US,213
+14575,"Doha",QA,213
+3843633,"Nevsehir",TR,212
+59840,"Zanzibar",TZ,211
+21371,"Hat Yai",TH,208
+24064,"Jaisalmer",IN,207
+42825,"Punta Cana",DO,207
+43619,"Rayong",TH,206
+57720,"Washington-Dc",US,205
+25892,"Kigali",RW,205
+21630,"Hefei",CN,203
+31631,"Manama",BH,203
+3946171,"Riccione",IT,203
+42992,"Qingdao",CN,203
+36937,"Nice",FR,202
+20907,"Hakone",JP,202
+32778,"Mauritius",MU,201
+42593,"Puebla",MX,201
+10750,"Charlotte-Nc",US,200
+43081,"Queenstown",NZ,200
+13500,"Daegu",KR,199
+18592,"Gapyeong",KR,199
+53619,"Tianjin",CN,198
+27161,"Kusadasi",TR,198
+49050,"Semarang",ID,197
+45053,"Rovinj",HR,197
+11374,"Chongqing",CN,196
+42518,"Protaras",CY,196
+15190,"Durban",ZA,196
+42395,"Pretoria",ZA,195
+55952,"Varanasi",IN,194
+59783,"Zagreb",HR,193
+7311,"Breckenridge-Co",US,192
+5901,"Bhopal",IN,190
+2220932,"Lombok Island",ID,190
+23370,"Indianapolis-In",US,190
+20728,"Gyeongju",KR,188
+18282,"Fujikawaguchiko",JP,188
+1682444,"Nakhorn Ratchasima",TH,188
+59220,"Xiamen",CN,187
+4801,"Batam Island",ID,187
+39382,"Palm Springs-Ca",US,187
+3786232,"Birmingham",GB,187
+5203,"Beirut",LB,187
+22825,"Hue",VN,187
+14110,"Denver-Co",US,187
+32918,"Mchenry-Md",US,186
+40572,"Phoenix-Az",US,186
+46874,"San Andres",CO,186
+36211,"Natal",BR,185
+30948,"Lyon",FR,185
+41961,"Porto De Galinhas",BR,185
+59156,"Wuxi",CN,184
+1843015,"Pisa",IT,184
+26234,"Kissimmee-Fl",US,184
+40526,"Phan Thiet",VN,182
+50236,"Skiathos",GR,182
+505883,"Sarande",AL,182
+52889,"Tashkent",UZ,182
+52536,"Takayama",JP,181
+39587,"Paphos",CY,181
+48098,"Sanya",CN,181
+2736,"Arusha",TZ,181
+7139,"Bozcaada",TR,181
+21892,"Hersonissos",GR,180
+19143,"Gili Trawangan",ID,180
+59123,"Wuhan",CN,180
+20742,"Ha Long",VN,179
+1842504,"Salerno",IT,179
+18725,"Gatlinburg-Tn",US,179
+3843647,"Urgup",TR,179
+4871,"Batumi",GE,179
+54306,"Toulouse",FR,179
+55911,"Vancouver",CA,178
+8196,"Bursa",TR,177
+29054,"Leh",IN,177
+1842580,"Gallipoli",IT,177
+55316,"Unawatuna",LK,177
+18569,"Gangneung",KR,177
+193,"Acapulco",MX,177
+43989,"Reykjavik",IS,176
+25306,"Kassandra",GR,176
+48196,"Sapa",VN,176
+3802688,"Whitby",GB,175
+25038,"Kanazawa",JP,175
+48439,"Savannah-Ga",US,175
+13699,"Dar Es Salaam",TZ,175
+6842,"Bordeaux",FR,175
+14250,"Dhaka",BD,175
+1843006,"Lucca",IT,175
+37079,"Ninh Binh",VN,174
+24291,"Jerusalem",IL,174
+7773,"Bruges",BE,173
+427515,"Oklahoma City-Ok",US,173
+52426,"Taean",KR,173
+56899,"Vina Del Mar",CL,173
+17801,"Fort Lauderdale-Fl",US,172
+53792,"Tirana",AL,172
+3946866,"Cagliari",IT,172
+38143,"Oita",JP,172
+12543,"Copenhagen",DK,171
+50483,"Sofia",BG,171
+39324,"Palembang",ID,171
+43106,"Queretaro",MX,171
+22056,"Hikkaduwa",LK,170
+5902,"Bhubaneshwar",IN,170
+3944986,"Assisi",IT,169
+40757,"Pigeon Forge-Tn",US,168
+59794,"Zakopane",PL,167
+30631,"Luang Prabang",LA,166
+23493,"Inverness",GB,166
+42700,"Puerto Princesa",PH,166
+20715,"Gwangju",KR,166
+8966,"Campos Do Jordao",BR,166
+12239,"Columbus-Oh",US,165
+18492,"Galle",LK,165
+13503,"Daejeon",KR,165
+1534178,"Medina",SA,165
+30083,"Lloret De Mar",ES,164
+3689923,"Torquay",GB,164
+3386,"Ayia Napa",CY,164
+53467,"Thessaloniki",GR,164
+134,"Abidjan",CI,164
+3786466,"Weymouth",GB,163
+164,"Abu Dhabi",AE,163
+23380,"Indore",IN,162
+539,"Agrigento",IT,161
+7544,"Bristol",GB,161
+40547,"Philadelphia-Pa",US,161
+35981,"Nakuru",KE,161
+3903187,"Funchal",PT,160
+16526,"Essaouira",MA,160
+43059,"Quebec",CA,159
+41511,"Pondicherry",IN,159
+48051,"Santo Domingo",DO,159
+48220,"Sarajevo",BA,158
+25039,"Kanchanaburi",TH,158
+32409,"Marseille",FR,158
+34268,"Mombasa",KE,157
+1489564,"Sleman",ID,157
+52665,"Tampa-Fl",US,157
+1843023,"Siena",IT,157
+35717,"Muscat",OM,157
+3947680,"Lignano Sabbiadoro",IT,156
+46961,"San Cristobal De Las Casas",MX,155
+46795,"Salzburg",AT,155
+20616,"Gulf Shores-Al",US,155
+9108,"Cannes",FR,155
+55125,"Ubatuba",BR,155
+31679,"Mandalay",MM,155
+9003,"Canakkale",TR,155
+3946156,"Cesenatico",IT,155
+17867,"Fort Worth-Tx",US,155
+1842076,"Genoa",IT,155
+18924,"Geoje",KR,155
+37995,"Ocean City-Md",US,155
+44350,"Rishikesh",IN,154
+397,"Agadir",MA,154
+24466,"Jodhpur",IN,153
+1842026,"Matera",IT,153
+7257,"Branson-Mo",US,153
+8515,"Cairns",AU,152
+48865,"Seattle-Wa",US,152
+51823,"Stuttgart",DE,152
+26523,"Koh Tao",TH,152
+3946776,"Taormina",IT,152
+23529,"Ipoh",MY,151
+4549,"Bariloche",AR,151
+50570,"Solo",ID,150
+24023,"Jacksonville-Fl",US,150
+14186,"Destin-Fl",US,150
+18573,"Gangtok",IN,150
+51691,"Strasbourg",FR,150
+1612752,"Gapyeong Gun",KR,150
+41740,"Port Elizabeth",ZA,150
+29600,"Lijiang",CN,149
+35881,"Nagano",JP,149
+46773,"Salvador De Bahia",BR,149
+35607,"Munnar",IN,149
+31971,"Marbella",ES,148
+56235,"Veracruz",MX,148
+35739,"Mussoorie",IN,148
+36071,"Nantou",TW,148
+9673,"Casablanca",MA,148
+38188,"Okinawa",JP,147
+21147,"Hannover",DE,147
+14909,"Dresden",DE,147
+26428,"Kobe",JP,146
+25769,"Khao Lak",TH,146
+3946133,"Porto Cesareo",IT,146
+53166,"Tenerife",ES,146
+10633,"Changsha",CN,146
+13796,"Davao",PH,145
+43121,"Quezon",PH,145
+811,"Al Khobar",SA,145
+3845725,"Patong",TH,145
+5412,"Belo Horizonte",BR,145
+6973,"Boston-Ma",US,145
+2089,"Antigua",GT,144
+38779,"Oslo",NO,144
+17952,"Foz Do Iguacu",BR,144
+37073,"Ningbo",CN,144
+3945884,"Alghero",IT,144
+1842587,"Ostuni",IT,144
+42874,"Puri",IN,144
+27014,"Kuching",MY,143
+21807,"Heraklion",GR,143
+23636,"Ishigaki",JP,143
+49288,"Sevierville-Tn",US,143
+3845777,"Jimbaran",ID,143
+3689965,"Norwich",GB,143
+41695,"Port Aransas-Tx",US,143
+34620,"Montego Bay",JM,142
+56486,"Vientiane",LA,142
+50829,"South Lake Tahoe-Ca",US,142
+521813,"Wroclaw",PL,142
+17894,"Foshan",CN,141
+25724,"Keystone-Co",US,141
+33242,"Menorca",ES,141
+54674,"Trogir",HR,141
+26482,"Koh Chang",TH,141
+47405,"San Sebastian",ES,140
+41928,"Portland-Or",US,140
+20699,"Guwahati",IN,140
+38226,"Olbia",IT,140
+43194,"Quy Nhon",VN,139
+59580,"Yokohama",JP,139
+3947952,"Belek",TR,139
+39385,"Palma De Mallorca",ES,139
+13981,"Dehradun",IN,138
+982,"Albuquerque-Nm",US,138
+27254,"Kyrenia",CY,138
+55256,"Ulsan",KR,138
+3802674,"Scarborough",GB,138
+37757,"Nuremberg",DE,138
+1842923,"Bergamo",IT,137
+20453,"Guanajuato",MX,137
+29094,"Leipzig",DE,137
+59523,"Yeosu",KR,137
+52720,"Tangalle",LK,137
+36277,"Navi Mumbai",IN,137
+34684,"Monterrey",MX,136
+1679157,"Ella",LK,136
+21219,"Haridwar",IN,136
+33217,"Mendoza",AR,136
+12816,"Salou Area/Costa Dorada",ES,136
+31041,"Maceio",BR,135
+54851,"Tucson-Az",US,135
+3815494,"Aberdeen",GB,135
+27936,"Lahore",PK,135
+42736,"Puglia",IT,135
+1842588,"Otranto",IT,135
+30543,"Louisville-Ky",US,134
+13396,"Curitiba",BR,134
+23144,"Puerto Iguazu",AR,134
+12023,"Coimbatore",IN,134
+13544,"Dakar",SN,134
+3815390,"Newcastle upon Tyne",GB,134
+55167,"Udon Thani",TH,134
+26875,"Krasnodar",RU,133
+1863655,"Alacati",TR,133
+52729,"Tangier",MA,133
+3689778,"Windermere",GB,133
+5992,"Big Bear Lake-Ca",US,133
+3786450,"Bournemouth",GB,132
+39472,"Panama City Beach-Fl",US,132
+42833,"Punta Del Este",UY,132
+1842574,"Bari",IT,131
+24369,"Jiaxing",CN,131
+35061,"Morro De Sao Paulo",BR,131
+27102,"Kunming",CN,131
+6626,"Bohol",PH,131
+40404,"Petaling Jaya",MY,131
+52724,"Tangerang",ID,130
+30904,"Lviv",UA,130
+52108,"Surat Thani",TH,130
+57990,"Wellington",NZ,130
+6610,"Bogor",ID,129
+38475,"Ooty",IN,129
+691769,"Datca",TR,129
+1186,"Alicante",ES,129
+3975565,"Gurugram",IN,129
+5568,"Bentota",LK,129
+56982,"Visakhapatnam",IN,128
+30553,"Lourdes",FR,128
+1748,"Anaheim-Ca",US,128
+27068,"Kumamoto",JP,128
+35801,"Mysore",IN,127
+8690,"Calgary",CA,127
+4395,"Bansko",BG,127
+24278,"Jericoacoara",BR,127
+3815148,"Cambridge",GB,126
+19844,"Gran Canaria",ES,126
+39235,"Pai",TH,125
+27186,"Kutchan",JP,125
+3803004,"Brighton",GB,125
+12612,"Cordoba",ES,125
+426363,"Kansas City-Mo",US,124
+44997,"Rotorua",NZ,124
+39673,"Paraty",BR,124
+30011,"Ljubljana",SI,124
+46087,"Saint Louis - Mo",US,124
+27207,"Kuwait",KW,124
+46750,"Salta",AR,124
+44172,"Riga",LV,124
+39888,"Patna",IN,124
+12200,"Colorado Springs-Co",US,123
+52180,"Suwon",KR,123
+1842078,"La Spezia",IT,123
+47287,"San Miguel Allende",MX,123
+2134042,"Honolulu -Hi",US,123
+20896,"Haiphong",VN,123
+54408,"Trapani",IT,123
+23686,"Islamabad",PK,123
+1693753,"Mahe Island",SC,122
+36114,"Nara",JP,122
+2117,"Antwerp",BE,122
+21442,"Havana",CU,122
+3569543,"Noto",IT,122
+22223,"Hobart",AU,122
+36919,"Niagara Falls",CA,122
+32865,"Mazatlan",MX,122
+53400,"Thassos",GR,122
+37037,"Nikko",JP,121
+30837,"Lusaka",ZM,121
+1842594,"Vieste",IT,121
+10726,"Charleston-Sc",US,121
+8380,"Cabo Frio",BR,121
+3476,"Bacalar",MX,121
+25208,"Karlovy Vary",CZ,121
+40077,"Pekanbaru",ID,121
+13594,"Dalian",CN,120
+33195,"Memphis-Tn",US,120
+47840,"Santa Fe-Nm",US,120
+31277,"Mahabaleshwar",IN,119
+51417,"Steamboat Springs-Co",US,119
+1679558,"Mirissa",LK,119
+27559,"La Paz",BO,119
+1292,"Almaty",KZ,119
+43289,"Ragusa",IT,119
+3802943,"Oxford",GB,118
+1488600,"Batu",ID,118
+3786538,"Bath",GB,118
+47170,"San Juan",PR,118
+50141,"Sithonia",GR,117
+49087,"Sendai",JP,117
+37028,"Niigata",JP,117
+3569147,"Livigno",IT,117
+34053,"Miyakojima",JP,117
+26394,"Knysna",ZA,117
+18888,"Geneva",CH,117
+8332,"Byron Bay",AU,117
+18512,"Galveston-Tx",US,117
+42887,"Pushkar",IN,116
+42811,"Puno",PE,116
+56961,"Virginia Beach-Va",US,116
+18515,"Galway",IE,116
+48815,"Scottsdale-Az",US,115
+22265,"Hoedspruit",ZA,115
+47277,"San Miguel De Allende",MX,115
+3568530,"Bellaria Igea Marina",IT,115
+35890,"Nagasaki",JP,114
+40166,"Penha",BR,114
+34707,"Montevideo",UY,114
+4656,"Barranquilla",CO,114
+59959,"Zhangjiajie",CN,114
+17166,"Fernando De Noronha",BR,113
+15676,"Ekaterinburg",RU,113
+39473,"Panama City-Fl",US,113
+24391,"Jinan",CN,113
+3892375,"Trieste",IT,113
+38929,"Ottawa",CA,113
+38524,"Orange Beach-Al",US,112
+11124,"Chiba",JP,111
+41936,"Porto Alegre",BR,111
+7271,"Brasov",RO,111
+3786799,"Leeds",GB,111
+521699,"Poznan",PL,111
+47325,"San Pedro De Atacama",CL,111
+37098,"Niseko",JP,110
+25443,"Kazan",RU,110
+54907,"Tulsa-Ok",US,110
+46848,"Samos",GR,110
+8644,"Caldas Novas",BR,110
+13844,"Daytona Beach-Fl",US,110
+34794,"Montpellier",FR,109
+27893,"Lagos",PT,109
+42935,"Pyeongchang",KR,108
+34960,"Morelia",MX,108
+3689797,"Penzance",GB,108
+3689796,"Newquay",GB,108
+3800,"Baguio",PH,108
+28498,"Larnaca",CY,108
+15795,"El Nido",PH,108
+59671,"Yuchi",TW,108
+52438,"Tagaytay",PH,108
+57067,"Vladivostok",RU,108
+20906,"Hakodate",JP,107
+20512,"Guayaquil",EC,107
+15717,"El Calafate",AR,107
+59975,"Zhengzhou",CN,107
+24033,"Jaco",CR,107
+59914,"Zell Am See",AT,107
+24457,"Joao Pessoa",BR,107
+7276,"Bratislava",SK,107
+35905,"Nagpur",IN,107
+36383,"Negril",JM,107
+28532,"Las Palmas",ES,106
+32580,"Massa Lubrense",IT,106
+10637,"Changwon",KR,106
+3945217,"Tropea",IT,106
+52768,"Taoyuan",TW,106
+6725,"Bombinhas",BR,106
+3896125,"Willemstad",CW,106
+49869,"Sigiriya",LK,106
+4289,"Bandar Lampung",ID,106
+25823,"Khon Kaen",TH,105
+27004,"Kuantan",MY,105
+5571,"Beppu",JP,105
+49520,"Shenyang",CN,105
+41124,"Playa Del Ingles",ES,105
+43652,"Recife",BR,105
+41759,"Port Harcourt",NG,104
+31530,"Malia",GR,104
+1612351,"Panglao",PH,104
+25365,"Katra",IN,104
+9028,"Canberra",AU,104
+30268,"Lonavala",IN,104
+1842501,"Pompei",IT,104
+16236,"Ensenada",MX,104
+24348,"Jian",TW,104
+29620,"Lille",FR,104
+22399,"Hollywood-Fl",US,104
+1842865,"Ravenna",IT,104
+14693,"Dongguan",CN,104
+6050,"Bilbao",ES,104
+2134281,"Angeles",PH,103
+39314,"Palawan",PH,103
+43213,"Rabat",MA,103
+39714,"Park City-Ut",US,103
+1842585,"Monopoli",IT,103
+1842537,"Perugia",IT,103
+59404,"Yangyang",KR,103
+31609,"Mammoth Lakes-Ca",US,102
+23883,"Ito",JP,102
+3845924,"Phi Phi Islands",TH,102
+3846055,"Nusa Dua",ID,102
+16316,"Eramalloor",IN,102
+41299,"Pocheon",KR,102
+40966,"Pittsburgh-Pa",US,102
+54206,"Torremolinos",ES,101
+45396,"Sacramento-Ca",US,101
+31618,"Manado",ID,101
+55611,"Vadodara",IN,101
+12227,"Columbia-Sc",US,101
+59998,"Zhuhai",CN,101
+1398793,"Chanthaburi",TH,101
+51134,"Srinagar",IN,101
+54068,"Tongyeong",KR,101
+49658,"Shirdi",IN,101
+44476,"Roatan",HN,101
+34703,"Monteverde",CR,100
+521742,"Sopot",PL,100
+36070,"Nantong",CN,100
+3947818,"Bibione",IT,100
+33772,"Milos",GR,100
+55586,"Uzungol",TR,100
+2958,"Asuncion",PY,100
+8383,"Cabo San Lucas",MX,100
+10641,"Changzhou",CN,100
+21727,"Helsinki",FI,100
+21059,"Hammamet",TN,100
+25718,"Key West-Fl",US,100
+15527,"Edmonton",CA,100
+520860,"Tallinn",EE,99
+13308,"Cuernavaca",MX,99
+7269,"Brasilia",BR,99
+4023,"Balikpapan",ID,99
+22103,"Hilton Head-Sc",US,99
+3689749,"Keswick",GB,99
+3569373,"Polignano a Mare",IT,99
+19500,"Goiania",BR,99
+19533,"Golden Sands",BG,98
+3944956,"Cortona",IT,98
+29639,"Limassol",CY,98
+3843634,"Goreme",TR,98
+11961,"Cochin",IN,98
+3946154,"Cattolica",IT,98
+31910,"Mar Del Plata",AR,98
+26769,"Kota Bharu",MY,98
+41357,"Pohang",KR,97
+36416,"Nelson",NZ,97
+3947960,"Kalkan",TR,97
+20842,"The Hague",NL,97
+390296,"Salamanca",ES,97
+16576,"Estes Park-Co",US,97
+18383,"Fuzhou",CN,96
+26241,"Kisumu",KE,96
+49417,"Sharjah",AE,96
+55999,"Varna",BG,96
+43317,"Raipur",IN,96
+3845795,"Lembongan Island",ID,95
+31062,"Machu Picchu",PE,95
+26975,"Ksamil",AL,95
+11368,"Chon Buri",TH,95
+3802804,"Sheffield",GB,95
+3946161,"Milano Marittima",IT,95
+5223,"Bekasi",ID,95
+12646,"Cork",IE,95
+10864,"Chattanooga-Tn",US,95
+14265,"Dharamsala",IN,94
+13619,"Dalyan",TR,94
+53677,"Tijuana",MX,94
+38014,"Ocho Rios",JM,94
+40212,"Pensacola-Fl",US,94
+30886,"Luxor",EG,94
+42431,"Primosten",HR,94
+2829,"Asheville-Nc",US,94
+2171118,"Syros Island",GR,94
+44952,"Rostov On Don",RU,94
+15637,"Eilat",IL,93
+3944911,"Kotor",ME,93
+52510,"Taiyuan",CN,93
+3815044,"Cardiff",GB,93
+40265,"Pereira",CO,93
+42761,"Pula",HR,93
+3815528,"Llandudno",GB,93
+56885,"Vilnius",LT,93
+54938,"Tunis",TN,93
+6771,"Bonn",DE,93
+25935,"Killarney",IE,93
+21186,"Harbin",CN,93
+270390,"Puerto Del Carmen",ES,93
+7352,"Bremen",DE,92
+36026,"Nanchang",CN,92
+18025,"Franschhoek",ZA,92
+49677,"Shizuoka",JP,92
+13306,"Cuenca",EC,92
+55641,"Vail-Co",US,92
+2934,"Astana",KZ,92
+50272,"Skopje",MK,91
+10245,"Cefalu",IT,91
+24758,"Kagoshima",JP,91
+3946837,"San Gimignano",IT,91
+2134453,"Yeosu Si",KR,91
+2119,"Anuradhapura",LK,91
+15008,"Ducktown-Tn",US,91
+4109,"Balneario Camboriu",BR,91
+44118,"Richmond-Va",US,91
+521562,"Kolobrzeg",PL,91
+55476,"Uruma",JP,90
+58400,"Whistler",CA,90
+41110,"Playa De Palma",ES,90
+21639,"Heidelberg",DE,90
+13798,"Davenport-Fl",US,90
+3949828,"Giza",EG,90
+23006,"Hvar",HR,90
+15806,"El Paso-Tx",US,90
+26391,"Knoxville-Tn",US,90
+52941,"Taupo",NZ,90
+3845729,"Rawai",TH,90
+43350,"Raleigh-Nc",US,90
+5262,"Belfast",GB,90
+17824,"Fort Myers-Fl",US,89
+50508,"Sokcho",KR,89
+8583,"Calabria",IT,89
+33382,"Merzouga",MA,89
+42651,"Puerto Escondido",MX,89
+3803093,"Shrewsbury",GB,89
+35969,"Nakhon Si Thammarat",TH,89
+31404,"Makarska",HR,89
+3186,"Aurangabad",IN,89
+41548,"Ponta Delgada",PT,89
+31026,"Macau",MO,89
+19716,"Gothenburg",SE,89
+47447,"San Vito Lo Capo",IT,88
+46740,"Salt Lake City-Ut",US,88
+51470,"Stellenbosch",ZA,88
+3786216,"Southampton",GB,88
+58737,"Windhoek",NA,88
+45429,"Safranbolu",TR,88
+6165,"Birmingham-Al",US,88
+14800,"Douala",CM,88
+41734,"Port Douglas",AU,88
+16246,"Entebbe",UG,88
+3410,"Ayutthaya",TH,88
+57404,"Wakayama",JP,88
+14515,"Djerba",TN,88
+3815124,"Reading",GB,87
+27921,"Lahaina-Hi",US,87
+43502,"Rarotonga",CK,87
+521767,"Swinoujscie",PL,87
+26448,"Kochi",IN,87
+8990,"Can Tho",VN,87
+47144,"San Jose-Ca",US,87
+12695,"Coron",PH,87
+176171,"Aix-En-Provence",FR,87
+55497,"Ushuaia",AR,87
+31622,"Managua",NI,87
+13593,"Dali",CN,87
+36460,"Nerja",ES,87
+48185,"Sao Sebastiao",BR,87
+54399,"Trang",TH,86
+4407,"Banyuwangi",ID,86
+3949336,"Sile",TR,86
+11765,"Clearwater-Fl",US,86
+2973,"Atami",JP,86
+38372,"Omaha-Ne",US,86
+24363,"Jiaoxi",TW,86
+55788,"Valladolid",MX,86
+32715,"Matsumoto",JP,86
+3689661,"Cheltenham",GB,86
+14337,"Didim",TR,86
+41910,"Portimao",PT,86
+59364,"Yamanouchi",JP,86
+16531,"Essen",DE,86
+1763,"Anapa",RU,86
+6195,"Bishkek",KG,85
+22773,"Huangshan",CN,85
+3786472,"Chester",GB,85
+3815936,"Nottingham",GB,85
+56650,"Villa De Leyva",CO,85
+39184,"Padang",ID,85
+58618,"Williamsburg-Va",US,85
+31649,"Manaus",BR,85
+53768,"Tinos",GR,85
+4128,"Baltimore-Md",US,85
+18338,"Furano",JP,85
+47392,"San Salvador",SV,85
+176439,"Avignon",FR,85
+23599,"Irving-Tx",US,84
+3948332,"Calpe",ES,84
+33867,"Minneapolis-Mn",US,84
+1163,"Algiers",DZ,84
+41662,"Porec",HR,84
+39807,"Pasay",PH,84
+57314,"Wadi Rum",JO,84
+30675,"Lucerne",CH,84
+3803007,"Eastbourne",GB,84
+19063,"Ghent",BE,84
+48197,"Sapanca",TR,83
+42581,"Pucon",CL,83
+20450,"Guanacaste",CR,83
+58511,"Wichita-Ks",US,83
+35874,"Nafplio",GR,83
+2063,"Antananarivo",MG,83
+23218,"Ilhabela",BR,83
+1842558,"Padova",IT,83
+1701467,"North Okinawa",JP,83
+20124,"Greensboro-Nc",US,83
+36187,"Nashik",IN,83
+11414,"Christ Church",BB,83
+50108,"Sirmione",IT,83
+36002,"Namhae",KR,83
+23545,"Iquitos",PE,82
+2442,"Arenal",CR,82
+47781,"Santa Cruz",BO,82
+1843012,"Montecatini Terme",IT,82
+38968,"Ouarzazate",MA,82
+29193,"Leon",MX,82
+12716,"Corpus Christi-Tx",US,82
+28153,"Lalitpur",NP,82
+20599,"Guiyang",CN,82
+11123,"Chiayi",TW,82
+3846425,"Selcuk",TR,82
+42089,"Positano",IT,82
+33793,"Milwaukee-Wi",US,81
+3157,"Augusta-Ga",US,81
+3944947,"Arezzo",IT,81
+42644,"Puerto De La Cruz",ES,80
+4742,"Basel",CH,80
+38171,"Okayama",JP,80
+47348,"San Pedro",BZ,80
+45167,"Ruidoso-Nm",US,80
+35970,"Nakijin",JP,80
+2134445,"Yangpyeong Gun",KR,80
+27992,"Lake Como",IT,80
+29423,"Lexington-Ky",US,80
+26233,"Kissamos",GR,80
+4845,"Baton Rouge-La",US,79
+54747,"Trujillo",PE,79
+674376,"North Myrtle Beach-Sc",US,79
+552254,"Arraial Dajuda",BR,79
+180955,"Tours",FR,79
+11532,"Cincinnati-Oh",US,79
+3571696,"St  Augustine-FL",US,79
+432343,"Vlore",AL,79
+59309,"Xuzhou",CN,79
+13630,"Dambulla",LK,79
+52512,"Taizhou",CN,79
+51157,"St Augustine-Fl",US,79
+30879,"Luxembourg",LU,79
+16476,"Eskisehir",TR,79
+179357,"Nantes",FR,79
+23043,"Ibadan",NG,78
+48094,"Sanxenxo",ES,78
+3815241,"Stratford upon Avon",GB,78
+45004,"Rotterdam",NL,78
+53381,"Thane",IN,78
+2134394,"Gangneung Si",KR,78
+3568800,"Riva del Garda",IT,78
+41707,"Port Blair",IN,78
+42697,"Puerto Plata",DO,78
+2240,"Aqaba",JO,78
+47216,"San Luis Potosi",MX,78
+13722,"Darjeeling",IN,78
+29988,"Livingstone",ZM,78
+26072,"Kingston",JM,77
+3689715,"Ambleside",GB,77
+21848,"Hermanus",ZA,77
+3946155,"Cervia",IT,77
+3569338,"Alberobello",IT,77
+11602,"Ciudad De Guatemala",GT,77
+12994,"Cozumel",MX,77
+12611,"Cordoba",AR,77
+22788,"Huatulco",MX,77
+31551,"Mallorca",ES,77
+32397,"Marsala",IT,77
+42654,"Puerto Galera",PH,77
+15113,"Dunedin",NZ,77
+2642,"Arraial Do Cabo",BR,77
+43477,"Ranong",TH,77
+31407,"Makati",PH,77
+7998,"Bukhara",UZ,77
+567,"Aguascalientes",MX,76
+2585,"Armenia",CO,76
+28009,"Lake George-Ny",US,76
+36018,"Nan",TH,76
+23447,"Innsbruck",AT,76
+3946147,"Ugento",IT,76
+17399,"Flagstaff-Az",US,76
+3847592,"Oludeniz",TR,76
+29316,"Lesbos",GR,76
+19060,"Ghaziabad",IN,76
+176960,"Carcassonne",FR,76
+3689865,"Exeter",GB,76
+1145051,"Lake Naivasha",KE,76
+37136,"Nizhniy Novgorod",RU,75
+6395,"Bloemfontein",ZA,75
+3848174,"Noord",AW,75
+41207,"Plettenberg Bay",ZA,75
+52627,"Tamarindo",CR,75
+23263,"Iloilo",PH,75
+1704340,"Baturetno",ID,75
+9845,"Castellammare Del Golfo",IT,75
+11291,"Chisinau",MD,75
+59406,"Yangzhou",CN,75
+26451,"Kodaikanal",IN,75
+58809,"Winterberg",DE,75
+42615,"Puerto Ayora",EC,75
+20143,"Greenville-Sc",US,75
+59357,"Yamagata",JP,75
+4806,"Batangas",PH,74
+674333,"Miramar Beach-Fl",US,74
+10422,"Cesky Krumlov",CZ,74
+27000,"Kuala Terengganu",MY,74
+30040,"Llanes",ES,74
+1579,"Amarillo-Tx",US,74
+3786712,"Derby",GB,74
+1343408,"Camlihemsin",TR,74
+35009,"Morjim",IN,74
+21184,"Harare",ZW,74
+25774,"Khao Yai",TH,74
+3946821,"Montepulciano",IT,74
+59362,"Yamanakako",JP,74
+52522,"Takamatsu",JP,74
+3815200,"Leicester",GB,74
+15538,"Edremit",TR,74
+10441,"Cha Am",TH,73
+11893,"Cluj Napoca",RO,73
+3946118,"Fasano",IT,73
+46784,"Salvador",BR,73
+42728,"Puerto Viejo",CR,73
+1597000,"Kailua-Kona-Hi",US,73
+40564,"Phitsanulok",TH,73
+25267,"Karuizawa",JP,73
+55223,"Ulaanbaatar",MN,73
+56429,"Victoria",CA,73
+36788,"Newcastle",AU,73
+23574,"Irkutsk",RU,73
+1700051,"South Goa",IN,73
+48013,"Santiago De Compostela",ES,73
+52109,"Surat",IN,73
+42685,"Puerto Natales",CL,73
+20628,"Gumi",KR,73
+32676,"Mathura",IN,73
+180322,"Saint Malo",FR,73
+428375,"Seneca Rocks-Wv",US,72
+3815704,"Caernarfon",GB,72
+57558,"Wanaka",NZ,72
+16964,"Faridabad",IN,72
+15324,"East London",ZA,72
+59340,"Yala",LK,72
+48410,"Sauraha",NP,72
+179779,"Porto Vecchio",FR,72
+2252,"Aracaju",BR,72
+31176,"Madurai",IN,72
+50072,"Sintra",PT,72
+1541199,"Mamaia",RO,72
+49653,"Shirahama",JP,72
+24075,"Jalandhar",IN,72
+1559,"Amalfi Coast",IT,72
+59858,"Zaragoza",ES,72
+36102,"Naples-Fl",US,72
+270673,"Ronda",ES,72
+3689904,"Plymouth",GB,71
+42714,"Puerto Rico",ES,71
+18399,"Gaborone",BW,71
+31155,"Madison-Wi",US,71
+23832,"Itacare",BR,71
+25522,"Kelowna",CA,71
+30646,"Lubbock-Tx",US,71
+9710,"Cascais",PT,71
+14777,"Dortmund",DE,71
+3843643,"Kayseri",TR,71
+1036,"Alcudia",ES,71
+7864,"Bucaramanga",CO,71
+32721,"Matsuyama",JP,71
+23002,"Huzhou",CN,70
+29713,"Lincoln City-Or",US,70
+25134,"Kaprun",AT,70
+20865,"Haifa",IL,70
+20867,"Haikou",CN,70
+2134409,"Gyeongju Si",KR,70
+19078,"Giardini Naxos",IT,70
+24094,"Jambi",ID,70
+35114,"Moshi",TZ,70
+11460,"Chuncheon",KR,70
+3689790,"Falmouth",GB,70
+39239,"Paihia",NZ,70
+39693,"Parga",GR,70
+6932,"Boryeong",KR,70
+60048,"Zirakpur",IN,70
+3689763,"Penrith",GB,69
+50270,"Skopelos",GR,69
+10976,"Cheongju",KR,69
+58784,"Winnipeg",CA,69
+28640,"Launceston",AU,69
+3947955,"Cirali",TR,69
+47126,"San Jose Del Cabo",MX,69
+1693767,"Praslin Island",SC,69
+46807,"Samana",DO,69
+38391,"Omis",HR,69
+3568775,"Desenzano del Garda",IT,69
+11959,"Cochem",DE,69
+51921,"Sukhothai",TH,69
+34570,"Monte Verde",BR,69
+53812,"Tirupati",IN,69
+8126,"Buri Ram",TH,68
+3947824,"Caorle",IT,68
+9342,"Capri",IT,68
+57090,"Vodice",HR,68
+39259,"Pak Chong",TH,68
+40465,"Petropolis",BR,68
+27745,"Labuan Bajo",ID,68
+19901,"Grand Rapids-Mi",US,68
+57979,"Weligama",LK,68
+2563,"Arlington-Va",US,68
+1842854,"Ferrara",IT,68
+53204,"Tepoztlan",MX,68
+12983,"Coxs Bazar",BD,67
+43824,"Reims",FR,67
+52805,"Tarapoto",PE,67
+25090,"Kanpur",IN,67
+50139,"Sitges Area",ES,67
+32573,"Maspalomas",ES,67
+300,"Adana",TR,67
+1489544,"Sidoarjo",ID,67
+29940,"Little Rock-Ar",US,67
+16897,"Faliraki",GR,67
+56673,"Villa La Angostura",AR,67
+23104,"Ierapetra",GR,67
+3948535,"Benalmadena",ES,67
+6770,"Bonito",BR,67
+47383,"San Remo",IT,67
+39460,"Pamplona",ES,67
+3689953,"Great Yarmouth",GB,67
+18871,"General Luna",PH,67
+56541,"Vijayawada",IN,67
+30727,"Lugano",CH,67
+3944919,"Ulcinj",ME,67
+13633,"Dammam",SA,67
+30696,"Ludhiana",IN,67
+1785,"Anchorage - AK",US,66
+40181,"Peniscola",ES,66
+47730,"Santa Barbara-Ca",US,66
+48902,"Sedona-Az",US,66
+5483,"Bend-Or",US,66
+54090,"Toowoomba",AU,66
+13755,"Darwin",AU,66
+55140,"Ubon Ratchathani",TH,66
+22868,"Huizhou",CN,66
+25767,"Khao Kho",TH,66
+3786701,"Buxton",GB,66
+1352015,"Saint Anton Am Arlberg",AT,66
+34669,"Monterey-Ca",US,65
+44949,"Rostock",DE,65
+9059,"Canela",BR,65
+750964,"Fuerteventura",ES,65
+10616,"Changchun",CN,65
+49886,"Sihanoukville",KH,65
+19855,"Granada",NI,65
+52581,"Tallahassee-Fl",US,65
+3975465,"Dahab",EG,65
+176326,"Arles",FR,65
+45969,"Saint John",CA,65
+3945396,"Fiumicino",IT,65
+31929,"Maragogi",BR,65
+41332,"Podstrana",HR,65
+38477,"Opatija",HR,65
+3802906,"Skegness",GB,65
+3815882,"Oban",GB,65
+1855,"Andros",GR,65
+12006,"Coffs Harbour",AU,64
+3815454,"Menai Bridge",GB,64
+4363,"Banjarmasin",ID,64
+11456,"Chumphon",TH,64
+37665,"Novosibirsk",RU,64
+55947,"Varadero",CU,64
+3689601,"Canterbury",GB,64
+35202,"Mount Abu",IN,64
+665,"Airlie Beach",AU,64
+56419,"Victoria Falls",ZW,64
+39463,"Pamukkale",TR,64
+36198,"Nassau",BS,64
+26664,"Konya",TR,64
+37244,"Noosa Heads",AU,64
+55040,"Tuxtla Gutierrez",MX,64
+20942,"Halifax",CA,64
+18781,"Gaziantep",TR,64
+59363,"Yamanashi",JP,64
+177090,"Chamonix Mont Blanc",FR,64
+29724,"Lincoln-Ne",US,64
+36922,"Niagara On The Lake",CA,64
+48235,"Sarasota-Fl",US,64
+33947,"Miri",MY,64
+178340,"La Rochelle",FR,64
+3568783,"Malcesine",IT,64
+37617,"Novalja",HR,64
+1841978,"Agropoli",IT,64
+35789,"Myoko",JP,64
+59417,"Yantai",CN,63
+47984,"Santander",ES,63
+33364,"Mersin",TR,63
+15202,"Durham-Nc",US,63
+46815,"Samarkand",UZ,63
+3815405,"Bridlington",GB,63
+43101,"Quepos",CR,63
+25307,"Kassel",DE,63
+31089,"Macon-Ga",US,63
+54620,"Trincomalee",LK,63
+31535,"Malindi",KE,63
+34085,"Moab-Ut",US,63
+53627,"Tibau Do Sul",BR,63
+3689804,"Truro",GB,63
+53788,"Tiradentes",BR,63
+15207,"Durres",AL,63
+1488852,"Gili Air",ID,63
+34730,"Montgomery-Al",US,63
+44057,"Ribeirao Preto",BR,63
+176661,"Biarritz",FR,63
+28426,"Lanzhou",CN,63
+21045,"Hamilton",NZ,62
+23461,"Interlaken",CH,62
+48498,"Sayulita",MX,62
+3569384,"Trani",IT,62
+2134395,"Geoje Si",KR,62
+26774,"Kota",IN,62
+1842566,"Treviso",IT,62
+3847734,"Urla",TR,62
+49779,"Sicily",IT,62
+3689902,"Paignton",GB,62
+41699,"Port Au Prince",HT,62
+3815285,"Milton Keynes",GB,62
+13136,"Crikvenica",HR,62
+3946078,"Orvieto",IT,62
+27167,"Kusatsu",JP,62
+35899,"Nago",JP,62
+56791,"Villavicencio",CO,62
+3848175,"Oranjestad",AW,62
+31904,"Maputo",MZ,62
+55876,"Valparaiso",CL,62
+1542642,"Saint Julians",MT,62
+3689800,"St Austell",GB,61
+7570,"Brno",CZ,61
+2562,"Arlington-Tx",US,61
+3949949,"Nungwi",TZ,61
+30647,"Lubeck",DE,61
+23015,"Hwaseong",KR,61
+3802976,"Salisbury",GB,61
+32390,"Marsa Alam",EG,61
+25619,"Kenting",TW,61
+25896,"Kihei-Hi",US,61
+52229,"Swakopmund",NA,61
+42788,"Puli",TW,61
+36420,"Nelspruit",ZA,61
+38988,"Oudtshoorn",ZA,61
+53480,"Thimphu",BT,61
+55294,"Umhlanga",ZA,61
+1488969,"Karawang",ID,61
+48916,"Seefeld In Tirol",AT,61
+8446,"Cadiz",ES,61
+34096,"Mobile-Al",US,61
+3946801,"Chianciano Terme",IT,61
+3689702,"Swindon",GB,61
+41256,"Plovdiv",BG,60
+37852,"Oakland-Ca",US,60
+39067,"Oviedo",ES,60
+54346,"Townsville",AU,60
+10802,"Chatan",JP,60
+3570693,"Viareggio",IT,60
+13835,"Daylesford",AU,60
+56611,"Vilamoura",PT,60
+3571710,"St  George-UT",US,60
+1842920,"Viterbo",IT,60
+35142,"Mostar",BA,60
+56639,"Villa Carlos Paz",AR,60
+55628,"Vagator",IN,60
+36735,"New Smyrna Beach-Fl",US,60
+12065,"Coles Bay",AU,60
+36054,"Nanning",CN,60
+49343,"Shah Alam",MY,60
+27182,"Kutaisi",GE,60
+55471,"Urubamba",PE,60
+26449,"Kochi",JP,60
+3802654,"Leyburn",GB,60
+5871,"Bhaktapur",NP,60
+25143,"Karachi",PK,60
+1842094,"Trento",IT,59
+23967,"Izu",JP,59
+20031,"Graz",AT,59
+14682,"Dong Hoi",VN,59
+41033,"Plano-Tx",US,59
+1764929,"Male",MV,59
+270098,"La Coruna",ES,59
+10921,"Chefchaouen",MA,59
+16657,"Eureka Springs-Ar",US,59
+3689792,"Helston",GB,59
+33315,"Merimbula",AU,59
+3933,"Bakersfield-Ca",US,59
+8471,"Cagayan De Oro",PH,59
+53974,"Toledo",ES,59
+30254,"Lome",TG,59
+32104,"Marianske Lazne",CZ,59
+36844,"Newport-Ri",US,59
+3802744,"Carnforth",GB,59
+8924,"Campinas",BR,59
+16997,"Faro",PT,59
+768,"Akyaka",TR,59
+53629,"Tiberias",IL,59
+2134419,"Jeju Island",KR,59
+3845761,"Canggu",ID,59
+38443,"Onna",JP,59
+43754,"Regensburg",DE,59
+59422,"Yaounde",CM,58
+31785,"Manizales",CO,58
+8563,"Cala Millor",ES,58
+40442,"Petra",JO,58
+49411,"Shaoxing",CN,58
+3786736,"Matlock",GB,58
+45912,"Saint James",BB,58
+23944,"Ixtapa",MX,58
+3967208,"Kovalam",IN,58
+179605,"Perpignan",FR,58
+58588,"Wildwood-Nj",US,58
+52023,"Suncheon",KR,58
+25787,"Kharkiv",UA,58
+12873,"Cotonou",BJ,58
+766,"Akureyri",IS,58
+343,"Adler",RU,58
+42726,"Puerto Varas",CL,58
+42222,"Prachuab Khiri Khan",TH,58
+3945793,"Sveti Vlas",BG,58
+21562,"Hazyview",ZA,58
+23067,"Ica",PE,58
+8901,"Campeche",MX,58
+3815025,"Carmarthen",GB,58
+3946725,"Messina",IT,58
+54279,"Tossa De Mar",ES,58
+53724,"Timisoara",RO,57
+16566,"Estepona",ES,57
+34117,"Modica",IT,57
+52301,"Sylhet",BD,57
+8568,"Cala Ratjada",ES,57
+43418,"Ranchi",IN,57
+55797,"Valle De Bravo",MX,57
+55016,"Tuscany",IT,57
+3802641,"Harrogate",GB,57
+32531,"Masai Mara",KE,57
+6376,"Bled",SI,57
+44578,"Rockhampton",AU,57
+270245,"Leon",ES,57
+15060,"Dumaguete",PH,57
+22732,"Hsinchu",TW,57
+24584,"Jounieh",LB,57
+3786458,"Poole",GB,57
+41107,"Playa De Las Americas",ES,57
+1842593,"Taranto",IT,57
+19124,"Gijon",ES,56
+38287,"Olimpia",BR,56
+1679009,"Arugam Bay",LK,56
+8111,"Burgos",ES,56
+5625,"Bergen",NO,56
+11178,"Chihuahua",MX,56
+18147,"Fresno-Ca",US,56
+33604,"Midland-Tx",US,56
+28210,"Lampang",TH,56
+27845,"Laganas",GR,56
+51091,"Springfield-Mo",US,56
+31160,"Madonna Di Campiglio",IT,56
+53129,"Tempe-Az",US,56
+36950,"Nicosia",CY,56
+3815140,"Fort William",GB,56
+41733,"Port Dickson",MY,56
+16263,"Enugu",NG,56
+50083,"Sioux Falls-Sd",US,56
+18252,"Fuengirola",ES,56
+10974,"Cheonan",KR,56
+59385,"Yancheng",CN,56
+179993,"Rouen",FR,56
+3815063,"Swansea",GB,56
+40094,"Pelion",GR,55
+58840,"Wisconsin Dells-Wi",US,55
+46611,"Salalah",OM,55
+44551,"Rochester-Mn",US,55
+4425,"Bar Harbor-Me",US,55
+179903,"Rennes",FR,55
+26499,"Koh Lipe",TH,55
+31873,"Manzanillo",MX,55
+46812,"Samara",RU,55
+6646,"Boise-Id",US,55
+39229,"Paguera",ES,55
+25220,"Karlsruhe",DE,55
+24984,"Kamloops",CA,55
+50742,"Sosua",DO,55
+3944918,"Tivat",ME,55
+11558,"Cirebon",ID,55
+3689993,"Carlisle",GB,55
+56572,"Vila Nova De Gaia",PT,55
+50331,"Sliema",MT,55
+3945969,"Santa Teresa Di Gallura",IT,55
+2897,"Aspen-Co",US,55
+3802679,"Skipton",GB,55
+21009,"Hamamatsu",JP,54
+3946132,"Peschici",IT,54
+13322,"Cuiaba",BR,54
+24942,"Kamakura",JP,54
+31000,"Maastricht",NL,54
+36641,"New Braunfels-Tx",US,54
+1691916,"Nosy Be",MG,54
+3845502,"Monemvasia",GR,54
+50845,"South Padre Island-Tx",US,54
+3846040,"Legian",ID,54
+18876,"General Santos",PH,54
+3550,"Bad Gastein",AT,54
+18297,"Fukushima",JP,54
+12928,"Courchevel",FR,54
+18610,"Garda",IT,54
+59632,"Yosemite National Park-Ca",US,54
+42527,"Providenciales",TC,54
+48152,"Sao Luis",BR,54
+23515,"Ios",GR,54
+15517,"Edirne",TR,54
+33882,"Minsk",BY,54
+3815109,"Newport",GB,54
+8988,"Can Picafort",ES,54
+20072,"Greater Noida",IN,54
+3802896,"Lincoln",GB,54
+3945791,"Sozopol",BG,54
+1218,"Allahabad",IN,54
+3568794,"Peschiera del Garda",IT,54
+21260,"Harrisburg-Pa",US,53
+3786238,"Coventry",GB,53
+3689787,"Bodmin",GB,53
+46860,"Samsun",TR,53
+34856,"Mooloolaba",AU,53
+52944,"Tauranga",NZ,53
+1111,"Alexandria-Va",US,53
+3946129,"Nardo",IT,53
+43414,"Ranau",MY,53
+25243,"Karpathos",GR,53
+9222,"Cape Coral-Fl",US,53
+3814979,"Haverfordwest",GB,53
+33816,"Minamioguni",JP,53
+17022,"Fatima",PT,53
+47241,"San Martin De Los Andes",AR,53
+18664,"Garmisch Partenkirchen",DE,53
+57142,"Volos",GR,53
+43680,"Red River-Nm",US,53
+44553,"Rochester-Ny",US,53
+31804,"Mannheim",DE,53
+27169,"Kushalnagar",IN,53
+48369,"Satun",TH,53
+58674,"Wilmington-Nc",US,53
+44889,"Roses",ES,53
+43534,"Ratchaburi",TH,53
+1612939,"Namhae Gun",KR,53
+12719,"Corralejo",ES,53
+29833,"Lipari",IT,53
+35130,"Mossel Bay",ZA,53
+3947843,"Mestre",IT,53
+55926,"Vang Vieng",LA,53
+35155,"Motobu",JP,53
+25011,"Kampot",KH,53
+3815428,"Durham",GB,53
+33804,"Minakami",JP,52
+55837,"Valletta",MT,52
+3815450,"Holyhead",GB,52
+34075,"Mlini",HR,52
+3569478,"Avola",IT,52
+1843001,"Grosseto",IT,52
+47788,"Santa Cruz-Ca",US,52
+48324,"Saskatoon",CA,52
+1908,"Angra Dos Reis",BR,52
+49863,"Sifnos",GR,52
+49768,"Sibiu",RO,52
+59728,"Yuzawa",JP,52
+46667,"Salento",CO,52
+1842521,"Pesaro",IT,52
+14388,"Dijon",FR,52
+28342,"Langfang",CN,52
+3494,"Bacolod",PH,52
+34059,"Miyazaki",JP,52
+1842584,"Martina Franca",IT,52
+43494,"Rapid City-Sd",US,52
+35619,"Munster",DE,52
+19115,"Gifu",JP,52
+35860,"Nadi",FJ,52
+13815,"Davos",CH,52
+179363,"Narbonne",FR,52
+3945347,"Forio",IT,52
+59758,"Zacatecas",MX,52
+36091,"Napa-Ca",US,52
+47483,"Sandakan",MY,51
+26300,"Klang",MY,51
+179410,"Nimes",FR,51
+38901,"Otaru",JP,51
+3151,"Augsburg",DE,51
+3945868,"Vico Equense",IT,51
+3568760,"Bardolino",IT,51
+22,"Aachen",DE,51
+58065,"Wenzhou",CN,51
+21902,"Hervey Bay",AU,51
+3689880,"Ilfracombe",GB,51
+12233,"Columbus-Ga",US,51
+1488677,"Borobudur",ID,51
+41798,"Port Macquarie",AU,51
+44321,"Rionegro",CO,51
+5252,"Belem",BR,51
+36920,"Niagara Falls-Ny",US,51
+24751,"Kaga",JP,51
+32011,"Marco Island-Fl",US,51
+3848519,"Antibes",FR,51
+3946074,"Gubbio",IT,51
+12025,"Coimbra",PT,51
+27654,"La Serena",CL,51
+27835,"Lafayette-La",US,51
+54363,"Toyooka",JP,51
+55548,"Utrecht",NL,51
+1469842,"Kolagappara",IN,51
+31069,"Mackay",AU,51
+2134440,"Sokcho Si",KR,51
+34447,"Mont Tremblant",CA,51
+3570256,"Carovigno",IT,51
+22952,"Huntsville-Al",US,51
+26952,"Kruger",ZA,51
+59201,"Xalapa",MX,50
+31684,"Mandarmani",IN,50
+2134420,"Jeonju Si",KR,50
+18837,"Gelendzhik",RU,50
+3815161,"Peterborough",GB,50
+13591,"Dalhousie",IN,50
+41846,"Port Vila",VU,50
+26694,"Korcula",HR,50
+38681,"Oropesa Del Mar",ES,50
+3816500,"Riviera Maya",MX,50
+47328,"San Pedro Sula",HN,50
+6661,"Bol",HR,50
+27561,"La Paz",MX,50
+16355,"Erfurt",DE,50
+49070,"Semporna",MY,50
+23506,"Ioannina",GR,50
+23726,"Isle Of Skye",GB,50
+26251,"Kitakyushu",JP,50
+41090,"Playa Blanca",ES,50
+22488,"Hongcheon",KR,50
+9728,"Caserta",IT,50
+47600,"Sanliurfa",TR,50
+47421,"San Teodoro",IT,50
+1842018,"Pescara",IT,50
+3845959,"Phang Nga",TH,50
+36206,"Nasu",JP,50
+3786560,"Minehead",GB,50
+2159,"Aparecida",BR,50
+20713,"Gwalior",IN,50
+1679776,"Udawalawe",LK,50
+17864,"Fort Wayne-In",US,50
+6710,"Bolu",TR,50
+18435,"Gainesville-Fl",US,50
+42683,"Puerto Morelos",MX,50
+3569583,"Sciacca",IT,49
+59127,"Wujie",TW,49
+57757,"Watamu",KE,49
+33019,"Medulin",HR,49
+552877,"Nyaung U",MM,49
+3944927,"Ancona",IT,49
+1973,"Annecy",FR,49
+18293,"Fukui",JP,49
+59976,"Zhenjiang",CN,49
+1842861,"Parma",IT,49
+32760,"Maun",BW,49
+389945,"Adeje",ES,49
+25285,"Kasauli",IN,49
+1680540,"Xiaoliuqiu",TW,49
+3574391,"Isla Holbox",MX,49
+11788,"Clermont Ferrand",FR,49
+176918,"Calvi",FR,49
+38308,"Ollantaytambo",PE,49
+21833,"Heringsdorf",DE,49
+54743,"Truckee-Ca",US,49
+20184,"Grenoble",FR,49
+31132,"Madikeri",IN,49
+17057,"Fayetteville-Nc",US,49
+1488774,"Citaringgul",ID,49
+43600,"Rawalpindi",PK,49
+9079,"Cangas De Onis",ES,49
+42800,"Puncak",ID,49
+1684453,"Bocas Town",PA,49
+49597,"Shillong",IN,49
+39885,"Patmos",GR,49
+58538,"Wiesbaden",DE,49
+1343519,"Gokceada",TR,49
+42134,"Potsdam",DE,48
+3947325,"Villasimius",IT,48
+16718,"Evora",PT,48
+3802772,"Preston",GB,48
+11809,"Cleveland-Oh",US,48
+3947767,"Courmayeur",IT,48
+2768,"Asahikawa",JP,48
+3802761,"Lancaster",GB,48
+52096,"Supetar",HR,48
+607018,"Ras Al Khaimah",AE,48
+8676,"Calella",ES,48
+12399,"Conil De La Frontera",ES,48
+3786268,"Ipswich",GB,48
+48007,"Santiago De Compostela",ES,48
+19163,"Gimhae",KR,48
+38054,"Odessa-Tx",US,48
+16961,"Fargo-Nd",US,48
+42403,"Preveza",GR,48
+22346,"Holbox",MX,48
+49577,"Shijiazhuang",CN,48
+3815712,"Porthmadog",GB,48
+3708,"Baden Baden",DE,48
+176250,"Angers",FR,48
+8006,"Bukittinggi",ID,48
+6418,"Bloomington-Mn",US,48
+30304,"Long Beach-Ca",US,48
+59589,"Yonago",JP,48
+9098,"Canmore",CA,48
+1390395,"Cortina D'ampezzo",IT,48
+37250,"Noosaville",AU,48
+3570583,"Manciano",IT,48
+17720,"Formentera",ES,48
+3815356,"Worcester",GB,48
+3815714,"Pwllheli",GB,48
+18933,"George",ZA,48
+3945994,"Abano Terme",IT,48
+9841,"Castellabate",IT,48
+3689748,"Kendal",GB,47
+54663,"Trivandrum",IN,47
+3815112,"Shanklin",GB,47
+10506,"Halkidiki",GR,47
+50778,"Sousse",TN,47
+32027,"Mardin",TR,47
+7795,"Brunei",BN,47
+27626,"La Romana",DO,47
+177310,"Colmar",FR,47
+47370,"San Rafael",AR,47
+19801,"Grado",IT,47
+698,"Aizuwakamatsu",JP,47
+3846424,"Seferihisar",TR,47
+3689775,"Ulverston",GB,47
+14091,"Denizli",TR,47
+9026,"Canazei",IT,47
+4035,"Ballarat",AU,47
+60020,"Zihuatanejo",MX,47
+889,"Alassio",IT,47
+11955,"Cochabamba",BO,47
+53881,"Toba",JP,47
+45045,"Rovaniemi",FI,47
+24778,"Kaikoura",NZ,47
+2134434,"Samcheok Si",KR,47
+1105,"Alexandria",EG,47
+3948536,"Mijas Costa",ES,47
+59775,"Zagora",MA,47
+51547,"Stirling",GB,47
+46814,"Samarinda",ID,47
+59566,"Yiwu",CN,47
+20501,"Guaruja",BR,47
+58575,"Wilderness",ZA,47
+33690,"Milazzo",IT,47
+24876,"Kaliningrad",RU,47
+36721,"New Plymouth",NZ,47
+39390,"Palma Nova",ES,47
+55551,"Utsunomiya",JP,47
+18915,"Genting Highlands",MY,47
+1481765,"Cala Dor",ES,47
+56729,"Villahermosa",MX,47
+1488798,"Depok",ID,46
+1842054,"Ricadi",IT,46
+1842092,"Merano",IT,46
+1842570,"Vicenza",IT,46
+176566,"Beaune",FR,46
+3946064,"Castiglione del Lago",IT,46
+23980,"Jabalpur",IN,46
+26070,"Kingston",CA,46
+54356,"Toyama",JP,46
+43892,"Reno-Nv",US,46
+22878,"Hull",GB,46
+58585,"Wildwood Crest-Nj",US,46
+2774187,"Manavgat",TR,46
+39802,"Pas De La Casa",AD,46
+433870,"Pefkochori",GR,46
+2139,"Aomori",JP,46
+33088,"Meknes",MA,46
+26821,"Kowloon",HK,46
+49763,"Sibenik",HR,46
+39767,"Paro",BT,46
+3946163,"Misano Adriatico",IT,46
+2001,"Ansan",KR,46
+32647,"Mataram",ID,46
+46940,"San Carlos De Bariloche",AR,46
+3946088,"Spoleto",IT,46
+178064,"Honfleur",FR,46
+29551,"Liege",BE,46
+8837,"Cameron Highlands",MY,46
+36097,"Napier",NZ,46
+3949310,"Aegina",GR,46
+34314,"Moncton",CA,46
+11145,"Chiclayo",PE,46
+1828,"Andong",KR,46
+49157,"Seremban",MY,46
+3568780,"Lazise",IT,46
+20654,"Gunsan",KR,46
+32315,"Marloth Park",ZA,45
+28666,"Lausanne",CH,45
+11263,"Chios",GR,45
+853,"Alajuela",CR,45
+59335,"Yakushima",JP,45
+432843,"Kalambaka",GR,45
+51850,"Subic Bay",PH,45
+56533,"Vigo",ES,45
+3749,"Bagan",MM,45
+2134471,"Okinawa Main Island",JP,45
+40976,"Piura",PE,45
+20081,"Green Bay-Wi",US,45
+47155,"San Juan Del Sur",NI,45
+53450,"Thekkady",IN,45
+58223,"West Yellowstone-Mt",US,45
+3944943,"Senigallia",IT,45
+38243,"Old Orchard Beach-Me",US,45
+3570665,"Marina di Pietrasanta",IT,45
+33386,"Mesa-Az",US,45
+58957,"Wonju",KR,45
+17497,"Florence-Sc",US,45
+39414,"Palmerston North",NZ,45
+3689802,"St Ives",GB,45
+30825,"Luoyang",CN,44
+3944914,"Petrovac",ME,44
+49916,"Siliguri",IN,44
+24284,"Jersey City-Nj",US,44
+176902,"Caen",FR,44
+55014,"Tuscaloosa-Al",US,44
+3786575,"Taunton",GB,44
+912,"Albany-Ny",US,44
+14158,"Des Moines-Ia",US,44
+49013,"Selfoss",IS,44
+14980,"Dubbo",AU,44
+57729,"Washington-Ut",US,44
+3569070,"Bormio",IT,44
+521770,"Szczecin",PL,44
+53108,"Telluride-Co",US,44
+27074,"Kumasi",GH,44
+4755,"Baska Voda",HR,44
+10755,"Charlottesville-Va",US,44
+58644,"Willingen",DE,44
+22656,"Hot Springs-Ar",US,44
+12180,"Colonia Del Sacramento",UY,44
+7500,"Bright",AU,44
+10164,"Cavtat",HR,44
+32838,"Mayrhofen",AT,44
+14192,"Detroit-Mi",US,44
+2134431,"Pohang Si",KR,44
+11060,"Chetumal",MX,44
+3689961,"Kings Lynn",GB,44
+26273,"Kitzbuhel",AT,44
+34086,"Moalboal",PH,44
+521600,"Lodz",PL,44
+24836,"Kalamata",GR,44
+19206,"Girona",ES,44
+38452,"Ontario-Ca",US,43
+59594,"Yongin",KR,43
+24423,"Jinzhong",CN,43
+20305,"Gros Islet",LC,43
+3803095,"Telford",GB,43
+4411,"Baoding",CN,43
+50527,"Solden",AT,43
+3945946,"Orosei",IT,43
+2963,"Aswan",EG,43
+51018,"Spindleruv Mlyn",CZ,43
+2134442,"Tongyeong Si",KR,43
+6383,"Blenheim",NZ,43
+521506,"Gdynia",PL,43
+8577,"Calabar",NG,43
+3689743,"Grange over Sands",GB,43
+501,"Agios Nikolaos",GR,43
+18772,"Gaya",IN,43
+41412,"Pokolbin",AU,43
+1469530,"Havelock Island",IN,43
+43837,"Reit Im Winkl",DE,43
+180922,"Tignes",FR,43
+3571541,"Port St  Joe-FL",US,43
+3816495,"Jambiani",TZ,43
+3948342,"Denia",ES,43
+3945428,"Forte dei Marmi",IT,43
+6352,"Blanes",ES,43
+12105,"College Station-Tx",US,43
+3945810,"Agerola",IT,43
+1842577,"Foggia",IT,43
+34109,"Modena",IT,43
+6080,"Biloxi-Ms",US,43
+433855,"Paralia Katerini",GR,43
+4284,"Banda Aceh",ID,43
+3815370,"Hexham",GB,43
+8729,"Caloundra",AU,43
+32354,"Maroochydore",AU,43
+300682,"Tarifa",ES,43
+3815357,"Alnwick",GB,43
+4662,"Barreirinhas",BR,43
+54118,"Nago Torbole",IT,43
+49857,"Siesta Key-Fl",US,43
+47955,"Santa Teresa",CR,43
+18059,"Fredericksburg-Va",US,42
+3944940,"San Benedetto del Tronto",IT,42
+34206,"Mokpo",KR,42
+3815481,"Pitlochry",GB,42
+31074,"Mackinaw City-Mi",US,42
+5683,"Bern",CH,42
+39023,"Ouro Preto",BR,42
+905,"Albany",AU,42
+3815016,"Tenby",GB,42
+24031,"Jackson-Wy",US,42
+20260,"Grindelwald",CH,42
+9494,"Carlsbad-Ca",US,42
+6068,"Billings-Mt",US,42
+30629,"Luanda",AO,42
+1842074,"Diano Marina",IT,42
+3947369,"Alba",IT,42
+58199,"West Palm Beach-Fl",US,42
+44841,"Rosario",AR,42
+9239,"Cape May-Nj",US,42
+27128,"Kurashiki",JP,42
+24270,"Jerez De La Frontera",ES,42
+28242,"Lancaster-Pa",US,42
+28313,"Langebaan",ZA,42
+24238,"Jekyll Island-Ga",US,42
+15738,"El Chalten",AR,42
+31559,"Malmo",SE,42
+40048,"Pegeia",CY,42
+2193523,"Supply-Nc",US,42
+50659,"Songkhla",TH,42
+39330,"Palenque",MX,42
+46572,"Saipan",MP,42
+49138,"Sepang",MY,42
+178773,"Limoges",FR,42
+43333,"Rajkot",IN,42
+3945787,"Nesebar",BG,42
+20420,"Guadeloupe",GP,42
+3689883,"Kingsbridge",GB,41
+40352,"Perth",GB,41
+18928,"George Town",MY,41
+9513,"Carmel-Ca",US,41
+1612940,"Namyangju",KR,41
+2134382,"Changwon Si",KR,41
+1595,"Ambala",IN,41
+3815419,"Barnard Castle",GB,41
+46208,"Saint Moritz",CH,41
+42861,"Puntarenas",CR,41
+4387,"Banos",EC,41
+390098,"Gandia",ES,41
+1595685,"Flic En Flac",MU,41
+54394,"Trancoso",BR,41
+52678,"Tamworth",AU,41
+23924,"Iwaki",JP,41
+3949633,"Saint Raphael",FR,41
+138,"Abilene-Tx",US,41
+58613,"Williams-Az",US,41
+35441,"Mudgee",AU,41
+52484,"Taif",SA,41
+57289,"Waco-Tx",US,41
+49131,"Seongnam",KR,41
+51044,"Spokane-Wa",US,41
+3568434,"Maiori",IT,41
+3568791,"Padenghe sul Garda",IT,41
+52970,"Tavira",PT,41
+45319,"Saalbach Hinterglemm",AT,41
+50422,"Snowmass Village-Co",US,41
+23411,"Ingolstadt",DE,41
+25423,"Kawasaki",JP,41
+43207,"Rab",HR,41
+7188,"Braga",PT,41
+36833,"Newport News-Va",US,41
+12430,"Constanta",RO,41
+57921,"Weihai",CN,41
+11018,"Chesapeake-Va",US,41
+35647,"Murcia",ES,41
+3815264,"Northampton",GB,41
+33013,"Medjugorje",BA,41
+38579,"Orebic",HR,41
+38714,"Ortaca",TR,41
+180630,"Sarlat La Caneda",FR,41
+38923,"Otsu",JP,41
+49775,"Sibu",MY,41
+19196,"Girardot",CO,41
+33695,"Mildura",AU,41
+35688,"Murree",PK,41
+35006,"Morioka",JP,41
+48860,"Seaside-Or",US,40
+42885,"Purwokerto",ID,40
+16367,"Erie-Pa",US,40
+46096,"Saint Lucia",ZA,40
+7285,"Braunlage",DE,40
+26433,"Koblenz",DE,40
+8942,"Campo Grande",BR,40
+32711,"Matsue",JP,40
+2245,"Aquiraz",BR,40
+38823,"Ostend",BE,40
+178554,"Le Mans",FR,40
+1947,"Ann Arbor-Mi",US,40
+54003,"Toluca",MX,40
+270541,"Cambrils",ES,40
+40544,"Phetchaburi",TH,40
+24414,"Jinja",UG,40
+13441,"Cuxhaven",DE,40
+22782,"Huaraz",PE,40
+36030,"Nancy",FR,40
+31356,"Mainz",DE,40
+55578,"Uyo",NG,40
+54602,"Trier",DE,40
+13033,"Crans Montana",CH,40
+2954,"Astypalaia",GR,40
+46865,"Samut Songkhram",TH,40
+425673,"Fort Walton-Fl",US,40
+48026,"Santillana Del Mar",ES,40
+3548,"Bad Fussing",DE,40
+4005,"Baler",PH,40
+3944916,"Podgorica",ME,40
+5481,"Bendigo",AU,40
+27117,"Kupang",ID,40
+28945,"Leavenworth-Wa",US,40
+40218,"Penticton",CA,40
+1830,"Andorra La Vella",AD,40
+1241,"Alleppey",IN,40
+3848378,"Roissy en France",FR,40
+3786776,"Bradford",GB,40
+4310,"Banff",CA,40
+429,"Agia Pelagia",GR,40
+37788,"Nyeri",KE,40
+3815324,"Luton",GB,40
+20766,"Habarana",LK,40
+32056,"Margaret River",AU,40
+3900890,"Calheta",PT,40
+42283,"Praiano",IT,40
+43468,"Ranikhet",IN,40
+16687,"Evansville-In",US,40
+10757,"Charlottetown",CA,40
+53574,"Thrissur",IN,40
+52439,"Tagbilaran",PH,40
+18287,"Fujiyoshida",JP,40
+47921,"Santa Ponsa",ES,40
+39643,"Paramaribo",SR,40
+26626,"Konavle",HR,40
+28459,"Lapu Lapu",PH,40
+59585,"Yomitan",JP,40
+42026,"Portoferraio",IT,40
+19140,"Gilgil",KE,40
+3570593,"Orbetello",IT,40
+13335,"Culiacan",MX,39
+43345,"Rakovica",HR,39
+49713,"Shreveport-La",US,39
+35965,"Nakhon Nayok",TH,39
+3846421,"Foca",TR,39
+48620,"Schladming",AT,39
+37225,"Nong Khai",TH,39
+6041,"Bikaner",IN,39
+27426,"La Fortuna",CR,39
+49747,"Si Racha",TH,39
+36083,"Nanyuki",KE,39
+28479,"Laredo-Tx",US,39
+18096,"Freiburg",DE,39
+49159,"Serengeti National Park",TZ,39
+3569034,"Riomaggiore",IT,39
+35655,"Murfreesboro-Tn",US,39
+985,"Albury",AU,39
+22293,"Hofn",IS,39
+36394,"Neiva",CO,39
+40896,"Pipa",BR,39
+18802,"Geelong",AU,39
+3786453,"Dorchester",GB,39
+710,"Ajmer",IN,39
+24934,"Kalymnos",GR,39
+3689676,"Gloucester",GB,39
+10606,"Chandler-Az",US,39
+3946828,"Pienza",IT,39
+1680159,"Jinning",TW,39
+1683323,"Phong Nha",VN,39
+26519,"Koh Samet",TH,39
+49044,"Selva Di Val Gardena",IT,39
+52400,"Tabuk",SA,39
+15056,"Duluth-Mn",US,39
+180520,"Saint Tropez",FR,39
+3815371,"Morpeth",GB,39
+38521,"Oran",DZ,39
+179700,"Poitiers",FR,39
+1842591,"San Giovanni Rotondo",IT,39
+18058,"Fredericksburg-Tx",US,39
+3944909,"Herceg Novi",ME,39
+53011,"Te Anau",NZ,39
+55789,"Valladolid",ES,39
+34288,"Monastir",TN,39
+51248,"St Pete Beach-Fl",US,39
+32897,"Mcallen-Tx",US,39
+19772,"Goyang",KR,39
+27242,"Kyongju",KR,39
+3803048,"Stoke on Trent",GB,39
+33996,"Missoula-Mt",US,39
+12336,"Concepcion",CL,39
+13847,"Dayton-Oh",US,39
+17507,"Flores",GT,39
+24874,"Kalimpong",IN,39
+270148,"Caceres",ES,39
+47215,"San Luis Obispo-Ca",US,39
+49707,"Shoufeng",TW,39
+39057,"Overland Park-Ks",US,39
+55044,"Tuy Hoa",VN,38
+1698080,"Luberon Regional Park",FR,38
+3707,"Baddi",IN,38
+39469,"Panajachel",GT,38
+6828,"Boquete",PA,38
+3814958,"Ross on Wye",GB,38
+18379,"Fuyang",CN,38
+53962,"Tokushima",JP,38
+49189,"Serra Negra",BR,38
+54439,"Traverse City-Mi",US,38
+42535,"Provincetown-Ma",US,38
+25361,"Katoomba",AU,38
+3815967,"Oakham",GB,38
+10941,"Chelyabinsk",RU,38
+3946108,"Volterra",IT,38
+3786408,"Colchester",GB,38
+21987,"Higashiizu",JP,38
+42671,"Puerto Madryn",AR,38
+6357,"Blankenberge",BE,38
+41496,"Pompano Beach-Fl",US,38
+26563,"Kolhapur",IN,38
+25879,"Kiel",DE,38
+36208,"Nasushiobara",JP,38
+23675,"Isla Mujeres",MX,38
+24413,"Jining",CN,38
+28972,"Lech Am Arlberg",AT,38
+1340,"Alor Setar",MY,38
+3843632,"Avanos",TR,38
+52669,"Tampico",MX,38
+3946686,"Acireale",IT,38
+40645,"Piazza Armerina",IT,38
+41452,"Polokwane",ZA,38
+1842924,"Brescia",IT,38
+12560,"Copper Mountain-Co",US,38
+16642,"Eugene-Or",US,38
+7141,"Bozeman-Mt",US,38
+34197,"Mojacar",ES,38
+19875,"Grand Cayman",KY,38
+15909,"Eldoret",KE,38
+37643,"Novi Sad",RS,38
+1709684,"Padre Island National Seashore-Tx",US,38
+46574,"Saitama",JP,38
+2853,"Ashland-Or",US,38
+3815850,"Dundee",GB,38
+27241,"Kyonan",JP,38
+56372,"Viana Do Castelo",PT,38
+59358,"Yamaguchi",JP,38
+53054,"Tegucigalpa",HN,37
+5502,"Bengkulu",ID,37
+59960,"Zhangjiakou",CN,37
+3689788,"Bude",GB,37
+30280,"Londonderry",GB,37
+24110,"Jammu",IN,37
+1842575,"Brindisi",IT,37
+270421,"Segovia",ES,37
+42936,"Pyeongtaek",KR,37
+1691600,"Bulawayo",ZW,37
+270183,"Costa Teguise",ES,37
+31229,"Magelang",ID,37
+24393,"Jincheng",TW,37
+1693743,"La Digue",SC,37
+57031,"Vitoria",BR,37
+44472,"Roanoke-Va",US,37
+52098,"Suqian",CN,37
+55280,"Umag",HR,37
+4852,"Battambang",KH,37
+49601,"Shima",JP,37
+1322,"Almunecar",ES,37
+3802630,"Filey",GB,37
+3949295,"Amasya",TR,37
+6122,"Bintulu",MY,37
+38780,"Oslob",PH,37
+52667,"Tampere",FI,37
+11520,"Cikarang",ID,37
+38126,"Ohrid",MK,37
+9312,"Capoliveri",IT,37
+1389110,"Val Disere",FR,37
+27983,"Lake Charles-La",US,37
+37232,"Nonthaburi",TH,37
+3815892,"Dumfries",GB,37
+1842505,"Sant Agnello",IT,37
+179570,"Pau",FR,37
+39082,"Owerri",NG,37
+390069,"El Arenal",ES,37
+5970,"Bielefeld",DE,37
+32992,"Medford-Or",US,37
+3568781,"Limone sul Garda",IT,37
+24014,"Jackson-Ms",US,37
+55572,"Uvita",CR,37
+1481797,"Platja Daro",ES,37
+7108,"Bowling Green-Ky",US,37
+57326,"Wagga Wagga",AU,37
+55479,"Urumqi",CN,37
+3814952,"Hereford",GB,37
+59984,"Zhongshan",CN,37
+3815126,"Slough",GB,37
+10328,"Centurion",ZA,37
+51399,"Stavanger",NO,37
+54255,"Tortuguero",CR,37
+31180,"Mae Hong Son",TH,37
+37306,"Norfolk-Va",US,37
+39447,"Palu",ID,37
+1489272,"Pangandaran",ID,37
+30181,"Loei",TH,37
+1398149,"Amphawa",TH,37
+3878641,"Camarsac",FR,37
+2221031,"Maui Island-Hi",US,37
+3034,"Atlantic City-Nj",US,37
+3689842,"Bideford",GB,37
+3569024,"Levanto",IT,36
+30201,"Logrono",ES,36
+25560,"Kempton Park",ZA,36
+48166,"Sao Miguel Do Gostoso",BR,36
+3944821,"Tarragona",ES,36
+57678,"Warrnambool",AU,36
+3786300,"Southport",GB,36
+553094,"Kralendijk",BQ,36
+8351,"Cabarete",DO,36
+36843,"Newport-Or",US,36
+53314,"Tetouan",MA,36
+43702,"Redding-Ca",US,36
+56665,"Villa Gesell",AR,36
+3786507,"Chichester",GB,36
+31857,"Manuel Antonio",CR,36
+3786796,"Keighley",GB,36
+1337,"Alonissos",GR,36
+44982,"Rothenburg Ob Der Tauber",DE,36
+46581,"Sakai",JP,36
+2220930,"Bintan Island",ID,36
+23543,"Iquique",CL,36
+6128,"Biograd Na Moru",HR,36
+51086,"Springfield-Il",US,36
+30113,"Locarno",CH,36
+25953,"Killington-Vt",US,36
+17039,"Favignana",IT,36
+5038,"Beaumont-Tx",US,36
+3945398,"Gaeta",IT,36
+45244,"Rust",DE,36
+40169,"Peniche",PT,36
+52262,"Swellendam",ZA,36
+48474,"Sawai Madhopur",IN,36
+2102,"Antofagasta",CL,36
+10233,"Cedar Rapids-Ia",US,36
+52059,"Sunnyvale-Ca",US,36
+29042,"Legaspi",PH,36
+57293,"Wadduwa",LK,36
+2190,"Apollo Bay",AU,36
+37986,"Ocala-Fl",US,36
+40985,"Placencia",BZ,36
+39213,"Paestum",IT,36
+51865,"Sucre",BO,36
+1362,"Alpharetta-Ga",US,36
+3942,"Bakuriani",GE,36
+3946734,"Piraeus",GR,36
+3946157,"Gabicce Mare",IT,36
+48236,"Saratoga Springs-Ny",US,36
+3689622,"Maidstone",GB,36
+55082,"Tyler-Tx",US,36
+57937,"Weimar",DE,36
+3574491,"San Pedro Pochutla",MX,36
+45802,"Saint George-Ut",US,36
+19033,"Gettysburg-Pa",US,36
+3949699,"Agde",FR,36
+54450,"Treasure Island-Fl",US,36
+29374,"Leuven",BE,35
+56406,"Vicksburg-Ms",US,35
+390299,"San Antonio",ES,35
+21125,"Hanga Roa",CL,35
+18556,"Gandhinagar",IN,35
+177489,"Deauville",FR,35
+24418,"Jinju",KR,35
+29823,"Linz",AT,35
+3949763,"Blois",FR,35
+18275,"Fujairah",AE,35
+3815427,"Darlington",GB,35
+31278,"Mahabalipuram",IN,35
+41812,"Port Of Spain",TT,35
+3803021,"Rye",GB,35
+8253,"Busselton",AU,35
+3570331,"Salve",IT,35
+45028,"Round Rock-Tx",US,35
+13307,"Cuenca",ES,35
+36305,"Nazca",PE,35
+33329,"Merlo",AR,35
+11611,"Ciudad Juarez",MX,35
+20586,"Guimaraes",PT,35
+35566,"Multan",PK,35
+52734,"Tangshan",CN,35
+38111,"Ogunquit-Me",US,35
+1612661,"Ural",RU,35
+42681,"Puerto Montt",CL,35
+7176,"Bradenton-Fl",US,35
+59682,"Yugawara",JP,35
+52498,"Taiping",MY,35
+176639,"Besancon",FR,35
+39,"Aarhus",DK,35
+2134387,"Chuncheon Si",KR,35
+4960,"Baytown-Tx",US,35
+41926,"Portland-Me",US,35
+13548,"Dakhla",MA,35
+42731,"Puerto Villamil",EC,35
+50040,"Sinop",TR,35
+179501,"Orleans",FR,35
+3949873,"Ajman",AE,35
+11551,"Cipanas",ID,35
+29821,"Linyi",CN,35
+3689662,"Chipping Norton",GB,35
+22113,"Himeji",JP,35
+43784,"Regina",CA,35
+7878,"Bucheon",KR,35
+3568812,"Torri del Benaco",IT,35
+1580,"Amasra",TR,35
+37816,"O Grove",ES,35
+3689861,"Dartmouth",GB,35
+25282,"Kasane",BW,35
+47101,"San Ignacio",BZ,35
+54697,"Tromso",NO,35
+3815298,"Bedford",GB,35
+31721,"Mangalore",IN,35
+16419,"Erzurum",TR,35
+12591,"Corbett National Park",IN,35
+52042,"Sungai Petani",MY,35
+41608,"Pontianak",ID,35
+3689894,"Newton Abbot",GB,35
+11465,"Chungju",KR,35
+31213,"Magaluf",ES,35
+24114,"Jamshedpur",IN,35
+6445,"Blue Ridge-Ga",US,35
+37379,"North Conway-Nh",US,35
+31116,"Madeira",PT,35
+176823,"Brest",FR,35
+3945786,"Pomorie",BG,35
+3206,"Aurora-Co",US,35
+32114,"Maribor",SI,34
+42675,"Puerto Maldonado",PE,34
+55209,"Ujjain",IN,34
+41311,"Pocos De Caldas",BR,34
+9666,"Carvoeiro",PT,34
+3944989,"Foligno",IT,34
+17757,"Forster",AU,34
+58426,"White River",ZA,34
+1843005,"Livorno",IT,34
+583,"Ahangama",LK,34
+3802791,"Doncaster",GB,34
+3945906,"Budoni",IT,34
+3786580,"Weston super Mare",GB,34
+27076,"Kumbhalgarh",IN,34
+179301,"Morzine",FR,34
+39833,"Passau",DE,34
+55827,"Valledupar",CO,34
+55106,"Tyumen",RU,34
+45246,"Rustenburg",ZA,34
+39215,"Pag",HR,34
+11644,"Civitavecchia",IT,34
+59138,"Wuppertal",DE,34
+56990,"Visby",SE,34
+32853,"Mazamitla",MX,34
+3947946,"Adrasan",TR,34
+37260,"Norcross-Ga",US,34
+6124,"Binz",DE,34
+39913,"Patzcuaro",MX,34
+2134344,"Con Dao Islands",VN,34
+41436,"Polis",CY,34
+7810,"Brunswick-Ga",US,34
+28107,"Lakes Entrance",AU,34
+9372,"Caraguatatuba",BR,34
+3786704,"Chesterfield",GB,34
+1682056,"Chiang Khan",TH,34
+5056,"Beaver Creek-Co",US,34
+19699,"Goseong",KR,34
+18671,"Garopaba",BR,34
+49613,"Shimoda",JP,34
+3815143,"Portree",GB,34
+40689,"Picton",NZ,34
+521626,"Mielno",PL,34
+15228,"Dwarka",IN,34
+24840,"Kalamazoo-Mi",US,34
+55033,"Tux",AT,34
+15654,"Eindhoven",NL,34
+57858,"Wayanad",IN,34
+50789,"South Bend-In",US,34
+30786,"Lumut",MY,34
+31675,"Mancora",PE,34
+23377,"Indio-Ca",US,34
+19707,"Goslar",DE,34
+181077,"Vannes",FR,34
+53994,"Tolo",GR,34
+1738,"Anacapri",IT,34
+41693,"Port Antonio",JM,34
+38722,"Ortisei",IT,34
+39298,"Palangkaraya",ID,34
+3786263,"Bury St Edmunds",GB,34
+552878,"Nyaungshwe",MM,34
+11141,"Chiclana De La Frontera",ES,34
+27202,"Kuusamo",FI,34
+46882,"San Angelo-Tx",US,34
+3945154,"Crotone",IT,34
+176659,"Beziers",FR,33
+18015,"Franklin-Tn",US,33
+19541,"Golden",CA,33
+3570572,"Castiglione della Pescaia",IT,33
+52072,"Sunshine Coast",AU,33
+20977,"Halls Gap",AU,33
+50078,"Siofok",HU,33
+55910,"Vancouver-Wa",US,33
+58473,"Whitianga",NZ,33
+28516,"Las Cruces-Nm",US,33
+35282,"Mount Pleasant-Sc",US,33
+3689794,"Liskeard",GB,33
+37970,"Obidos",PT,33
+15036,"Duisburg",DE,33
+33099,"Melbourne-Fl",US,33
+6005,"Big Sky-Mt",US,33
+43578,"Ravello",IT,33
+21950,"Heviz",HU,33
+1679769,"Tissamaharama",LK,33
+25635,"Kep",KH,33
+48138,"Sao Jose Dos Campos",BR,33
+2797,"Ascona",CH,33
+1842077,"Imperia",IT,33
+3815845,"St Andrews",GB,33
+40730,"Pietermaritzburg",ZA,33
+3950099,"Hydra",GR,33
+3689700,"Stroud",GB,33
+58932,"Wollongong",AU,33
+39373,"Palm Cove",AU,33
+38659,"Ormond Beach-Fl",US,33
+52177,"Suwa",JP,33
+1527,"Alwar",IN,33
+3802717,"Conwy",GB,33
+11722,"Clarksville-Tn",US,33
+3843639,"Uchisar",TR,33
+52857,"Taroudant",MA,33
+10254,"Celaya",MX,33
+54424,"Trat",TH,33
+57126,"Volgograd",RU,33
+30814,"Luodong",TW,33
+21043,"Hamilton",CA,33
+38900,"Otari",JP,33
+15182,"Durango-Co",US,33
+30565,"Loutraki",GR,33
+19274,"Gladstone",AU,33
+59696,"Yuma-Az",US,33
+24857,"Kalaw",MM,33
+18372,"Fussen",DE,33
+24396,"Jindabyne",AU,33
+36073,"Nantucket-Ma",US,33
+35888,"Nagarkot",NP,33
+41282,"Plzen",CZ,33
+176726,"Bonifacio",FR,33
+3786209,"Portsmouth",GB,33
+56664,"Villa General Belgrano",AR,33
+3949609,"Frejus",FR,33
+17776,"Fort Collins-Co",US,33
+38329,"Olongapo",PH,33
+44465,"Rizhao",CN,33
+43002,"Qinhuangdao",CN,33
+12794,"Costa Adeje",ES,33
+41454,"Polonnaruwa",LK,33
+57771,"Waterford",IE,33
+57919,"Weifang",CN,33
+55133,"Uberlandia",BR,33
+17063,"Fazana",HR,33
+54211,"Torreon",MX,33
+3786451,"Bridport",GB,33
+24918,"Kalpitiya",LK,33
+51841,"Subang Jaya",MY,33
+1842490,"Castellammare Di Stabia",IT,33
+16336,"Erdek",TR,33
+47231,"San Marcos-Tx",US,33
+3846014,"Melaya",ID,33
+3802667,"Richmond",GB,33
+17886,"Fortuna",CR,33
+28054,"Lake Placid-Ny",US,33
+733,"Akita",JP,32
+270703,"Santa Eulalia Del Rio",ES,32
+926,"Albena",BG,32
+37945,"Oberstaufen",DE,32
+132,"Abha",SA,32
+17494,"Florence-Ky",US,32
+25764,"Khanom",TH,32
+521551,"Katowice",PL,32
+54096,"Topeka-Ks",US,32
+36215,"Natchez-Ms",US,32
+3949840,"Ain Soukhna",EG,32
+1842500,"Piano Di Sorrento",IT,32
+36145,"Narita",JP,32
+32585,"Massa",IT,32
+38011,"Oceanside-Ca",US,32
+3946809,"Montalcino",IT,32
+48857,"Seaside Heights-Nj",US,32
+12222,"Columbia-Mo",US,32
+23477,"Invercargill",NZ,32
+1611711,"Ngapali Beach",MM,32
+49621,"Shimonoseki",JP,32
+14691,"Donggang",TW,32
+32464,"Martinique",MQ,32
+34672,"Monteria",CO,32
+51748,"Stresa",IT,32
+30278,"London",CA,32
+23223,"Ilheus",BR,32
+270125,"Avila",ES,32
+1139017,"Belitung",ID,32
+1468313,"Vityazevo",RU,32
+1693785,"Freetown",SL,32
+21088,"Hampton-Nh",US,32
+3949334,"Sakarya",TR,32
+51876,"Sudbury",CA,32
+3846005,"Karangasem",ID,32
+38575,"Ordu",TR,32
+16337,"Erdemli",TR,32
+25717,"Key Largo-Fl",US,32
+3571034,"Fort Myers Beach-FL",US,32
+6500,"Boca Chica",DO,32
+3815123,"Newbury",GB,32
+176230,"Amiens",FR,32
+31960,"Marathon-Fl",US,32
+58919,"Wolfsburg",DE,32
+11371,"Chonburi",TH,32
+55591,"Vaalwater",ZA,32
+58315,"Westport",IE,32
+47929,"Santa Rosa-Ca",US,32
+35059,"Morro Bay-Ca",US,32
+3815131,"Windsor",GB,32
+36218,"Nathdwara",IN,32
+43032,"Quanzhou",CN,32
+1682620,"Sakon Nakhon",TH,32
+2783,"Ascea",IT,32
+9923,"Castelsardo",IT,32
+37409,"North Little Rock-Ar",US,32
+10947,"Chemnitz",DE,32
+1512505,"Patras",GR,32
+47044,"San Gil",CO,32
+37719,"Nuevo Vallarta",MX,32
+54701,"Trondheim",NO,32
+3689795,"Looe",GB,32
+20442,"Guam",GU,32
+1842011,"Laquila",IT,32
+6216,"Bismarck-Nd",US,32
+30380,"Longview-Tx",US,32
+3572,"Bad Hofgastein",AT,32
+40522,"Phalaborwa",ZA,32
+176172,"Aix Les Bains",FR,31
+181048,"Val Thorens",FR,31
+3802918,"Banbury",GB,31
+3569339,"Altamura",IT,31
+15696,"El Alamein",EG,31
+1239,"Allentown-Pa",US,31
+3689991,"Brampton",GB,31
+55151,"Ucluelet",CA,31
+55250,"Ulm",DE,31
+52406,"Tacloban",PH,31
+176179,"Albi",FR,31
+3945585,"Fermo",IT,31
+27173,"Kushiro",JP,31
+3945807,"Pistoia",IT,31
+3257,"Aveiro",PT,31
+38962,"Ouagadougou",BF,31
+40940,"Pismo Beach-Ca",US,31
+17978,"Francistown",BW,31
+15181,"Durango",MX,31
+1617,"Ambon",ID,31
+49852,"Sierra Nevada",ES,31
+39149,"Paarl",ZA,31
+270655,"Port De Pollenca",ES,31
+37299,"Norfolk Island",AU,31
+1481792,"Lestartit",ES,31
+26705,"Koriyama",JP,31
+179057,"Menton",FR,31
+1686967,"Praia Do Rosa",BR,31
+39511,"Pangkor",MY,31
+25944,"Killeen-Tx",US,31
+31279,"Mahahual",MX,31
+178082,"Hyeres",FR,31
+1352013,"Saalbach",AT,31
+23962,"Izmit",TR,31
+20480,"Guarapari",BR,31
+7968,"Buffalo-Ny",US,31
+26656,"Konstanz",DE,31
+58751,"Windsor",CA,31
+2179,"Apia",WS,31
+179086,"Metz",FR,31
+6463,"Blumenau",BR,31
+11256,"Chino",JP,31
+9485,"Carlisle-Pa",US,31
+3786794,"Huddersfield",GB,31
+40543,"Phetchabun",TH,31
+3802664,"Pickering",GB,31
+3570661,"Lido di Camaiore",IT,31
+1842044,"Lamezia Terme",IT,31
+53218,"Teresina",BR,31
+3745,"Baga",IN,31
+28101,"Lakeland-Fl",US,31
+6715,"Bolzano",IT,31
+25746,"Khajuraho",IN,31
+41572,"Ponte De Lima",PT,31
+9127,"Canoa Quebrada",BR,31
+39461,"Pamporovo",BG,31
+31963,"Marau",BR,31
+23556,"Irapuato",MX,31
+40663,"Pichilemu",CL,31
+33108,"Melendugno",IT,31
+53489,"Thiruvananthapuram",IN,31
+41321,"Podgora",HR,31
+41219,"Plitvice",HR,31
+3786508,"Crawley",GB,31
+20890,"Haines City-Fl",US,31
+3945138,"Capo Vaticano",IT,31
+10026,"Castro",CL,31
+21293,"Hartbeespoort",ZA,31
+26880,"Krasnoyarsk",RU,31
+34499,"Montauk-Ny",US,31
+521605,"Lublin",PL,31
+29464,"Lianyungang",CN,31
+6538,"Bodh Gaya",IN,31
+18173,"Friedrichshafen",DE,31
+18690,"Garut",ID,31
+37739,"Numazu",JP,31
+39256,"Paju",KR,31
+13739,"Darmstadt",DE,31
+26434,"Kobuleti",GE,30
+58250,"Westerland",DE,30
+180582,"Saintes Maries De La Mer",FR,30
+3585576,"Piedras Encimadas Valley",MX,30
+39598,"Paracas",PE,30
+38446,"Onomichi",JP,30
+3945849,"Pozzuoli",IT,30
+29630,"Lilongwe",MW,30
+3786693,"Bakewell",GB,30
+9370,"Caracas",VE,30
+49297,"Seward-Ak",US,30
+59614,"York-Pa",US,30
+3815363,"Berwick upon Tweed",GB,30
+47928,"Santa Rosa Beach-Fl",US,30
+1843007,"Marciana Marina",IT,30
+3946089,"Todi",IT,30
+25068,"Kangra",IN,30
+4925,"Bayahibe",DO,30
+4151,"Bamberg",DE,30
+46692,"Salina-Ks",US,30
+24207,"Jazan",SA,30
+178542,"Le Havre",FR,30
+45332,"Saarbrucken",DE,30
+53884,"Tobago",TT,30
+2125,"Anyang",KR,30
+48558,"Schaumburg-Il",US,30
+2510,"Arica",CL,30
+35239,"Mount Gambier",AU,30
+15055,"Duluth-Ga",US,30
+54819,"Tsuruoka",JP,30
+8009,"Bukovel",UA,30
+2134390,"Danyang Gun",KR,30
+6417,"Bloomington-In",US,30
+35479,"Mugla",TR,30
+23290,"Imbituba",BR,30
+6915,"Borovets",BG,30
+18506,"Gallup-Nm",US,30
+58800,"Winston Salem-Nc",US,30
+47526,"Sandusky-Oh",US,30
+3815509,"Betws y Coed",GB,30
+48147,"Sao Lourenco",BR,30
+1612829,"Jinju Si",KR,30
+33474,"Mexicali",MX,30
+47807,"Santa Cruz De Tenerife",ES,30
+53385,"Thanh Hoa",VN,30
+21859,"Hermosillo",MX,30
+57177,"Voronezh",RU,30
+3569349,"Castellana Grotte",IT,30
+6416,"Bloomington-Il",US,30
+39165,"Pachuca",MX,30
+56512,"Vigan",PH,30
+3473,"Bac Ninh",VN,30
+4640,"Barra Grande",BR,30
+1683186,"Ha Giang",VN,30
+28215,"Lampedusa",IT,30
+2134451,"Yeongdeok Gun",KR,30
+3946180,"Urbino",IT,30
+807,"Al Jubail",SA,30
+3985,"Balchik",BG,30
+26160,"Kirishima",JP,30
+46759,"Saltillo",MX,30
+176174,"Ajaccio",FR,30
+3945924,"Golfo Aranci",IT,30
+49387,"Shangrao",CN,30
+1351736,"Bad Kleinkirchheim",AT,30
+53208,"Tequisquiapan",MX,30
+17395,"Flachau",AT,30
+11994,"Cody-Wy",US,30
+9055,"Candolim",IN,30
+8319,"Byblos",LB,30
+42473,"Pristina",RS,30
+3845927,"Koh Lanta",TH,30
+3846422,"Karaburun",TR,30
+177151,"Chartres",FR,30
+3946797,"Castellina In Chianti",IT,30
+52890,"Tasikmalaya",ID,30
+58346,"Wexford",IE,30
+13065,"Creel",MX,29
+19889,"Grand Junction-Co",US,29
+2220,"Appleton-Wi",US,29
+3967221,"Varkala",IN,29
+11362,"Cholula",MX,29
+1610038,"Koh Rong Sanloem Island",KH,29
+58509,"Wichita Falls-Tx",US,29
+42018,"Porto Velho",BR,29
+47576,"Sanibel-Fl",US,29
+55412,"Uppsala",SE,29
+49261,"Setubal",PT,29
+1048868,"Al Hofuf",SA,29
+44559,"Rock Hill-Sc",US,29
+42817,"Punta Arenas",CL,29
+39220,"Page-Az",US,29
+3569029,"Monterosso al Mare",IT,29
+59143,"Wurzburg",DE,29
+390224,"Playa De Muro",ES,29
+3570634,"San Vincenzo",IT,29
+3848176,"Palm Beach",AW,29
+2774,"Asan",KR,29
+3944907,"Bar",ME,29
+6965,"Bossier City-La",US,29
+14510,"Diyarbakir",TR,29
+43965,"Revelstoke",CA,29
+39372,"Palm Coast-Fl",US,29
+42041,"Portoroz",SI,29
+3945830,"Ercolano",IT,29
+3946211,"Fiuggi",IT,29
+48320,"Sasebo",JP,29
+53155,"Temuco",CL,29
+3803080,"Ludlow",GB,29
+39375,"Palm Desert-Ca",US,29
+51680,"Stralsund",DE,29
+43803,"Rehoboth Beach-De",US,29
+3689793,"Launceston",GB,29
+3572871,"Shangri-La",CN,29
+59401,"Yangsan",KR,29
+3585547,"La Trinitaria",MX,29
+14796,"Dothan-Al",US,29
+44464,"Rize",TR,29
+43118,"Quetzaltenango",GT,29
+53119,"Temecula-Ca",US,29
+3815085,"Knighton",GB,29
+11605,"Ciudad Del Carmen",MX,29
+55799,"Valle De Guadalupe",MX,29
+3663260,"Cirencester",GB,29
+48087,"Santos",BR,29
+1684034,"Antigua Guatemala",GT,29
+3689805,"Wadebridge",GB,29
+55717,"Valdosta-Ga",US,29
+20618,"Gulfport-Ms",US,29
+1842518,"Fano",IT,29
+27507,"La Malbaie",CA,29
+39826,"Paso Robles-Ca",US,29
+39206,"Paducah-Ky",US,29
+16221,"Enniskillen",GB,29
+300402,"Roquetas De Mar",ES,29
+3945350,"Arco",IT,29
+2997,"Athens-Ga",US,29
+52985,"Taxco",MX,29
+3949819,"Olympos",TR,29
+31839,"Manta",EC,29
+42945,"Pylos",GR,29
+55906,"Van",TR,29
+25926,"Kilkenny",IE,29
+1842051,"Praia A Mare",IT,29
+3569342,"Barletta",IT,29
+14033,"Delphi",GR,29
+21140,"Hanmer Springs",NZ,29
+5171,"Begur",ES,29
+43491,"Rapallo",IT,29
+5576,"Berat",AL,29
+3845712,"Kamala",TH,29
+59350,"Yalova",TR,29
+51705,"Stratford",CA,29
+33880,"Minot-Nd",US,29
+22783,"Huasca De Ocampo",MX,29
+3786691,"Ashbourne",GB,29
+35507,"Muju",KR,29
+30488,"Los Mochis",MX,29
+178546,"Le Lavandou",FR,29
+57118,"Volcano-Hi",US,29
+7287,"Braunschweig",DE,29
+59124,"Wuhu",CN,29
+1842527,"Campobasso",IT,29
+1682646,"Sara Buri",TH,29
+37588,"Nouakchott",MR,29
+50718,"Sorocaba",BR,29
+746,"Akron-Oh",US,29
+41601,"Pontevedra",ES,29
+47430,"San Vicente",PH,29
+3574262,"Penida",ID,28
+44576,"Rockford-Il",US,28
+1798,"Andalo",IT,28
+5363,"Bellevue-Wa",US,28
+29665,"Limerick",IE,28
+3786224,"Winchester",GB,28
+35261,"Mount Laurel-Nj",US,28
+25399,"Kaunas",LT,28
+5575,"Berastagi",ID,28
+18197,"Frisco-Tx",US,28
+521623,"Miedzyzdroje",PL,28
+9495,"Carlsbad-Nm",US,28
+1489516,"Senggigi",ID,28
+3903284,"Santa Susanna",ES,28
+552991,"Santa Maria",CV,28
+59269,"Xining",CN,28
+3947753,"Aosta",IT,28
+48137,"Sao Jose Do Rio Preto",BR,28
+3815421,"Bishop Auckland",GB,28
+36590,"Neustift Im Stubaital",AT,28
+46791,"Saly",SN,28
+40109,"Peloponnese",GR,28
+3945417,"Terracina",IT,28
+16378,"Erlangen",DE,28
+33051,"Megeve",FR,28
+3947826,"Cavallino Treporti",IT,28
+21268,"Harrisonburg-Va",US,28
+33627,"Mie",JP,28
+24019,"Jackson-Tn",US,28
+55379,"Unzen",JP,28
+24025,"Jacksonville-Nc",US,28
+3689990,"Barrow in Furness",GB,28
+4701,"Barstow-Ca",US,28
+39403,"Palmas",BR,28
+46946,"San Casciano In Val Di Pesa",IT,28
+180474,"Saint Remy De Provence",FR,28
+1628,"Amelia Island-Fl",US,28
+35933,"Nairn",GB,28
+39551,"Pantelleria",IT,28
+35259,"Mount Kenya National Park",KE,28
+21395,"Hattiesburg-Ms",US,28
+38902,"Otavalo",EC,28
+7699,"Broome",AU,28
+3786588,"Yeovil",GB,28
+1139023,"Jember",ID,28
+1404926,"Addo",ZA,28
+18299,"Fulda",DE,28
+56110,"Vejer De La Frontera",ES,28
+40884,"Pinzolo",IT,28
+3948003,"Patara",TR,28
+14694,"Donghae",KR,28
+45432,"Saga",JP,28
+32550,"Maseru",LS,28
+24233,"Jeffreys Bay",ZA,28
+9289,"Capitolio",BR,28
+39168,"Pacific Grove-Ca",US,28
+39431,"Palo Alto-Ca",US,28
+432632,"Agios Vasileios",GR,28
+35968,"Nakhon Sawan",TH,28
+3815561,"Crianlarich",GB,28
+31183,"Mae Rim",TH,28
+3945971,"Sassari",IT,28
+3815706,"Dolgellau",GB,28
+4046,"Ballina",AU,28
+23088,"Idaho Falls-Id",US,28
+15774,"El Jadida",MA,28
+2259,"Arachova",GR,28
+3572357,"Hulhumale",MV,28
+50974,"Spartanburg-Sc",US,28
+54949,"Tupelo-Ms",US,28
+40211,"Pensacola Beach-Fl",US,28
+25736,"Khabarovsk",RU,28
+42330,"Predeal",RO,28
+7616,"Broken Hill",AU,28
+1308,"Almeria",ES,28
+29392,"Levico Terme",IT,28
+37557,"Nosara",CR,28
+14266,"Dharamshala",IN,28
+58082,"Wernigerode",DE,28
+9864,"Castelldefels",ES,28
+2053454,"Ascoli Piceno",IT,28
+48380,"Saugatuck-Mi",US,28
+3946798,"Castelnuovo Berardenga",IT,28
+47754,"Santa Clara-Ca",US,28
+11976,"Cocoa Beach-Fl",US,28
+3945226,"Bellagio",IT,28
+22536,"Hope Valley",GB,28
+51657,"Stowe-Vt",US,28
+46696,"Salinas",EC,28
+39483,"Panchgani",IN,28
+3945960,"Porto Cervo",IT,28
+18196,"Frisco-Co",US,28
+54988,"Turku",FI,28
+5370,"Bellingham-Wa",US,28
+15961,"Elkhart-In",US,28
+25599,"Kennesaw-Ga",US,28
+36302,"Nazare",PT,28
+3815583,"Aberystwyth",GB,28
+3946903,"Oristano",IT,28
+3815700,"Bangor",GB,28
+28220,"Lamphun",TH,28
+23974,"Izumo",JP,28
+2086,"Antigua",AG,28
+3572178,"UJUNG PANDANG",ID,28
+54543,"Tres De Mayo",MX,28
+36483,"Netanya",IL,28
+23619,"Ise",JP,28
+521549,"Karpacz",PL,28
+176542,"Bayeux",FR,27
+27834,"Lafayette-In",US,27
+42818,"Punta Arena",CL,27
+36303,"Nazareth",IL,27
+16179,"Engelberg",CH,27
+3689827,"Tintagel",GB,27
+58719,"Winchester-Va",US,27
+1842589,"Rodi Garganico",IT,27
+50275,"Skoura",MA,27
+36022,"Nanaimo",CA,27
+424817,"Big Bear City-Ca",US,27
+3949750,"Amboise",FR,27
+180472,"Saint Regle",FR,27
+21961,"Heze",CN,27
+3947828,"Chioggia",IT,27
+1542646,"Saint Pauls Bay",MT,27
+15968,"Elko-Nv",US,27
+31236,"Maggie Valley-Nc",US,27
+16814,"Fairbanks-Ak",US,27
+1489097,"Lembang",ID,27
+3786474,"Crewe",GB,27
+56224,"Ventura-Ca",US,27
+27340,"La Ceiba",HN,27
+12977,"Cowes",AU,27
+56306,"Vero Beach-Fl",US,27
+31017,"Macae",BR,27
+11077,"Cheyenne-Wy",US,27
+30075,"Lleida",ES,27
+31184,"Mae Sai",TH,27
+3946033,"Salsomaggiore Terme",IT,27
+36845,"Newport-Tn",US,27
+22165,"Hirosaki",JP,27
+1512035,"Loutra Edipsou",GR,27
+23081,"Icmeler",TR,27
+176316,"Argeles Sur Mer",FR,27
+44766,"Romulus-Mi",US,27
+49678,"Shkoder",AL,27
+13799,"Davenport-Ia",US,27
+1842001,"Asti",IT,27
+53754,"Tinghir",MA,27
+41638,"Popayan",CO,27
+34136,"Moena",IT,27
+26575,"Koloa-Hi",US,27
+4171,"Ban Chang",TH,27
+29355,"Leticia",CO,27
+2134438,"Seosan Si",KR,27
+1384823,"Orgnac Laven",FR,27
+521772,"Szklarska Poreba",PL,27
+35937,"Naivasha",KE,27
+20524,"Gudauri",GE,27
+53059,"Tehri",IN,27
+7390,"Bressanone",IT,27
+180254,"Saint Jean De Luz",FR,27
+59561,"Yinchuan",CN,27
+2590,"Armidale",AU,27
+178684,"Les Deux Alpes",FR,27
+39851,"Pasto",CO,27
+3946307,"Palinuro",IT,27
+8807,"Cambridge-Ma",US,27
+3803011,"Hastings",GB,27
+3802748,"Clitheroe",GB,27
+1685494,"Abraao",BR,27
+55937,"Vantaa",FI,27
+1842025,"Vasto",IT,27
+48167,"Sao Miguel Dos Milagres",BR,27
+1998,"Anqing",CN,27
+3786540,"Bridgwater",GB,27
+26492,"Koh Kood",TH,27
+4819,"Batemans Bay",AU,27
+36830,"Newport Beach-Ca",US,27
+29171,"Lenox-Ma",US,27
+3568440,"Vietri Sul Mare",IT,27
+40804,"Pinamar",AR,27
+26297,"Klamath Falls-Or",US,27
+3946805,"Gaiole in Chianti",IT,27
+3945314,"Greve in Chianti",IT,27
+181053,"Valence",FR,27
+4528,"Bareilly",IN,27
+1709463,"North Lake Tahoe-Ca",US,27
+270153,"Caleta De Fuste",ES,27
+9637,"Cartagena",ES,27
+55715,"Valdivia",CL,27
+32858,"Mazara Del Vallo",IT,27
+55177,"Ueda",JP,27
+14813,"Douglas",GB,27
+40735,"Pietra Ligure",IT,27
+521569,"Koscielisko",PL,27
+1489664,"Tegal",ID,27
+50757,"Soufriere",LC,27
+1351860,"Ischgl",AT,27
+3945584,"Civitanova Marche",IT,27
+1489219,"Ngadisari",ID,27
+13293,"Cucuta",CO,27
+35420,"Muar",MY,27
+17289,"Finale Ligure",IT,27
+1842866,"Reggio Emilia",IT,27
+24511,"Joinville",BR,27
+6510,"Boca Raton-Fl",US,27
+27906,"Laguna Beach-Ca",US,26
+3786532,"Worthing",GB,26
+11693,"Clarens",ZA,26
+429451,"Yarmouth-Ma",US,26
+3947761,"Breuil Cervinia",IT,26
+32907,"Mcdonough-Ga",US,26
+22321,"Hohhot",CN,26
+59383,"Yanbu",SA,26
+3569608,"Zafferana Etnea",IT,26
+14108,"Denton-Tx",US,26
+39486,"Panchkula",IN,26
+53727,"Timmendorfer Strand",DE,26
+3569352,"Conversano",IT,26
+5585,"Berchtesgaden",DE,26
+22650,"Hospitalet De Llobregat",ES,26
+43050,"Quartu Sant Elena",IT,26
+51834,"Suances",ES,26
+8848,"Camiguin",PH,26
+59095,"Wrexham",GB,26
+38858,"Ostrava",CZ,26
+10567,"Champaign-Il",US,26
+1401951,"Saint Gallen",CH,26
+3946788,"Asciano",IT,26
+16926,"Falmouth-Ma",US,26
+3568769,"Castelnuovo del Garda",IT,26
+47859,"Santa Margherita Ligure",IT,26
+20049,"Great Falls-Mt",US,26
+1842037,"Catanzaro",IT,26
+2134379,"Boryeong Si",KR,26
+3947951,"Beldibi",TR,26
+46753,"Saltburn By The Sea",GB,26
+41444,"Pollensa",ES,26
+29194,"Leon",NI,26
+7737,"Brownsville-Tx",US,26
+3569369,"Noci",IT,26
+40311,"Perm",RU,26
+3802684,"Thirsk",GB,26
+48191,"Sao Tome",ST,26
+15403,"Eau Claire-Wi",US,26
+3663675,"Yorkshire Dales",GB,26
+48263,"Sarigerme",TR,26
+38004,"Ocean Shores-Wa",US,26
+3815773,"Llangollen",GB,26
+52696,"Tanah Rata",MY,26
+30734,"Lugo",ES,26
+2627,"Arosa",CH,26
+181000,"Troyes",FR,26
+30089,"Llucmajor",ES,26
+39366,"Palm Beach-Fl",US,26
+433653,"Kolymbari",GR,26
+1679526,"Matara",LK,26
+51386,"State College-Pa",US,26
+27746,"Labuan",MY,26
+32134,"Marietta-Ga",US,26
+2134414,"Hongcheon Gun",KR,26
+2380,"Arcos De La Frontera",ES,26
+25487,"Keflavik",IS,26
+3689900,"Okehampton",GB,26
+54217,"Torres",BR,26
+37241,"Noordwijk",NL,26
+44188,"Rijeka",HR,26
+8737,"Caltagirone",IT,26
+3948326,"Benissa",ES,26
+19002,"Gero",JP,26
+8530,"Cajamarca",PE,26
+24800,"Kajang",MY,26
+43866,"Renai",TW,26
+3946127,"Mattinata",IT,26
+3570281,"Alliste",IT,26
+1277,"Almada",PT,26
+42221,"Prachin Buri",TH,26
+23878,"Ithaca-Ny",US,26
+3815860,"Ayr",GB,26
+42486,"Procida",IT,26
+14480,"Disneyland",FR,26
+50528,"Soldeu",AD,26
+23796,"Isparta",TR,26
+7522,"Brinchang",MY,26
+27017,"Kucukkuyu",TR,26
+31227,"Magdeburg",DE,26
+50623,"Somnath",IN,26
+49127,"Seogwipo",KR,26
+47992,"Santarem",BR,26
+42596,"Pueblo-Co",US,26
+30923,"Lynchburg-Va",US,26
+8123,"Burhaniye",TR,26
+48905,"Seeb",OM,26
+21803,"Hepburn Springs",AU,26
+50158,"Sivas",TR,26
+23492,"Inverness-Fl",US,26
+22225,"Hobbs-Nm",US,26
+3803047,"Stafford",GB,26
+3319,"Avon-Co",US,26
+40913,"Pirenopolis",BR,26
+39230,"Pahalgam",IN,26
+17813,"Fort Mcmurray",CA,26
+39435,"Palomino",CO,26
+4546,"Barichara",CO,26
+22451,"Homer-Ak",US,26
+47169,"San Juan",AR,26
+3571036,"Fort Walton Beach-FL",US,26
+21686,"Helena-Mt",US,26
+42439,"Prince George",CA,26
+3946075,"Magione",IT,26
+50472,"Soelden",AT,25
+27072,"Kumarakom",IN,25
+24286,"Jersey",GB,25
+44958,"Roswell-Nm",US,25
+11099,"Chiang Dao",TH,25
+23044,"Ibague",CO,25
+37160,"Noboribetsu",JP,25
+23687,"Islamorada-Fl",US,25
+3569528,"Licata",IT,25
+13450,"Cyberjaya",MY,25
+521779,"Torun",PL,25
+59333,"Yakima-Wa",US,25
+24213,"Jecheon",KR,25
+50997,"Spetses",GR,25
+3815352,"Malvern",GB,25
+44076,"Richards Bay",ZA,25
+1690236,"Kinshasa",CD,25
+3945779,"Burgas / Black Sea Resorts",BG,25
+22406,"Holmes Beach-Fl",US,25
+25251,"Kars",TR,25
+20176,"Grenada",GD,25
+18473,"Galena-Il",US,25
+3949627,"Sainte Maxime",FR,25
+20761,"Haarlem",NL,25
+36409,"Nelson Bay",AU,25
+23260,"Ilocos",PH,25
+26030,"Kingman-Az",US,25
+7145,"Bozhou",CN,25
+3568585,"Gatteo a Mare",IT,25
+1843110,"Sestriere",IT,25
+37946,"Oberstdorf",DE,25
+3815483,"Aviemore",GB,25
+268264,"Canyon Lake-Tx",US,25
+17264,"Figueira Da Foz",PT,25
+55080,"Tybee Island-Ga",US,25
+35895,"Naggar",IN,25
+1382789,"Les Sables Dolonne",FR,25
+29353,"Lethbridge",CA,25
+3802677,"Settle",GB,25
+52322,"Syracuse-Ny",US,25
+3786279,"Woodbridge",GB,25
+53148,"Temple-Tx",US,25
+34986,"Morgantown-Wv",US,25
+12539,"Copan Ruinas",HN,25
+6525,"Bochum",DE,25
+22140,"Hinterglemm",AT,25
+37032,"Nijmegen",NL,25
+56612,"Vilanculos",MZ,25
+18061,"Fredericton",CA,25
+30289,"Londrina",BR,25
+25411,"Kavos",GR,25
+57356,"Waiheke Island",NZ,25
+3786484,"Macclesfield",GB,25
+16364,"Ericeira",PT,25
+3786247,"Solihull",GB,25
+13893,"Deadwood-Sd",US,25
+14989,"Dublin-Oh",US,25
+15196,"Durg",IN,25
+39803,"Pasadena-Ca",US,25
+3815113,"Ventnor",GB,25
+29357,"Letojanni",IT,25
+3945273,"Menaggio",IT,25
+2170939,"Kea Island",GR,25
+179337,"Mulhouse",FR,25
+270429,"Soria",ES,25
+176911,"Calais",FR,25
+54294,"Tottori",JP,25
+34807,"Montreux",CH,25
+58008,"Wells-Me",US,25
+5906,"Bhuj",IN,25
+33346,"Merrillville-In",US,25
+29740,"Lindau",DE,25
+9648,"Cartersville-Ga",US,25
+8927,"Campitello Di Fassa",IT,25
+30401,"Lop Buri",TH,25
+29369,"Leura",AU,25
+53220,"Teresopolis",BR,25
+43065,"Quedlinburg",DE,25
+51251,"St Petersburg-Fl",US,25
+13688,"Danyang",KR,25
+53075,"Tekirdag",TR,25
+26295,"Klaipeda",LT,25
+33304,"Merida",ES,25
+1842567,"Valeggio Sul Mincio",IT,25
+5566,"Bentonville-Ar",US,25
+17581,"Folgaria",IT,25
+58372,"Whangarei",NZ,25
+48767,"Schwerin",DE,25
+34656,"Montenegro",CO,25
+38530,"Orange",AU,25
+33538,"Miaoli",TW,25
+17081,"Fehmarn",DE,25
+40007,"Pecos-Tx",US,25
+38405,"Omsk",RU,25
+42210,"Pozza Di Fassa",IT,25
+3571134,"Historic Bayfront-OR",US,25
+695302,"Nakhon Phanom",TH,25
+34261,"Molveno",IT,25
+37362,"North Bay",CA,25
+29496,"Libreville",GA,25
+6509,"Boca Grande-Fl",US,25
+10135,"Cavalese",IT,25
+11486,"Chuzhou",CN,25
+46918,"San Bernardino-Ca",US,25
+23017,"Hyannis-Ma",US,25
+42619,"Puerto Baquerizo Moreno",EC,25
+176298,"Arcachon",FR,25
+11928,"Coatzacoalcos",MX,24
+25159,"Karatsu",JP,24
+28433,"Laoag",PH,24
+23972,"Izumisano",JP,24
+56436,"Victoria-Tx",US,24
+50955,"Spangmik",IN,24
+3689911,"Sidmouth",GB,24
+176780,"Bourges",FR,24
+3949971,"Paje",TZ,24
+43208,"Rabac",HR,24
+13666,"Dania Beach-Fl",US,24
+3786380,"Horley",GB,24
+56573,"Vila Nova De Milfontes",PT,24
+48465,"Savonlinna",FI,24
+30961,"Lytham Saint Annes",GB,24
+177401,"Courbevoie",FR,24
+4870,"Batu Pahat",MY,24
+54388,"Tralee",IE,24
+48259,"Sarentino",IT,24
+23593,"Irvine-Ca",US,24
+42359,"Prescott-Az",US,24
+33311,"Meridian-Ms",US,24
+41055,"Platanias",GR,24
+31709,"Manduria",IT,24
+16353,"Erfoud",MA,24
+13956,"Deerfield Beach-Fl",US,24
+3948397,"Torrevieja",ES,24
+29419,"Lewisville-Tx",US,24
+20735,"Gyor",HU,24
+43040,"Quarteira",PT,24
+17835,"Fort Portal",UG,24
+25984,"Kimberley",ZA,24
+3804,"Bahar Dar",ET,24
+37972,"Obihiro",JP,24
+3786377,"Guildford",GB,24
+4296,"Bandarawela",LK,24
+34076,"Mljet",HR,24
+50561,"Soller",ES,24
+1469820,"Kihim",IN,24
+6769,"Bonita Springs-Fl",US,24
+54803,"Tsu",JP,24
+59992,"Zhoushan",CN,24
+46662,"Salem-Or",US,24
+18504,"Galloway-Nj",US,24
+24354,"Jiangmen",CN,24
+39016,"Ourense",ES,24
+52545,"Takoradi",GH,24
+49222,"Sesimbra",PT,24
+179411,"Niort",FR,24
+42231,"Prado",BR,24
+49565,"Shibukawa",JP,24
+24517,"Joliet-Il",US,24
+44311,"Riohacha",CO,24
+3949830,"El Gouna",EG,24
+42459,"Princeville-Hi",US,24
+3689877,"Holsworthy",GB,24
+3569542,"Nicolosi",IT,24
+10197,"Cayo Santa Maria",CU,24
+300798,"Vera",ES,24
+3574543,"Xilitla",MX,24
+26832,"Kozhikode",IN,24
+3570585,"Massa Marittima",IT,24
+24602,"Juazeiro Do Norte",BR,24
+26396,"Ko Chang",TH,24
+24688,"Jurmala",LV,24
+20296,"Groningen",NL,24
+36122,"Naran",PK,24
+18056,"Frederick-Md",US,24
+3803088,"Oswestry",GB,24
+52208,"Sveti Stefan",ME,24
+10175,"Caye Caulker",BZ,24
+3786787,"Halifax",GB,24
+1868,"Angel Fire-Nm",US,24
+3815072,"Brecon",GB,24
+3570575,"Follonica",IT,24
+2134400,"Gongju Si",KR,24
+52694,"Tanabe",JP,24
+9668,"Cary-Nc",US,24
+8802,"Cambria-Ca",US,24
+26517,"Koh Rong",KH,24
+176653,"Beynac Et Cazenac",FR,24
+3570644,"Capannori",IT,24
+46811,"Samara",CR,24
+1187,"Alice Springs",AU,24
+58647,"Williston-Nd",US,24
+179863,"Quimper",FR,24
+16712,"Evia",GR,24
+1842557,"Montegrotto Terme",IT,24
+521726,"Rzeszow",PL,24
+1691285,"Diani Beach",KE,24
+45385,"Sacheon",KR,24
+42577,"Puchong",MY,24
+3815407,"Driffield",GB,24
+39470,"Panaji",IN,24
+299573,"Cudillero",ES,24
+3802965,"Chippenham",GB,24
+1523,"Alvor",PT,24
+41750,"Port Fairy",AU,24
+8494,"Cahuita",CR,24
+28326,"Langenfeld",AT,24
+1684088,"Guatemala",GT,24
+16212,"Enna",IT,24
+56298,"Vernon",CA,24
+23213,"Ilha Grande",BR,24
+26747,"Kosice",SK,24
+270180,"Costa Calma",ES,24
+24623,"Juiz De Fora",BR,24
+3786553,"Glastonbury",GB,24
+1650,"Ames-Ia",US,24
+7023,"Boulogne-Billancourt",FR,24
+47860,"Santa Margherita Di Pula",IT,24
+26473,"Kofu",JP,24
+3974632,"Gocek",TR,24
+1842016,"Montesilvano",IT,24
+1689195,"Georgetown",GY,24
+19637,"Gorakhpur",IN,24
+18150,"Freudenstadt",DE,24
+13134,"Crieff",GB,24
+39269,"Pakse",LA,24
+17055,"Fayetteville-Ar",US,24
+14698,"Dongshan",CN,24
+10960,"Chengde",CN,24
+3815901,"Newton Stewart",GB,24
+30794,"Lund",SE,24
+8038,"Bundaberg",AU,24
+1595770,"Rodrigues Island",MU,24
+3689837,"Barnstaple",GB,24
+22211,"Hluhluwe",ZA,24
+19881,"Grand Forks-Nd",US,24
+4353,"Bangor-Me",US,24
+1843109,"Sauze Doulx",IT,24
+1489806,"Wonosobo",ID,24
+24176,"Jasper",CA,24
+3585607,"Sierra de la Laguna",MX,24
+55226,"Ulan Ude",RU,24
+1842087,"Varazze",IT,24
+34300,"Monchengladbach",DE,24
+10222,"Cedar City-Ut",US,24
+14697,"Dongshan",TW,24
+674372,"North Charleston-Sc",US,24
+36759,"Newark-De",US,24
+45162,"Ruhpolding",DE,24
+38326,"Olomouc",CZ,24
+55200,"Uijeongbu",KR,24
+1967,"Annapolis-Md",US,24
+38087,"Offenbach",DE,24
+1612699,"Buan",KR,24
+17770,"Fort Bragg-Ca",US,23
+59816,"Zambrone",IT,23
+19148,"Gillette-Wy",US,23
+10169,"Caxias Do Sul",BR,23
+57548,"Walvis Bay",NA,23
+3570619,"Bibbona",IT,23
+3815243,"Warwick",GB,23
+39294,"Palampur",IN,23
+9713,"Cascavel",BR,23
+44215,"Rincon De Guayabitos",MX,23
+59370,"Yamba",AU,23
+52173,"Suva",FJ,23
+179068,"Meribel",FR,23
+1704406,"Lumbang",ID,23
+15480,"Eden",AU,23
+3899915,"Colonia de Sant Jordi",ES,23
+3892470,"Udine",IT,23
+52452,"Tagum",PH,23
+43376,"Ramnagar",IN,23
+11606,"Ciudad Del Este",PY,23
+25161,"Karatu",TZ,23
+53710,"Timaru",NZ,23
+16514,"Espoo",FI,23
+6618,"Bohinj",SI,23
+33511,"Mhamid",MA,23
+34023,"Mito",JP,23
+11305,"Chitose",JP,23
+3802668,"Ripon",GB,23
+23757,"Isola Di Capo Rizzuto",IT,23
+44412,"Riverside-Ca",US,23
+3947792,"Varese",IT,23
+3786433,"Southend on Sea",GB,23
+49401,"Shantou",CN,23
+58146,"West Des Moines-Ia",US,23
+10679,"Chapeco",BR,23
+433541,"Gythio",GR,23
+22767,"Huancayo",PE,23
+10727,"Charleston-Wv",US,23
+3948149,"Sarria",ES,23
+3815705,"Criccieth",GB,23
+51082,"Springdale-Ut",US,23
+3946822,"Monteriggioni",IT,23
+37996,"Ocean City-Nj",US,23
+7345,"Brela",HR,23
+20834,"Hagerstown-Md",US,23
+3786271,"Lowestoft",GB,23
+31305,"Mahon",ES,23
+52616,"Tamandare",BR,23
+3689847,"Brixham",GB,23
+27985,"Lake City-Fl",US,23
+21091,"Hampton-Va",US,23
+3568813,"Toscolano Maderno",IT,23
+8767,"Camaguey",CU,23
+57648,"Warner Robins-Ga",US,23
+37319,"Norman-Ok",US,23
+4837,"Bathurst",AU,23
+39765,"Parnu",EE,23
+38790,"Osoyoos",CA,23
+14676,"Donegal",IE,23
+58596,"Wilkes Barre-Pa",US,23
+28149,"Lalibela",ET,23
+3815201,"Loughborough",GB,23
+16932,"Famagusta",CY,23
+32998,"Medicine Hat",CA,23
+14174,"Desert Hot Springs-Ca",US,23
+10532,"Chamba",IN,23
+42481,"Probolinggo",ID,23
+28400,"Lansing-Mi",US,23
+45311,"Sa Coma",ES,23
+29809,"Linthicum Heights-Md",US,23
+180581,"Saintes",FR,23
+3802883,"Boston",GB,23
+3815746,"Corwen",GB,23
+23432,"Inle",MM,23
+47160,"San Juan De Los Lagos",MX,23
+1842086,"Sestri Levante",IT,23
+37874,"Oamaru",NZ,23
+15455,"Echuca",AU,23
+31526,"Malgrat De Mar",ES,23
+8087,"Burg",DE,23
+1139029,"Sukabumi",ID,23
+51397,"Staunton-Va",US,23
+3568803,"Salo",IT,23
+36024,"Nanao",JP,23
+1704968,"East Mani",GR,23
+43668,"Red Deer",CA,23
+52765,"Taos-Nm",US,23
+11810,"Cleveland-Tn",US,23
+42057,"Portsmouth-Nh",US,23
+19171,"Gimpo",KR,23
+24206,"Jayapura",ID,23
+3689611,"Folkestone",GB,23
+24044,"Jaffna",LK,23
+1613092,"Suncheon Si",KR,23
+57033,"Vitoria",ES,23
+3689947,"Dereham",GB,23
+43483,"Ranthambore",IN,23
+19916,"Grande Prairie",CA,23
+3570631,"Piombino",IT,23
+25587,"Kenmare",IE,23
+433617,"Katerini",GR,23
+60010,"Zibo",CN,23
+19676,"Gorlitz",DE,23
+3949611,"Grimaud",FR,23
+22951,"Huntsville",CA,23
+3689960,"Hunstanton",GB,23
+3043,"Atlixco",MX,23
+8970,"Campos",ES,23
+25311,"Kastamonu",TR,23
+5499,"Bengbu",CN,23
+5230,"Bela Bela",ZA,23
+33614,"Midrand",ZA,23
+1550154,"Mestia",GE,23
+12905,"Council Bluffs-Ia",US,23
+3847730,"Gumuldur",TR,23
+17831,"Fort Pierce-Fl",US,23
+4897,"Baveno",IT,23
+3845732,"Surin",TH,23
+3903186,"Canico",PT,23
+3945201,"Scilla",IT,23
+57365,"Waikoloa-Hi",US,23
+39641,"Paralimni",CY,23
+21124,"Hang Dong",TH,23
+521452,"Bialka Tatrzanska",PL,23
+36079,"Nanwan",TW,23
+43143,"Quimbaya",CO,23
+40232,"Peoria-Il",US,23
+49167,"Seri Kembangan",MY,22
+3569506,"Castelvetrano",IT,22
+41363,"Poiana Brasov",RO,22
+24936,"Kalyves",GR,22
+52407,"Tacna",PE,22
+7799,"Brunico",IT,22
+21891,"Hershey-Pa",US,22
+38113,"Ohakune",NZ,22
+34088,"Moama",AU,22
+15661,"Eisenach",DE,22
+3569360,"Locorotondo",IT,22
+45193,"Runaway Bay",JM,22
+53852,"Tivoli",IT,22
+29725,"Lincoln-Nh",US,22
+26360,"Kluang",MY,22
+38040,"Odense",DK,22
+50172,"Skagen",DK,22
+3786492,"Warrington",GB,22
+3945956,"Palau",IT,22
+11631,"Ciudad Valles",MX,22
+26060,"Kingsland-Ga",US,22
+15994,"Ellijay-Ga",US,22
+27244,"Kyotango",JP,22
+3845995,"Pecatu",ID,22
+1503155,"Sankt Johann In Tirol",AT,22
+19211,"Gisborne",NZ,22
+14525,"Dnipropetrovsk",UA,22
+5017,"Beaufort-Sc",US,22
+3786256,"Wolverhampton",GB,22
+45124,"Rudesheim Am Rhein",DE,22
+33038,"Meerut",IN,22
+8707,"Calistoga-Ca",US,22
+179489,"Orange",FR,22
+3572862,"Huai'an",CN,22
+12580,"Coralville-Ia",US,22
+1705065,"Markopoulo Mesogaias",GR,22
+21363,"Hastings",NZ,22
+6430,"Blowing Rock-Nc",US,22
+3815122,"Maidenhead",GB,22
+424995,"Coeur Dalene-Id",US,22
+24528,"Jonesboro-Ar",US,22
+47784,"Santa Cruz",CL,22
+18519,"Gamagori",JP,22
+1842485,"Capaccio Paestum",IT,22
+19181,"Ginowan",JP,22
+30582,"Loveland-Co",US,22
+1463124,"Chosei",JP,22
+3568463,"Meta",IT,22
+1467383,"Sergiyev Posad",RU,22
+3945992,"Valledoria",IT,22
+178199,"La Baule",FR,22
+9756,"Casper-Wy",US,22
+21570,"Healdsburg-Ca",US,22
+34060,"Miyazu",JP,22
+270467,"Villaviciosa",ES,22
+560,"Aguas De Lindoia",BR,22
+1534117,"Buraydah",SA,22
+35056,"Morrisville-Nc",US,22
+46652,"Salem",IN,22
+1842056,"Rossano",IT,22
+57570,"Wanganui",NZ,22
+3901628,"Sivota",GR,22
+17428,"Flensburg",DE,22
+45968,"Saint Johns",AG,22
+3689607,"Dover",GB,22
+24870,"Kalibo",PH,22
+3689907,"Salcombe",GB,22
+180256,"Saint Jean De Monts",FR,22
+26133,"Kirchberg In Tirol",AT,22
+3946140,"Santa Cesarea Terme",IT,22
+11312,"Chittagong",BD,22
+58292,"Westminster-Co",US,22
+31204,"Mafra",PT,22
+12076,"Colima",MX,22
+37478,"North Wildwood-Nj",US,22
+3946067,"Citta di Castello",IT,22
+16980,"Farmington-Nm",US,22
+29848,"Liptovsky Mikulas",SK,22
+1680145,"Huxi",TW,22
+12362,"Concord-Nc",US,22
+29430,"Lexington-Va",US,22
+3945888,"Arzachena",IT,22
+46958,"San Clemente-Ca",US,22
+32925,"Mckinney-Tx",US,22
+3689751,"Kirkby Stephen",GB,22
+3571567,"Randle-WA",US,22
+43549,"Ratingen",DE,22
+8267,"Busum",DE,22
+23041,"Iasi",RO,22
+48643,"Schmallenberg",DE,22
+37913,"Oberhausen",DE,22
+14435,"Dingle",IE,22
+3947986,"Demre",TR,22
+2599,"Arnavutkoy",TR,22
+41808,"Port Moresby",PG,22
+3945416,"Sperlonga",IT,22
+28013,"Lake Havasu City-Az",US,22
+7016,"Boulder-Co",US,22
+53444,"The Woodlands-Tx",US,22
+3689708,"Witney",GB,22
+44310,"Riobamba",EC,22
+4787,"Bastia",FR,22
+48005,"Santiago De Cuba",CU,22
+25407,"Kavala",GR,22
+12474,"Cookeville-Tn",US,22
+1108,"Alexandria-La",US,22
+42303,"Prato",IT,22
+23843,"Itajai",BR,22
+8063,"Buon Ma Thuot",VN,22
+25772,"Khao Sok",TH,22
+1820,"Anderson-Sc",US,22
+20987,"Halmstad",SE,22
+3568784,"Manerba del Garda",IT,22
+59528,"Yercaud",IN,22
+25459,"Kearney-Ne",US,22
+3815890,"Castle Douglas",GB,22
+3945910,"Cala Gonone",IT,22
+3945320,"Tavarnelle Val Di Pesa",IT,22
+24973,"Kami",JP,22
+56705,"Villach",AT,22
+3947931,"Tarquinia",IT,22
+3948020,"Symi",GR,22
+48399,"Sault Saint Marie",CA,22
+43353,"Ramakkalmedu",IN,22
+19255,"Gjirokaster",AL,22
+552890,"Pyin Oo Lwin",MM,22
+3946808,"Montaione",IT,22
+25069,"Kanha",IN,22
+41930,"Portland-Tx",US,22
+1606315,"Vir",HR,22
+22373,"Holland-Mi",US,22
+52097,"Suphan Buri",TH,22
+3786465,"Wareham",GB,22
+1679860,"Anping",TW,22
+59195,"Wytheville-Va",US,22
+26863,"Kranjska Gora",SI,22
+11521,"Cilacap",ID,22
+424845,"Brasstown-Nc",US,22
+53808,"Tiruchirapalli",IN,22
+1488726,"Cianjur",ID,22
+1612425,"Siquijor",PH,22
+40525,"Phan Rang",VN,22
+29796,"Linkoping",SE,22
+177512,"Dinan",FR,22
+15213,"Dushanbe",TJ,22
+20776,"Hachinohe",JP,22
+28991,"Ledro",IT,22
+3815601,"Cardigan",GB,21
+3815904,"Stranraer",GB,21
+180657,"Saumur",FR,21
+14229,"Devonport",AU,21
+39195,"Paderborn",DE,21
+52063,"Sunriver-Or",US,21
+26479,"Koggala",LK,21
+22755,"Huaian",CN,21
+552871,"Nay Pyi Taw",MM,21
+30778,"Lumbini",NP,21
+13424,"Custer-Sd",US,21
+37140,"Nizwa",OM,21
+7382,"Brentwood-Tn",US,21
+52928,"Taubate",BR,21
+51570,"Stockton-Ca",US,21
+993578,"Wakad",IN,21
+34870,"Moorea",PF,21
+30580,"Lovedale",AU,21
+18269,"Fugen",AT,21
+3570337,"Sannicola",IT,21
+15192,"Durbuy",BE,21
+19963,"Grants Pass-Or",US,21
+25596,"Kennebunkport-Me",US,21
+3815635,"Lampeter",GB,21
+53978,"Toledo-Oh",US,21
+6696,"Bolpur",IN,21
+34467,"Montagu",ZA,21
+25026,"Kanab-Ut",US,21
+3815699,"Bala",GB,21
+39162,"Pachmarhi",IN,21
+35877,"Naga",PH,21
+1394131,"Pozzallo",IT,21
+27602,"La Quinta-Ca",US,21
+52980,"Tawau",MY,21
+1842886,"Latina",IT,21
+50004,"Sinaia",RO,21
+4022,"Balikesir",TR,21
+16034,"Elounda",GR,21
+5734,"Beruwela",LK,21
+24491,"Johnson City-Tn",US,21
+41473,"Polygyros",GR,21
+16416,"Erzincan",TR,21
+38280,"Olhao",PT,21
+3848526,"Juan les Pins",FR,21
+33776,"Milpitas-Ca",US,21
+45337,"Saariselka",FI,21
+54781,"Tsaghkadzor",AM,21
+41712,"Port Campbell",AU,21
+42273,"Praia Do Forte",BR,21
+3948415,"Antequera",ES,21
+33590,"Middletown-Ri",US,21
+19900,"Grand Prairie-Tx",US,21
+7356,"Bremerhaven",DE,21
+3945182,"Parghelia",IT,21
+3629,"Bad Reichenhall",DE,21
+57051,"Viveiro",ES,21
+3945889,"Badesi",IT,21
+178245,"La Clusaz",FR,21
+31850,"Mantova",IT,21
+49887,"Siheung",KR,21
+27131,"Kure",JP,21
+54034,"Tomsk",RU,21
+3802901,"Market Rasen",GB,21
+1699692,"Choubattakhal",IN,21
+13362,"Cumbuco",BR,21
+12772,"Corvara In Badia",IT,21
+180938,"Toulon",FR,21
+22502,"Hood River-Or",US,21
+19797,"Gradac",HR,21
+1842039,"Cosenza",IT,21
+11445,"Chula Vista-Ca",US,21
+29467,"Liaocheng",CN,21
+31950,"Maratea",IT,21
+1595688,"Grand Baie",MU,21
+22186,"Hita",JP,21
+3568360,"Alba Adriatica",IT,21
+58031,"Wenatchee-Wa",US,21
+55386,"Upington",ZA,21
+17594,"Folly Beach-Sc",US,21
+3568777,"Gardone Riviera",IT,21
+552876,"Nyaung Shwe",MM,21
+3802657,"Malton",GB,21
+46368,"Saint Robert-Mo",US,21
+26,"Aalborg",DK,21
+521788,"Ustka",PL,21
+4889,"Bauru",BR,21
+5284,"Belize",BZ,21
+37276,"Norderney",DE,21
+24537,"Jonkoping",SE,21
+1697753,"Dragey Ronthon",FR,21
+22802,"Hubli",IN,21
+26928,"Krk",HR,21
+3689889,"Lynton",GB,21
+25474,"Keelung",TW,21
+49306,"Seychelles",SC,21
+44594,"Rockport-Tx",US,21
+909,"Albany-Ga",US,21
+28728,"Lawton-Ok",US,21
+3948446,"Frigiliana",ES,21
+59591,"Yonezawa",JP,21
+53927,"Tofino",CA,21
+48315,"Sasan Gir",IN,21
+270106,"Albacete",ES,21
+12322,"Conakry",GN,21
+29068,"Leiden",NL,21
+6364,"Blantyre",MW,21
+23530,"Ipojuca",BR,21
+35262,"Mount Lavinia",LK,21
+47284,"San Miguel De Tucuman",AR,21
+177876,"Gerardmer",FR,21
+552228,"Alto Paraiso De Goias",BR,21
+24242,"Jelsa",HR,21
+180160,"Saint Etienne",FR,21
+34408,"Monrovia",LR,21
+44078,"Richardson-Tx",US,21
+19551,"Golem",AL,21
+28743,"Lazarevskoye",RU,21
+3848365,"Versailles",FR,21
+41698,"Port Arthur-Tx",US,21
+53607,"Thurso",GB,21
+1907,"Angra Do Heroismo",PT,21
+3245,"Avalon-Ca",US,21
+1699982,"Pimpri - Chinchwad",IN,21
+3848544,"Agen",FR,21
+521790,"Ustronie Morskie",PL,21
+179956,"Rodez",FR,21
+25651,"Kerikeri",NZ,21
+636,"Aiken-Sc",US,21
+20218,"Greymouth",NZ,21
+44680,"Rogoznica",HR,21
+19714,"Gotemba",JP,21
+3689918,"Tavistock",GB,21
+1488770,"Ciputat",ID,21
+37595,"Nova Friburgo",BR,21
+12823,"Costa Mesa-Ca",US,21
+3950090,"Les Menuires",FR,21
+50333,"Sligo",IE,21
+15919,"Eleuthera",BS,21
+58451,"Whitehorse",CA,21
+3802898,"Louth",GB,21
+45568,"Saint Augustine-Fl",US,21
+3815155,"Huntingdon",GB,21
+10457,"Chachoengsao",TH,21
+35255,"Mount Isa",AU,21
+27914,"Laguna",PH,21
+31644,"Manassas-Va",US,21
+3644,"Bad Salzuflen",DE,21
+17098,"Feldberg",DE,21
+35331,"Mountain View-Ca",US,21
+3786168,"Basingstoke",GB,21
+59680,"Yufu",JP,21
+3896119,"Jan Thiel",CW,21
+16750,"Exuma",BS,21
+14999,"Dubuque-Ia",US,21
+41717,"Port Charlotte-Fl",US,21
+47245,"San Martino Di Castrozza",IT,21
+7103,"Bowen",AU,21
+32238,"Maringa",BR,21
+25928,"Kill Devil Hills-Nc",US,21
+20604,"Gujo",JP,21
+59521,"Yeongwol",KR,21
+28074,"Lake Tekapo",NZ,20
+3815839,"Dunfermline",GB,20
+35966,"Nakhon Pathom",TH,20
+41677,"Poros",GR,20
+60,"Abashiri",JP,20
+14037,"Delray Beach-Fl",US,20
+22055,"Hiji",JP,20
+51998,"Sumter-Sc",US,20
+18632,"Gardiner-Mt",US,20
+4519,"Bardonecchia",IT,20
+32963,"Mechelen",BE,20
+12693,"Coromandel",NZ,20
+28958,"Lebanon-Tn",US,20
+21687,"Helen-Ga",US,20
+8813,"Cambridge",NZ,20
+21909,"Herzliya",IL,20
+48582,"Schenna",IT,20
+49529,"Shepparton",AU,20
+51107,"Spring-Tx",US,20
+23350,"Independence-Mo",US,20
+23798,"Ispica",IT,20
+5685,"Bernal",MX,20
+28430,"Lao Cai",VN,20
+56167,"Vellore",IN,20
+22553,"Hopkins",BZ,20
+1409640,"Kuhlungsborn",DE,20
+38289,"Olinda",BR,20
+3949979,"Michamvi",TZ,20
+47438,"San Vigilio Di Marebbe",IT,20
+40586,"Phrae",TH,20
+39991,"Pearl-Ms",US,20
+40425,"Petersburg-Va",US,20
+3815282,"High Wycombe",GB,20
+26720,"Koror",PW,20
+270531,"Calafell",ES,20
+3945928,"La Maddalena",IT,20
+21721,"Helsingborg",SE,20
+24041,"Jaen",ES,20
+37093,"Nis",RS,20
+56916,"Vinci",IT,20
+33078,"Meissen",DE,20
+24988,"Kamogawa",JP,20
+49915,"Silifke",TR,20
+39203,"Padstow",GB,20
+34837,"Montville",AU,20
+54368,"Traben Trarbach",DE,20
+58190,"West Memphis-Ar",US,20
+22957,"Hunza",PK,20
+5792,"Bethlehem-Pa",US,20
+51498,"Sterling-Va",US,20
+3946289,"Cava de Tirreni",IT,20
+522770,"Port El Kantaoui",TN,20
+42523,"Providence-Ri",US,20
+180009,"Royan",FR,20
+16586,"Estoril",PT,20
+3104,"Auburn Hills-Mi",US,20
+33839,"Mindo",EC,20
+2134384,"Cheongju Si",KR,20
+33503,"Mezzana",IT,20
+29475,"Liberec",CZ,20
+3689922,"Tiverton",GB,20
+24927,"Kalutara",LK,20
+45413,"Sado",JP,20
+54971,"Turia",IN,20
+683,"Ait Benhaddou",MA,20
+55777,"Valkenburg",NL,20
+19887,"Grand Island-Ne",US,20
+24878,"Kalispell-Mt",US,20
+50082,"Sioux City-Ia",US,20
+521719,"Rewal",PL,20
+15158,"Dunsborough",AU,20
+1382462,"Le Touquet Paris Plage",FR,20
+4058,"Ballito",ZA,20
+57728,"Washington-Pa",US,20
+29145,"Lencois",BR,20
+49540,"Sherbrooke",CA,20
+49904,"Silao",MX,20
+3568926,"Verbania",IT,20
+16699,"Everett-Wa",US,20
+176572,"Beauvais",FR,20
+18792,"Gebze",TR,20
+3571806,"Upper Grand Lagoon-FL",US,20
+2134435,"Sancheong Gun",KR,20
+57660,"Warren-Mi",US,20
+3843636,"Mustafapasa",TR,20
+22910,"Hunder",IN,20
+999,"Alcala De Henares",ES,20
+3946912,"Pula",IT,20
+180595,"Salon De Provence",FR,20
+14245,"Dezhou",CN,20
+36569,"Neuquen",AR,20
+53250,"Termoli",IT,20
+22110,"Himare",AL,20
+36826,"Newnan-Ga",US,20
+3570624,"Cecina",IT,20
+58671,"Wilmington-De",US,20
+424840,"Bradenton Beach-Fl",US,20
+25299,"Kasol",IN,20
+3689777,"Wigton",GB,20
+52013,"Sun Peaks",CA,20
+42693,"Puerto Penasco",MX,20
+30706,"Ludwigsburg",DE,20
+3969,"Balatonfured",HU,20
+59347,"Yallingup",AU,20
+1139026,"Madiun",ID,20
+28542,"Las Terrenas",DO,20
+11329,"Chizhou",CN,20
+45441,"Saginaw-Mi",US,20
+13611,"Dalton-Ga",US,20
+18028,"Franz Josef",NZ,20
+59439,"Yaroslavl",RU,20
+17849,"Fort Smith-Ar",US,20
+39443,"Pals",ES,20
+1842010,"Giulianova",IT,20
+28186,"Lamego",PT,20
+3786182,"Farnborough",GB,20
+22648,"Hospet",IN,20
+38533,"Orangeburg-Sc",US,20
+44113,"Richmond-Ky",US,20
+6046,"Bilaspur",IN,20
+50586,"Solvang-Ca",US,20
+57706,"Wasaga Beach",CA,20
+1758,"Anand",IN,20
+42257,"Praia Da Pipa",BR,20
+8768,"Camaiore",IT,20
+26423,"Ko Yao Noi",TH,20
+3664293,"Porto Heli",GR,20
+3946117,"Cisternino",IT,20
+28125,"Lakewood-Co",US,20
+59845,"Zaozhuang",CN,20
+20923,"Haldwani",IN,20
+55579,"Uyuni",BO,20
+21351,"Hasselt",BE,20
+705,"Ajijic",MX,20
+37895,"Oberammergau",DE,20
+3814956,"Leominster",GB,20
+1659,"Amherst-Ny",US,20
+3815110,"Ryde",GB,20
+29368,"Leukerbad",CH,20
+35514,"Mukdahan",TH,20
+389785,"Valdes",ES,20
+19705,"Gosier",GP,20
+1679656,"Pasikuda",LK,20
+58042,"Wengen",CH,20
+3945788,"Primorsko",BG,20
+56149,"Veliko Tarnovo",BG,20
+3568863,"Cannobio",IT,20
+15358,"East Syracuse-Ny",US,20
+1343465,"Caykara",TR,20
+8987,"Can Pastilla",ES,20
+11000,"Cherokee-Nc",US,20
+50330,"Slidell-La",US,20
+53588,"Thunder Bay",CA,20
+52409,"Tacoma-Wa",US,20
+59525,"Yeppoon",AU,20
+15582,"Egilsstadir",IS,20
+1382966,"Lile Rousse",FR,20
+59830,"Zandvoort",NL,20
+2416,"Ardmore-Ok",US,20
+2949,"Astrakhan",RU,20
+38571,"Ordino",AD,20
+9452,"Carilo",AR,20
+3848239,"Clichy",FR,20
+43000,"Qingyuan",CN,20
+45232,"Russell",NZ,20
+19610,"Gonzales-La",US,20
+1468330,"Volga",RU,20
+389422,"Ribadesella",ES,20
+19348,"Glendale-Ca",US,20
+3570358,"Comacchio",IT,20
+22057,"Hikone",JP,20
+28008,"Lake Geneva-Wi",US,20
+51678,"Strahan",AU,20
+40829,"Pineda De Mar",ES,20
+39952,"Paxos",GR,20
+3815002,"Pembroke",GB,20
+42201,"Poza Rica",MX,20
+46446,"Saint Thomas",VI,20
+40537,"Phatthalung",TH,20
+54682,"Trois Rivieres",CA,20
+27519,"La Marsa",TN,20
+32757,"Maumee-Oh",US,20
+30591,"Lovran",HR,20
+27394,"La Crosse-Wi",US,20
+5136,"Beechworth",AU,20
+57335,"Wagrain",AT,20
+51945,"Sulphur-La",US,20
+39297,"Palanga",LT,20
+53278,"Terre Haute-In",US,20
+1842080,"Loano",IT,20
+2609,"Arnhem",NL,20
+21571,"Healesville",AU,20
+5524,"Benin",NG,20
+12614,"Cordoba",MX,20
+20140,"Greenville-Nc",US,20
+3815100,"Rhayader",GB,20
+32570,"Mason-Oh",US,20
+52517,"Tak",TH,19
+41002,"Plainfield-In",US,19
+38581,"Orebro",SE,19
+14015,"Delft",NL,19
+1018,"Alcobaca",PT,19
+521538,"Jastrzebia Gora",PL,19
+26729,"Kortrijk",BE,19
+31478,"Malatya",TR,19
+3815475,"Grantown on Spey",GB,19
+29968,"Livermore-Ca",US,19
+39882,"Patiala",IN,19
+3946080,"Passignano sul Trasimeno",IT,19
+22097,"Hilo-Hi",US,19
+3689633,"Royal Tunbridge Wells",GB,19
+1701481,"Okinawa City",JP,19
+178930,"Mandelieu La Napoule",FR,19
+1488781,"Curug",ID,19
+2573,"Armacao De Pera",PT,19
+5655,"Berkeley-Ca",US,19
+3377,"Aydin",TR,19
+45819,"Saint Georges",GD,19
+34492,"Montanita",EC,19
+18277,"Fuji",JP,19
+54152,"Torquay",AU,19
+39507,"Pangkalpinang",ID,19
+49545,"Sheridan-Wy",US,19
+32498,"Maryborough",AU,19
+14311,"Diani",KE,19
+18549,"Gananoque",CA,19
+4397,"Bantayan Island",PH,19
+12633,"Corigliano Calabro",IT,19
+47724,"Santa Ana-Ca",US,19
+32050,"Margao",IN,19
+1096,"Alexandra Headland",AU,19
+18773,"Gaylord-Mi",US,19
+38154,"Ojochal",CR,19
+25313,"Kastela",HR,19
+39248,"Paipa",CO,19
+51543,"Stintino",IT,19
+12653,"Corlu",TR,19
+11761,"Clearwater",CA,19
+42571,"Pucallpa",PE,19
+176544,"Bayonne",FR,19
+25199,"Karjat",IN,19
+1707261,"Dauphin Island-Al",US,19
+19312,"Glen Allen-Va",US,19
+1683693,"Drake",CR,19
+10915,"Checheng",TW,19
+37208,"Noja",ES,19
+44257,"Rio Das Ostras",BR,19
+19828,"Grahamstown",ZA,19
+23011,"Hvolsvollur",IS,19
+20963,"Halle",DE,19
+47237,"San Marino",SM,19
+15253,"Eagan-Mn",US,19
+6544,"Bodo",NO,19
+3802890,"Grantham",GB,19
+32372,"Marquette-Mi",US,19
+34711,"Montezuma",CR,19
+2763,"Asaba",NG,19
+433197,"Skyros",GR,19
+52760,"Tanunda",AU,19
+24705,"Jyvaskyla",FI,19
+1351988,"Pertisau",AT,19
+12571,"Coral Coast",FJ,19
+3847732,"Sigacik",TR,19
+3815507,"Abergele",GB,19
+26579,"Kololi",GM,19
+54748,"Trujillo",ES,19
+33966,"Misasa",JP,19
+39755,"Parnaiba",BR,19
+59346,"Yalikavak",TR,19
+42049,"Portrush",GB,19
+52475,"Taian",CN,19
+56205,"Venice-Fl",US,19
+4797,"Bataan",PH,19
+3948030,"Messinia",GR,19
+24262,"Jeongseon",KR,19
+6006,"Big Spring-Tx",US,19
+12452,"Conway-Ar",US,19
+54808,"Tsukuba",JP,19
+2134374,"Ansan Si",KR,19
+2031,"Antakya",TR,19
+50448,"Socorro",BR,19
+15818,"El Puerto De Santa Maria",ES,19
+22504,"Hoofddorp",NL,19
+18321,"Funabashi",JP,19
+8004,"Bukit Mertajam",MY,19
+29322,"Leshan",CN,19
+38635,"Orizaba",MX,19
+43420,"Rancho Cordova-Ca",US,19
+178993,"Martigues",FR,19
+11365,"Chom Thong",TH,19
+25023,"Kamuela-Hi",US,19
+1411730,"Sankt Peter Ording",DE,19
+31255,"Magnetic Island",AU,19
+180387,"Saint Nazaire",FR,19
+51558,"Stockbridge-Ga",US,19
+32075,"Margherita Di Savoia",IT,19
+44104,"Richmond",CA,19
+3568811,"Tignale",IT,19
+38738,"Osage Beach-Mo",US,19
+3815444,"Stockton on Tees",GB,19
+60061,"Zlatibor",RS,19
+37985,"Obzor",BG,19
+3815560,"Callander",GB,19
+14096,"Denmark",AU,19
+3814995,"Narberth",GB,19
+34875,"Mooresville-Nc",US,19
+20365,"Grove City-Oh",US,19
+54238,"Torroella De Montgri",ES,19
+17716,"Forli",IT,19
+3947757,"Ayas",IT,19
+18965,"Geraldton",AU,19
+3569561,"Realmonte",IT,19
+45445,"Saguenay",CA,19
+53341,"Teziutlan",MX,19
+1704474,"Toba Lake",ID,19
+3846420,"Dikili",TR,19
+17177,"Fernie",CA,19
+26099,"Kinmen",TW,19
+29096,"Leiria",PT,19
+3868,"Baiersbronn",DE,19
+45652,"Saint Charles-Mo",US,19
+3570536,"Montespertoli",IT,19
+14633,"Domodedovo",RU,19
+3689732,"Cockermouth",GB,19
+19397,"Glenwood Springs-Co",US,19
+4361,"Banja Luka",BA,19
+21865,"Herndon-Va",US,19
+433896,"Platamonas",GR,19
+52117,"Surfside Beach-Sc",US,19
+55439,"Ureshino",JP,19
+1489807,"Wori",ID,19
+3815073,"Builth Wells",GB,19
+58853,"Witbank",ZA,19
+3786452,"Christchurch",GB,19
+40101,"Pelling",IN,19
+7947,"Buena Park-Ca",US,19
+3689924,"Totnes",GB,19
+3786406,"Clacton on Sea",GB,19
+24137,"Japaratinga",BR,19
+4952,"Bayreuth",DE,19
+2134411,"Hadong Gun",KR,19
+25245,"Karpenisi",GR,19
+46594,"Saku",JP,19
+5070,"Beaworthy",GB,19
+39014,"Ouray-Co",US,19
+17856,"Fort Stockton-Tx",US,19
+37428,"North Platte-Ne",US,19
+564926,"Marsa Matrouh",EG,19
+3570746,"Amicalola-GA",US,19
+3570280,"Alezio",IT,19
+54846,"Tucepi",HR,19
+3581,"Bad Kissingen",DE,19
+7993,"Bujumbura",BI,19
+24771,"Kai",JP,19
+33428,"Metairie-La",US,19
+3569023,"Lerici",IT,19
+43251,"Radium Hot Springs",CA,19
+31687,"Mandaue",PH,19
+38742,"Osaki",JP,19
+26905,"Kribi",CM,19
+57236,"Vrsar",HR,19
+23150,"Iida",JP,19
+53696,"Tilcara",AR,19
+24544,"Joplin-Mo",US,19
+56127,"Velden Am Worther See",AT,19
+19616,"Goodlettsville-Tn",US,19
+2134424,"Muju Gun",KR,19
+1343432,"Atakum",TR,19
+28721,"Lawrence-Ks",US,19
+5517,"Benicassim",ES,19
+41651,"Poprad",SK,19
+2126,"Anyer",ID,18
+51135,"Sriperumbudur",IN,18
+57703,"Warwick-Ri",US,18
+23995,"Jaca",ES,18
+50142,"Sitia",GR,18
+3815368,"Haltwhistle",GB,18
+3815116,"Bracknell",GB,18
+18027,"Frantiskovy Lazne",CZ,18
+3945199,"Scalea",IT,18
+25321,"Kastoria",GR,18
+54969,"Turgutreis",TR,18
+1612663,"Velikij Nowgorod",RU,18
+114,"Aberfeldy",GB,18
+3689803,"Torpoint",GB,18
+33573,"Middlesbrough",GB,18
+29388,"Leverkusen",DE,18
+24926,"Kaluga",RU,18
+25184,"Kargil",IN,18
+3018,"Atibaia",BR,18
+37049,"Nilai",MY,18
+11245,"Chincoteague-Va",US,18
+21649,"Heilbronn",DE,18
+3568778,"Gargnano",IT,18
+13864,"De Haan",BE,18
+41922,"Portland",GB,18
+3946243,"Pomezia",IT,18
+6858,"Borgarnes",IS,18
+13875,"De Panne",BE,18
+59650,"Ypres",BE,18
+11398,"Choshi",JP,18
+53199,"Tepic",MX,18
+3815111,"Sandown",GB,18
+33387,"Mesagne",IT,18
+3585734,"Yuzhniy",UA,18
+31789,"Mankato-Mn",US,18
+15197,"Durgapur",IN,18
+18939,"Georgetown-Ky",US,18
+3569593,"Terrasini",IT,18
+3574413,"Malinalco",MX,18
+21068,"Hammond-La",US,18
+19216,"Gisenyi",RW,18
+21249,"Harrachov",CZ,18
+1543691,"s-Hertogenbosch",NL,18
+6831,"Bora Bora",PF,18
+16660,"Eureka-Ca",US,18
+48048,"Santo Antonio Do Pinhal",BR,18
+50904,"Southfield-Mi",US,18
+2134383,"Cheonan Si",KR,18
+37333,"Norrkoping",SE,18
+3945266,"Lecco",IT,18
+57230,"Vrindavan",IN,18
+44564,"Rock Springs-Wy",US,18
+3689657,"Burford",GB,18
+6328,"Blairgowrie",GB,18
+428351,"Sea Ranch-Ca",US,18
+14098,"Dennis Port-Ma",US,18
+25383,"Katy-Tx",US,18
+41197,"Pleiku",VN,18
+40120,"Pemberton",AU,18
+14326,"Dickinson-Nd",US,18
+3878745,"Merignac",FR,18
+1842989,"Castiglion Fiorentino",IT,18
+10269,"Celle",DE,18
+30774,"Lumberton-Nc",US,18
+14848,"Dover-De",US,18
+3949978,"Matemwe",TZ,18
+55274,"Ulyanovsk",RU,18
+39555,"Pantnagar",IN,18
+53843,"Titusville-Fl",US,18
+57883,"Webster-Tx",US,18
+59601,"Yopal",CO,18
+1484836,"La Manga Del Mar Menor",ES,18
+1489749,"Trawas",ID,18
+52435,"Taganga",CO,18
+3815088,"Llandrindod Wells",GB,18
+48264,"Sarikamis",TR,18
+53188,"Teotihuacan",MX,18
+19733,"Goulburn",AU,18
+3786359,"Ashford",GB,18
+46803,"Sam Roi Yot",TH,18
+6892,"Borjomi",GE,18
+36094,"Naperville-Il",US,18
+22335,"Hokitika",NZ,18
+5541,"Benoni",ZA,18
+521469,"Bydgoszcz",PL,18
+3678,"Bad Wiessee",DE,18
+20682,"Gurye",KR,18
+22081,"Hillsboro-Or",US,18
+181160,"Vichy",FR,18
+3947766,"Cogne",IT,18
+178072,"Houlgate",FR,18
+40904,"Piracicaba",BR,18
+54812,"Tsumagoi",JP,18
+52223,"Svoronata",GR,18
+3848525,"Grasse",FR,18
+31288,"Mahdia",TN,18
+1489774,"Ungaran",ID,18
+36266,"Navarre-Fl",US,18
+2322,"Arbatax",IT,18
+24717,"Kabale",UG,18
+11147,"Chico-Ca",US,18
+16824,"Fairfield-Ca",US,18
+1406635,"Bernkastel Kues",DE,18
+44667,"Rogers-Ar",US,18
+428804,"Talkeetna-Ak",US,18
+31529,"Mali Losinj",HR,18
+21236,"Harlingen-Tx",US,18
+3585570,"Otumba",MX,18
+8467,"Cafayate",AR,18
+7157,"Brac",HR,18
+1390362,"Colle Di Val Delsa",IT,18
+7842,"Bryan-Tx",US,18
+1612385,"Roxas City",PH,18
+41513,"Ponferrada",ES,18
+10918,"Cheektowaga-Ny",US,18
+21868,"Herning",DK,18
+31670,"Manchester-Vt",US,18
+40854,"Pingtung",TW,18
+10536,"Chambersburg-Pa",US,18
+17360,"Fishkill-Ny",US,18
+3107,"Auburn-Al",US,18
+19975,"Grapevine-Tx",US,18
+45458,"Sai Yok",TH,18
+22979,"Husavik",IS,18
+33142,"Mellieha",MT,18
+5794,"Bethlehem",PS,18
+43604,"Rawlins-Wy",US,18
+44974,"Rothbury",AU,18
+4586,"Barnaul",RU,18
+179399,"Nevers",FR,18
+11101,"Chiang Khong",TH,18
+58690,"Wilson-Nc",US,18
+23066,"Ibusuki",JP,18
+21697,"Hella",IS,18
+26271,"Kitwe",ZM,18
+40335,"Perry-Ga",US,18
+8919,"Campina Grande",BR,18
+44694,"Rohtak",IN,18
+34061,"Miyoshi",JP,18
+24333,"Jhansi",IN,18
+50888,"Southaven-Ms",US,18
+32888,"Mbarara",UG,18
+17092,"Feira De Santana",BR,18
+6200,"Bishop-Ca",US,18
+36760,"Newark-Nj",US,18
+23127,"Igoumenitsa",GR,18
+433679,"Kriopigi",GR,18
+520841,"Malinska-Dubasnica",HR,18
+2449700,"Simpson Bay",SX,18
+9170,"Canyamel",ES,18
+3945903,"Bosa",IT,18
+50566,"Solna",SE,18
+2134446,"Yangsan Si",KR,18
+44271,"Rio Grande",BR,18
+27890,"Lagos De Moreno",MX,18
+3570,"Bad Hindelang",DE,18
+22622,"Horsham",AU,18
+1842882,"Fondi",IT,18
+58623,"Williamsport-Pa",US,18
+1704442,"Petumbak",ID,18
+41607,"Pontian",MY,18
+1169050,"Avsa Adasi",TR,18
+24789,"Kaiserslautern",DE,18
+42793,"Pulsano",IT,18
+39406,"Palmdale-Ca",US,18
+3815787,"Rhyl",GB,18
+58195,"West Monroe-La",US,18
+22537,"Hope",CA,18
+3848552,"Blagnac",FR,18
+16918,"Falls Creek",AU,18
+1843264,"St Peter Port",GB,18
+26794,"Kotu",GM,18
+1286,"Almancil",PT,18
+16090,"Emerald",AU,18
+40738,"Pietrasanta",IT,18
+58775,"Winnemucca-Nv",US,18
+22938,"Huntington Beach-Ca",US,18
+31909,"Mar De Las Pampas",AR,18
+41622,"Pontresina",CH,18
+1842937,"Passo Del Tonale",IT,18
+2525,"Arinsal",AD,18
+23503,"Inzell",DE,18
+3947371,"Alessandria",IT,18
+3946283,"Camerota",IT,18
+36313,"Ndola",ZM,18
+55290,"Umea",SE,18
+54736,"Troy-Mi",US,18
+33441,"Methven",NZ,18
+25569,"Kendari",ID,18
+8033,"Bunbury",AU,18
+5275,"Belgorod",RU,18
+24995,"Kamphaeng Phet",TH,18
+51811,"Sturgeon Bay-Wi",US,18
+1942,"Ankeny-Ia",US,18
+41017,"Plakias",GR,18
+42341,"Prem Nagar",IN,18
+58847,"Wismar",DE,18
+4671,"Barrie",CA,18
+178077,"Huez",FR,18
+53877,"Tlaxcala",MX,18
+1416186,"Campofelice Di Roccella",IT,18
+3786463,"Swanage",GB,18
+47033,"San Francisco",MX,18
+13623,"Daman",IN,18
+1469859,"Kondotti",IN,18
+3689723,"Bowness on Windermere",GB,18
+15371,"Easter Island",CL,18
+1533655,"Wadi Musa",JO,18
+3570544,"Reggello",IT,18
+19832,"Grainau",DE,18
+177077,"Chambery",FR,18
+54625,"Trinidad",CU,18
+13917,"Decatur-Al",US,18
+53778,"Tioman",MY,18
+21035,"Hamilton Island",AU,18
+3815262,"Kettering",GB,18
+10161,"Cavite",PH,18
+34364,"Moniga Del Garda",IT,18
+19347,"Glendale-Az",US,18
+312,"Addison-Tx",US,18
+30476,"Los Cabos",MX,18
+177488,"Dax",FR,18
+18613,"Garden City-Ks",US,18
+177190,"Chatel",FR,18
+2759,"Arzua",ES,18
+16819,"Fairfax-Va",US,18
+28466,"Laramie-Wy",US,17
+17296,"Findlay-Oh",US,17
+32885,"Mbabane",SZ,17
+36415,"Nelson",CA,17
+32958,"Mechanicsburg-Pa",US,17
+24595,"Juan Dolio",DO,17
+38293,"Olive Branch-Ms",US,17
+49866,"Sighisoara",RO,17
+521578,"Krynica Zdroj",PL,17
+54940,"Tunja",CO,17
+3786460,"Sherborne",GB,17
+41691,"Port Angeles-Wa",US,17
+33764,"Milna",HR,17
+24764,"Kahramanmaras",TR,17
+3848448,"Cassis",FR,17
+8694,"Calhoun-Ga",US,17
+1489789,"Wanayasa",ID,17
+57066,"Vladimir",RU,17
+1017,"Alcoa-Tn",US,17
+24660,"Juneau-Ak",US,17
+42491,"Progreso",MX,17
+22680,"Houma-La",US,17
+4292,"Bandar Penawar",MY,17
+433971,"Spata",GR,17
+39479,"Panarea",IT,17
+39908,"Patti",IT,17
+3802766,"Morecambe",GB,17
+3803061,"Bridgnorth",GB,17
+53086,"Telavi",GE,17
+3569376,"Putignano",IT,17
+41921,"Portland",AU,17
+18587,"Ganzhou",CN,17
+46261,"Saint Paul-Mn",US,17
+39877,"Pathum Thani",TH,17
+21537,"Hayward-Ca",US,17
+37725,"Nuku Alofa",TO,17
+4438,"Barahona",DO,17
+3693,"Bad Zwischenahn",DE,17
+3569353,"Corato",IT,17
+3802908,"Spalding",GB,17
+1546806,"Poronin",PL,17
+12421,"Conroe-Tx",US,17
+38619,"Orillia",CA,17
+10420,"Ceske Budejovice",CZ,17
+3948312,"Altea",ES,17
+19506,"Gokarna",IN,17
+42128,"Potosi",BO,17
+15868,"El Zaino",CO,17
+3919690,"Calella de Palafrugell",ES,17
+270601,"La Pineda",ES,17
+59729,"Yuzhno Sakhalinsk",RU,17
+48966,"Seia",PT,17
+55130,"Ubeda",ES,17
+179821,"Propriano",FR,17
+2449701,"Philipsburg",SX,17
+1842581,"Gravina In Puglia",IT,17
+27521,"La Massana",AD,17
+55038,"Tuxpan",MX,17
+3815838,"Cupar",GB,17
+29473,"Liberal-Ks",US,17
+3572131,"Pematang Siantar",ID,17
+18116,"Fremont-Ca",US,17
+58316,"Westport",NZ,17
+25096,"Kansas-Ks",US,17
+432944,"Larissa",GR,17
+9089,"Canillo",AD,17
+32066,"Margate",ZA,17
+33547,"Michigan City-In",US,17
+24401,"Jingdezhen",CN,17
+44611,"Rocky Mount-Nc",US,17
+46990,"San Felice Del Benaco",IT,17
+1842040,"Diamante",IT,17
+49853,"Sierra Vista-Az",US,17
+1842079,"Lavagna",IT,17
+3903286,"Playa Bavaro",DO,17
+42476,"Privlaka",HR,17
+55186,"Ufa",RU,17
+20403,"Gstaad",CH,17
+3949615,"La grande Motte",FR,17
+3846121,"Leutasch",AT,17
+3946834,"Radda In Chianti",IT,17
+46664,"Salem-Va",US,17
+55811,"Valle Del Cauca",CO,17
+1842541,"Terni",IT,17
+26379,"Knokke Heist",BE,17
+15716,"El Cajon-Ca",US,17
+3815814,"Mold",GB,17
+49430,"Sharonville-Oh",US,17
+4298,"Bandhavgarh",IN,17
+11632,"Ciudad Victoria",MX,17
+180213,"Saint Gervais Les Bains",FR,17
+1351957,"Nauders",AT,17
+3948410,"Alhaurin el Grande",ES,17
+57250,"Vulcano",IT,17
+42453,"Princeton-Nj",US,17
+26017,"King Of Prussia-Pa",US,17
+17453,"Flims",CH,17
+40538,"Phayao",TH,17
+9120,"Cannon Beach-Or",US,17
+10104,"Caucaia",BR,17
+11106,"Chiang Saen",TH,17
+33969,"Mishawaka-In",US,17
+3815701,"Barmouth",GB,17
+40727,"Piestany",SK,17
+59450,"Yarrawonga",AU,17
+41940,"Porto Azzurro",IT,17
+3803066,"Craven Arms",GB,17
+8916,"Campiglia Marittima",IT,17
+299463,"Ciutadella",ES,17
+3557,"Bad Griesbach",DE,17
+29227,"Leros",GR,17
+51539,"Stillwater-Ok",US,17
+31853,"Mantua",IT,17
+57536,"Walterboro-Sc",US,17
+29216,"Leptokaria",GR,17
+2193161,"Wailea -Hi",US,17
+31666,"Manchester-Nh",US,17
+52104,"Sur",OM,17
+300919,"Arona",ES,17
+37963,"Oberwiesenthal",DE,17
+48472,"Savusavu",FJ,17
+13015,"Craiova",RO,17
+41826,"Port Saint Lucie-Fl",US,17
+37848,"Oakhurst-Ca",US,17
+5885,"Bhedaghat",IN,17
+28994,"Leduc",CA,17
+28683,"Laval",CA,17
+20717,"Gwangyang",KR,17
+8265,"Busuanga",PH,17
+1489534,"Serpong",ID,17
+3585515,"Downtown Tequisquiapan",MX,17
+23119,"Iglesias",IT,17
+25921,"Kilifi",KE,17
+35818,"Myvatn",IS,17
+12496,"Coolum Beach",AU,17
+26223,"Kisarazu",JP,17
+24772,"Kaifeng",CN,17
+3848535,"Mougins",FR,17
+38219,"Olathe-Ks",US,17
+3689975,"Thetford",GB,17
+178319,"La Plagne",FR,17
+53297,"Teshikaga",JP,17
+1466012,"Loo",RU,17
+12456,"Conyers-Ga",US,17
+44940,"Rossland",CA,17
+25602,"Kennewick-Wa",US,17
+521808,"Wladyslawowo",PL,17
+11423,"Christiansburg-Va",US,17
+1842030,"Potenza",IT,17
+37691,"Nozawaonsen",JP,17
+3033,"Atlantic Beach-Nc",US,17
+3815050,"Merthyr Tydfil",GB,17
+23417,"Inhambane",MZ,17
+1842943,"Tirano",IT,17
+3569040,"Vernazza",IT,17
+15734,"El Centro-Ca",US,17
+12894,"Cotulla-Tx",US,17
+3946817,"Saint Pierre",RE,17
+3946791,"Barberino Val dElsa",IT,17
+176338,"Arras",FR,17
+24440,"Jiujiang",CN,17
+29390,"Levi",FI,17
+39805,"Pasadena-Tx",US,17
+37647,"Novi-Mi",US,17
+34417,"Monschau",DE,17
+19105,"Giessen",DE,17
+15945,"Elizabethtown-Ky",US,17
+504,"Agios Prokopios",GR,17
+57785,"Waterloo-Ia",US,17
+9163,"Canton-Oh",US,17
+13810,"Davis-Ca",US,17
+12128,"Collingwood",CA,17
+177297,"Cognac",FR,17
+1698725,"Bad Homburg Vor Der Hoehe",DE,17
+50673,"Sonoma-Ca",US,17
+27114,"Kuopio",FI,17
+56038,"Vasteras",SE,17
+27065,"Kumagaya",JP,17
+59538,"Yesan",KR,17
+3786201,"Lymington",GB,17
+33658,"Mihara",JP,17
+291922,"Alcossebre",ES,17
+35109,"Moses Lake-Wa",US,17
+52771,"Tapalpa",MX,17
+14556,"Dodge City-Ks",US,17
+48637,"Schluchsee",DE,17
+3815393,"South Shields",GB,17
+3946839,"San Quirico dOrcia",IT,17
+37591,"Noumea",NC,17
+1842058,"Vibo Valentia",IT,17
+1470713,"Siolim",IN,17
+18029,"Frascati",IT,17
+56440,"Victorville-Ca",US,17
+1695789,"Sankt Leonhard Im Pitztal",AT,17
+2701587,"Zermatt",CH,17
+30307,"Long Beach-Wa",US,17
+11054,"Chester-Va",US,17
+1842596,"Cassino",IT,17
+44220,"Rincon",PR,17
+12766,"Corum",TR,17
+7709,"Brotas",BR,17
+44899,"Roseville-Ca",US,17
+3948108,"Folegandros",GR,17
+38098,"Ogden-Ut",US,17
+35775,"Mwanza",TZ,17
+3850262,"Montauban",FR,17
+3569565,"Riposto",IT,17
+389421,"Ribadeo",ES,17
+51990,"Summerville-Sc",US,17
+22008,"High Peak",GB,17
+36792,"Newcastle",ZA,17
+1351869,"Kappl",AT,17
+29269,"Les Escaldes",AD,17
+34888,"Moose Jaw",CA,17
+49958,"Silverthorne-Co",US,17
+180463,"Saint Quentin",FR,17
+51391,"Statesville-Nc",US,17
+54886,"Tulbagh",ZA,17
+33115,"Melgar",CO,17
+176852,"Brive La Gaillarde",FR,17
+3786502,"Arundel",GB,17
+38873,"Ostseebad Sellin",DE,17
+52132,"Surrey",CA,17
+3689791,"Hayle",GB,17
+6660,"Boksburg",ZA,17
+31517,"Maleny",AU,17
+58133,"West Chester-Oh",US,17
+37917,"Oberhof",DE,17
+4859,"Battle Creek-Mi",US,17
+15847,"El Tarter",AD,17
+24723,"Kabin Buri",TH,17
+21155,"Hanover-Md",US,17
+57875,"Weatherford-Tx",US,17
+42167,"Pouso Alegre",BR,17
+27949,"Lairg",GB,17
+13805,"David",PA,17
+58593,"Wilhelmshaven",DE,17
+44128,"Ridgecrest-Ca",US,17
+552962,"Mindelo",CV,17
+1351812,"Gaschurn",AT,17
+54155,"Torrance-Ca",US,17
+25725,"Keystone-Sd",US,17
+36048,"Nanjo",JP,17
+18285,"Fujisawa",JP,17
+18985,"Gerlos",AT,17
+54878,"Tukwilla-Wa",US,17
+178538,"Le Grau Du Roi",FR,17
+20773,"Hachimantai",JP,17
+52532,"Takasaki",JP,17
+34112,"Modesto-Ca",US,17
+24856,"Kalavryta",GR,17
+54016,"Tomar",PT,17
+3080,"Atyrau",KZ,17
+1705,"Ampang",MY,17
+29022,"Leeuwarden",NL,16
+23280,"Imabari",JP,16
+3949976,"Kiwengwa",TZ,16
+54633,"Trinita Dagultu",IT,16
+3786174,"Brockenhurst",GB,16
+7384,"Brenzone Sul Garda",IT,16
+57080,"Vlissingen",NL,16
+53568,"Thredbo",AU,16
+3815534,"Llanrwst",GB,16
+52369,"Tababela",EC,16
+10669,"Chaozhou",CN,16
+53289,"Teruel",ES,16
+44107,"Richmond",AU,16
+55829,"Vallejo-Ca",US,16
+4630,"Barra De Navidad",MX,16
+4911,"Bay City-Tx",US,16
+8159,"Burlington-Nc",US,16
+52246,"Swansea",AU,16
+176256,"Angouleme",FR,16
+29184,"Leogang",AT,16
+24653,"Junction City-Ks",US,16
+12849,"Costermano",IT,16
+50558,"Soll",AT,16
+179607,"Perros Guirec",FR,16
+181055,"Valenciennes",FR,16
+54956,"Turangi",NZ,16
+35437,"Mudanya",TR,16
+179597,"Perigord",FR,16
+29906,"Litochoro",GR,16
+3569470,"Alcamo",IT,16
+54337,"Towada",JP,16
+5558,"Bento Goncalves",BR,16
+176625,"Bergerac",FR,16
+9084,"Cangzhou",CN,16
+34231,"Moline-Il",US,16
+48335,"Sassnitz",DE,16
+35953,"Nakanojo",JP,16
+40777,"Pilanesberg",ZA,16
+25222,"Karlstad",SE,16
+3945918,"Dorgali",IT,16
+33553,"Middelburg",NL,16
+8279,"Butte-Mt",US,16
+3946077,"Montefalco",IT,16
+36638,"New Bern-Nc",US,16
+55055,"Tweed Heads",AU,16
+8176,"Burnie",AU,16
+38756,"Osh",KG,16
+30367,"Longmont-Co",US,16
+9279,"Capilla Del Monte",AR,16
+3569343,"Bisceglie",IT,16
+18661,"Garland-Tx",US,16
+42328,"Predazzo",IT,16
+53207,"Tequila",MX,16
+6126,"Binzhou",CN,16
+52368,"Taba",EG,16
+54364,"Toyota",JP,16
+1699930,"Nilgiri Hills",IN,16
+22062,"Hildesheim",DE,16
+23048,"Ibarra",EC,16
+33983,"Mission Beach",AU,16
+45677,"Saint Cloud-Mn",US,16
+3802920,"Bicester",GB,16
+31312,"Mai Chau",VN,16
+2685875,"Saint Barthelemy",BL,16
+51296,"Stafford-Tx",US,16
+3947997,"Kumluca",TR,16
+1612700,"Buan Gun",KR,16
+2182138,"Magog Orford",CA,16
+41294,"Pocatello-Id",US,16
+59234,"Xianyang",CN,16
+3945980,"Siniscola",IT,16
+11319,"Chitwan",NP,16
+45434,"Sagamihara",JP,16
+28287,"Landshut",DE,16
+50011,"Sindelfingen",DE,16
+177332,"Concarneau",FR,16
+178826,"Lorient",FR,16
+44727,"Roma",AU,16
+3815514,"Colwyn Bay",GB,16
+39745,"Parksville",CA,16
+30644,"Lubbenau",DE,16
+3568395,"Pescasseroli",IT,16
+1485,"Altoona-Pa",US,16
+7887,"Bucine",IT,16
+8828,"Camden-Me",US,16
+6826,"Boppard",DE,16
+51996,"Sumoto",JP,16
+15061,"Dumai",ID,16
+48775,"Scicli",IT,16
+53830,"Titisee Neustadt",DE,16
+33403,"Mesquite-Tx",US,16
+42541,"Provo-Ut",US,16
+1499508,"Miyako Island",JP,16
+44844,"Rosarito",MX,16
+34546,"Monte Gordo",PT,16
+176487,"Bandol",FR,16
+270280,"Muxia",ES,16
+36059,"Nanping",CN,16
+13890,"Dead Sea",JO,16
+5790,"Bethesda-Md",US,16
+15261,"Eagle Pass-Tx",US,16
+48879,"Secaucus-Nj",US,16
+18081,"Freeport",BS,16
+16904,"Falkirk",GB,16
+26253,"Kitami",JP,16
+21534,"Hays-Ks",US,16
+59915,"Zell Am Ziller",AT,16
+1351916,"Lermoos",AT,16
+20503,"Guarulhos",BR,16
+3689733,"Coniston",GB,16
+10248,"Ceglie Messapica",IT,16
+3721,"Badia",IT,16
+3815276,"Aylesbury",GB,16
+25756,"Khandala",IN,16
+52451,"Taguig",PH,16
+42526,"Providencia",CO,16
+11619,"Ciudad Obregon",MX,16
+10985,"Cherating",MY,16
+21115,"Handan",CN,16
+1699728,"Eraniel",IN,16
+177262,"Cholet",FR,16
+53499,"Thohoyandou",ZA,16
+54359,"Toyohashi",JP,16
+3946795,"Casole dElsa",IT,16
+24112,"Jamnagar",IN,16
+44293,"Rio Quente",BR,16
+22756,"Huaibei",CN,16
+48213,"Saquarema",BR,16
+15050,"Dullstroom",ZA,16
+2134373,"Andong Si",KR,16
+51043,"Spokane Valley-Wa",US,16
+3570519,"Fiesole",IT,16
+34953,"Moree",AU,16
+3802738,"Blackburn",GB,16
+35029,"Morogoro",TZ,16
+26292,"Klagenfurt",AT,16
+47121,"San Jeronimo",CO,16
+17817,"Fort Mill-Sc",US,16
+40979,"Pizzo",IT,16
+56079,"Vaxjo",SE,16
+52712,"Tandil",AR,16
+4631,"Barra De Sao Miguel",BR,16
+54881,"Tula",RU,16
+59264,"Xingtai",CN,16
+17585,"Folgarida",IT,16
+28632,"Laugar",IS,16
+2187,"Apodaca",MX,16
+3568412,"Roccaraso",IT,16
+433175,"Saronikos",GR,16
+16204,"Enid-Ok",US,16
+50584,"Soltau",DE,16
+57003,"Viseu",PT,16
+39674,"Parauapebas",BR,16
+40339,"Perrysburg-Oh",US,16
+30437,"Lorne",AU,16
+298947,"Barbate",ES,16
+3571215,"Kenai Peninsula-AK",US,16
+522478,"Saas Grund",CH,16
+2134408,"Gwangyang Si",KR,16
+1691886,"Mahajanga",MG,16
+2945,"Astoria-Or",US,16
+53818,"Tisno",HR,16
+179949,"Rochefort",FR,16
+43572,"Rauris",AT,16
+53659,"Tifton-Ga",US,16
+47882,"Santa Maria-Ca",US,16
+25670,"Kerry",IE,16
+2930,"Assos",TR,16
+56777,"Villarrica",CL,16
+39093,"Oxford-Al",US,16
+521556,"Kielce",PL,16
+22338,"Hokuto",JP,16
+178477,"Laval",FR,16
+1481808,"Sillot",ES,16
+3569340,"Andria",IT,16
+179418,"Nogaro",FR,16
+19081,"Giarre",IT,16
+20084,"Green Island",TW,16
+44695,"Roi Et",TH,16
+30773,"Lumbarda",HR,16
+3569350,"Castellaneta",IT,16
+3663328,"Stow on the Wold",GB,16
+6814,"Boone-Nc",US,16
+52268,"Swift Current",CA,16
+1679253,"Haputale",LK,16
+177253,"Chinon",FR,16
+35859,"Naddi",IN,16
+3059,"Atsugi",JP,16
+4148,"Bamako",ML,16
+3946815,"Saint Paul",RE,16
+8833,"Camelford",GB,16
+50424,"Snowshoe-Wv",US,16
+3786824,"Wakefield",GB,16
+52826,"Taree",AU,16
+53387,"Thanjavur",IN,16
+6820,"Boothbay Harbor-Me",US,16
+270127,"Badajoz",ES,16
+13898,"Dearborn-Mi",US,16
+43056,"Queanbeyan",AU,16
+44134,"Ridgeland-Ms",US,16
+38172,"Okazaki",JP,16
+59909,"Zelenogradsk",RU,16
+28521,"Las Galeras",DO,16
+48126,"Sao Joao Del Rei",BR,16
+2134377,"Asan Si",KR,16
+3714,"Badenweiler",DE,16
+53037,"Tecolutla",MX,16
+1841836,"Rignano Sull Arno",IT,16
+22634,"Horta",PT,16
+15885,"Elazig",TR,16
+42312,"Prattville-Al",US,16
+3945397,"Formia",IT,16
+3896,"Baiona",ES,16
+3689656,"Broadway",GB,16
+29993,"Livonia-Mi",US,16
+5964,"Biei",JP,16
+8599,"Calamba",PH,16
+40954,"Pitigliano",IT,16
+43028,"Quang Ngai",VN,16
+42975,"Qawra",MT,16
+26917,"Kristiansand",NO,16
+1394126,"Porto Empedocle",IT,16
+26693,"Korce",AL,16
+32930,"Mclean-Va",US,16
+50816,"South Haven-Mi",US,16
+13083,"Crescent City-Ca",US,16
+177070,"Chalon Sur Saone",FR,16
+58217,"West Valley City-Ut",US,16
+26409,"Ko Mak",TH,16
+31774,"Manisa",TR,16
+270099,"A Lanzada",ES,16
+48240,"Saratov",RU,16
+3815788,"Ruthin",GB,16
+10303,"Centola",IT,16
+6468,"Blythe-Ca",US,16
+33212,"Mendocino-Ca",US,16
+176254,"Anglet",FR,16
+34253,"Mollymook",AU,16
+14287,"Dhulikhel",NP,16
+50867,"South West Rocks",AU,16
+55469,"Uruapan",MX,16
+25108,"Kapaa-Hi",US,16
+13524,"Dahlonega-Ga",US,16
+37646,"Novigrad",HR,16
+16146,"Encamp",AD,16
+966,"Albir",ES,16
+30697,"Ludington-Mi",US,16
+48109,"Sao Carlos",BR,16
+26062,"Kingsport-Tn",US,16
+2134388,"Chungju Si",KR,16
+1463461,"Kokonoe",JP,16
+3802661,"Northallerton",GB,16
+24219,"Jefferson City-Mo",US,16
+6535,"Bodenmais",DE,16
+3946848,"Arbus",IT,16
+15948,"Elk City-Ok",US,16
+3946833,"Poggibonsi",IT,16
+3815432,"Hartlepool",GB,16
+53862,"Tiznit",MA,16
+3569738,"Amelia",IT,16
+38199,"Okrug Gornji",HR,16
+1261,"Allinge",DK,16
+37118,"Niteroi",BR,16
+3786166,"Andover",GB,16
+52187,"Suzuka",JP,16
+3802640,"Guisborough",GB,16
+11890,"Clovis-Nm",US,16
+3949317,"Aksaray",TR,16
+179266,"Montrichard",FR,16
+3947474,"Cuneo",IT,15
+11542,"Cinisi",IT,15
+1501237,"Smiggin Holes",AU,15
+1694,"Amorgos",GR,15
+674196,"Glacier-Wa",US,15
+22348,"Holbrook-Az",US,15
+3815394,"Sunderland",GB,15
+8074,"Burbank-Ca",US,15
+19199,"Giresun",TR,15
+5064,"Beaverton-Or",US,15
+3949316,"Adalar",TR,15
+521069,"Etosha",NA,15
+24658,"Jundiai",BR,15
+1463025,"Abiko",JP,15
+3945881,"Aglientu",IT,15
+3803030,"Burton upon Trent",GB,15
+3585791,"Tiruchirappalli",IN,15
+3949757,"Azay Le Rideau",FR,15
+26019,"Kingaroy",AU,15
+2134432,"Pyeongchang Gun",KR,15
+31104,"Madaba",JO,15
+57781,"Waterloo",CA,15
+1465677,"Krasnaja Poljana",RU,15
+3848514,"Saint Paul De Vence",FR,15
+4536,"Bargara",AU,15
+24244,"Jena",DE,15
+42669,"Puerto Lopez",EC,15
+47006,"San Fernando",PH,15
+3569403,"Cannigione",IT,15
+3845713,"Karon",TH,15
+44100,"Richmond Hill-Ga",US,15
+3815500,"Buckie",GB,15
+3689769,"Seascale",GB,15
+21104,"Hanamaki",JP,15
+23684,"Isla",ES,15
+9701,"Casarano",IT,15
+51597,"Stone Mountain-Ga",US,15
+51190,"St Ignace-Mi",US,15
+10077,"Cathedral City-Ca",US,15
+35459,"Muelheim An Der Ruhr",DE,15
+55795,"Valle Aurina",IT,15
+7291,"Braunton",GB,15
+20425,"Guadix",ES,15
+3815351,"Kidderminster",GB,15
+3754,"Bagdogra",IN,15
+2279,"Aranda De Duero",ES,15
+5012,"Beaufort West",ZA,15
+3569510,"Chiaramonte Gulfi",IT,15
+27,"Aalen",DE,15
+3815151,"Ely",GB,15
+43393,"Ramsau Am Dachstein",AT,15
+300378,"Ribamontan Al Mar",ES,15
+52235,"Swan Hill",AU,15
+36035,"Nang Rong",TH,15
+38995,"Ouirgane",MA,15
+521456,"Bialystok",PL,15
+3786482,"Knutsford",GB,15
+46697,"Salinas-Ca",US,15
+29132,"Lemnos",GR,15
+3511,"Bad Bevensen",DE,15
+54879,"Tula De Allende",MX,15
+14184,"Dessau",DE,15
+42566,"Pskov",RU,15
+38930,"Ottawa-Il",US,15
+28237,"Lancaster-Ca",US,15
+57479,"Walla Walla-Wa",US,15
+23161,"Ikaria",GR,15
+50400,"Smyrna-Tn",US,15
+3848517,"Vence",FR,15
+520927,"Hveragerdi",IS,15
+56113,"Vejle",DK,15
+22711,"Howrah",IN,15
+36154,"Narooma",AU,15
+39007,"Oulu",FI,15
+59660,"Yuanshan",TW,15
+12960,"Covilha",PT,15
+53266,"Terrace",CA,15
+176777,"Bourg Saint Maurice",FR,15
+291900,"Alcala De Chivert",ES,15
+58971,"Woodbridge-Va",US,15
+51080,"Springdale-Ar",US,15
+36015,"Namur",BE,15
+54595,"Tricase",IT,15
+18010,"Franklin-Nc",US,15
+3945244,"Cernobbio",IT,15
+179118,"Millau",FR,15
+6516,"Bocas Del Toro",PA,15
+49416,"Shari",JP,15
+7243,"Brandon",CA,15
+56468,"Vielha",ES,15
+3802637,"Grassington",GB,15
+47834,"Santa Fe",AR,15
+43248,"Radicofani",IT,15
+25295,"Kashiwa",JP,15
+3949832,"Safaga",EG,15
+24406,"Jinghong",CN,15
+1842085,"Sarzana",IT,15
+179838,"Puteaux",FR,15
+52770,"Tapachula",MX,15
+177378,"Corsica",FR,15
+59693,"Yuli",TW,15
+3900298,"Port de Soller",ES,15
+20624,"Gulmarg",IN,15
+57833,"Waukegan-Il",US,15
+10660,"Chantilly-Va",US,15
+37119,"Nitra",SK,15
+3803040,"Leek",GB,15
+43994,"Reynosa",MX,15
+23208,"Ilha De Boipeba",BR,15
+38258,"Oldenburg",DE,15
+39291,"Palamos",ES,15
+35843,"Nabeul",TN,15
+18266,"Fuerth",DE,15
+41551,"Ponta Grossa",BR,15
+11266,"Chipiona",ES,15
+42434,"Prince Albert",ZA,15
+44748,"Rome-Ga",US,15
+3572866,"Lu'an",CN,15
+16876,"Falcade",IT,15
+33919,"Miramar-Fl",US,15
+17943,"Fox Glacier",NZ,15
+521764,"Swieradow Zdroj",PL,15
+53333,"Texas City-Tx",US,15
+41220,"Plitvicka Jezera",HR,15
+7870,"Bucerias",MX,15
+41793,"Port Lincoln",AU,15
+1842005,"Chieti",IT,15
+177919,"Gordes",FR,15
+51810,"Sturbridge-Ma",US,15
+3689817,"Perranporth",GB,15
+23894,"Itu",BR,15
+1761,"Anantapur",IN,15
+1842862,"Piacenza",IT,15
+3947844,"Mira",IT,15
+53420,"The Entrance",AU,15
+21761,"Hendersonville-Nc",US,15
+6895,"Borkum",DE,15
+47601,"Sanlucar De Barrameda",ES,15
+30767,"Lulea",SE,15
+17466,"Flint-Mi",US,15
+22188,"Hitachinaka",JP,15
+36407,"Nellore",IN,15
+3864,"Baie Saint Paul",CA,15
+38480,"Opelika-Al",US,15
+3846418,"Bergama",TR,15
+1842023,"Tortoreto",IT,15
+1704401,"Legok",ID,15
+1489120,"Lubuklinggau",ID,15
+428322,"Sautee Nacoochee-Ga",US,15
+3848453,"La Ciotat",FR,15
+15642,"Ein Bokek",IL,15
+46702,"Salisbury-Md",US,15
+6392,"Block Island-Ri",US,15
+1488913,"Jerowaru",ID,15
+3689949,"Diss",GB,15
+3815708,"Harlech",GB,15
+177567,"Dunkerque",FR,15
+12221,"Columbia-Md",US,15
+3570984,"Egypt Lane Historic District-NY",US,15
+3949700,"Aigues Mortes",FR,15
+8290,"Butuan",PH,15
+24412,"Jinhua",CN,15
+44787,"Rondonopolis",BR,15
+49161,"Serfaus",AT,15
+179747,"Pornichet",FR,15
+3815703,"Blaenau Ffestiniog",GB,15
+35730,"Muskogee-Ok",US,15
+21041,"Hamilton",AU,15
+22116,"Himi",JP,15
+30928,"Lyndhurst",GB,15
+3439,"Azumino",JP,15
+7281,"Brattleboro-Vt",US,15
+42295,"Pranburi",TH,15
+4769,"Bassano Del Grappa",IT,15
+54039,"Tonami",JP,15
+7318,"Breda",NL,15
+32896,"Mcalester-Ok",US,15
+3846006,"Kediri",ID,15
+52254,"Swat",PK,15
+3947775,"La Thuile",IT,15
+38351,"Olympia",GR,15
+1556,"Amakusa",JP,15
+1687287,"Serra Do Cipo",BR,15
+20646,"Gunma",JP,15
+3848289,"Issy-Les-Moulineaux",FR,15
+34390,"Monreale",IT,15
+3946895,"Muravera",IT,15
+17164,"Fernandina Beach-Fl",US,15
+3802914,"Abingdon",GB,15
+8241,"Bushmills",GB,15
+29864,"Lishui",CN,15
+3786579,"Wells",GB,15
+58441,"Whitefish-Mt",US,15
+54763,"Truskavets",UA,15
+10623,"Changhua",TW,15
+426711,"Lodi-Ny",US,15
+51297,"Stafford-Va",US,15
+31828,"Mansfield-Oh",US,15
+1211,"Aljezur",PT,15
+2889,"Aso",JP,15
+34964,"Moreno Valley-Ca",US,15
+32253,"Marion-Il",US,15
+3945789,"Ravda",BG,15
+3946277,"Battipaglia",IT,15
+3848494,"Cagnes Sur Mer",FR,15
+23112,"Igatpuri",IN,15
+57840,"Wausau-Wi",US,15
+30535,"Louis Trichardt",ZA,15
+42660,"Puerto Jimenez",CR,15
+3802802,"Rotherham",GB,15
+2193666,"Breezy Point-Mn",US,15
+28454,"Lappeenranta",FI,15
+46681,"Salida-Co",US,15
+54354,"Toyako",JP,15
+56553,"Vila Do Bispo",PT,15
+26763,"Kostroma",RU,15
+15541,"Edson",CA,15
+52834,"Targu Mures",RO,15
+13915,"Debrecen",HU,15
+36216,"Natchitoches-La",US,15
+1680158,"Jinhu",TW,15
+16974,"Farmington Hills-Mi",US,15
+1706843,"Cape Hatteras National Seashore-Nc",US,15
+44285,"Rio Marina",IT,15
+25810,"Khlong Luang",TH,15
+40393,"Peso Da Regua",PT,15
+3786194,"Hythe",GB,15
+51350,"Stanthorpe",AU,15
+11183,"Chikkamagaluru",IN,15
+24904,"Kalmar",SE,15
+23958,"Izhevsk",RU,15
+16861,"Faisalabad",PK,15
+3569601,"Valderice",IT,15
+50604,"Somerset-Nj",US,15
+521771,"Szczyrk",PL,15
+41071,"Plattsburgh-Ny",US,15
+177513,"Dinard",FR,15
+52429,"Tafi Del Valle",AR,15
+4412,"Baoji",CN,15
+18715,"Gastonia-Nc",US,15
+44965,"Rota",ES,15
+5095,"Beckley-Wv",US,15
+3802642,"Hawes",GB,15
+1842579,"Galatina",IT,15
+3949842,"El Qoseir",EG,15
+1500539,"Hat Head",AU,15
+3945704,"Loreto",IT,15
+270616,"Manacor",ES,15
+1842539,"Spello",IT,15
+3815008,"Saundersfoot",GB,15
+42179,"Povoa De Varzim",PT,15
+55074,"Twizel",NZ,15
+31470,"Malapascua Island",PH,15
+57700,"Warwick",AU,15
+3815384,"Gateshead",GB,15
+38841,"Ostersund",SE,15
+10016,"Castrignano Del Capo",IT,15
+40441,"Petoskey-Mi",US,15
+13429,"Custonaci",IT,15
+42104,"Postira",HR,15
+3363,"Ayacucho",PE,15
+3815033,"Llanelli",GB,15
+52748,"Tanna",VU,15
+53329,"Texarkana-Ar",US,15
+3786403,"Chelmsford",GB,15
+31023,"Macapa",BR,15
+19980,"Graskop",ZA,15
+31511,"Malelane",ZA,15
+3949851,"Al Ain",AE,15
+54856,"Tucumcari-Nm",US,15
+33365,"Mersing",MY,15
+3786571,"Shepton Mallet",GB,15
+18084,"Freeport-Me",US,15
+56984,"Visalia-Ca",US,15
+16495,"Esperance",AU,15
+11038,"Chesterfield-Mo",US,15
+1470107,"Mcleod Ganj",IN,15
+20659,"Guntur",IN,15
+23351,"Independence-Oh",US,15
+31747,"Manhattan-Ks",US,15
+47832,"Santa Fe De Antioquia",CO,15
+31513,"Maleme",GR,15
+39790,"Parsippany-Nj",US,15
+3689869,"Exmouth",GB,15
+16362,"Erice",IT,15
+13128,"Criciuma",BR,15
+36556,"Neum",BA,15
+41506,"Ponce",PR,15
+8764,"Camacari",BR,15
+20741,"Gzira",MT,15
+9632,"Carson City-Nv",US,15
+13024,"Cranbrook",CA,15
+1390186,"Capo D Orlando",IT,15
+54366,"Tozeur",TN,15
+11323,"Chiusi",IT,15
+3689717,"Appleby in Westmorland",GB,15
+55557,"Uttarkashi",IN,15
+3570562,"Vicchio",IT,15
+13686,"Danville-Va",US,15
+7226,"Bran",RO,15
+13777,"Datong",CN,15
+20361,"Grottammare",IT,15
+3945301,"Varenna",IT,15
+42112,"Potchefstroom",ZA,15
+3949330,"Marmara",TR,15
+56284,"Vernal-Ut",US,15
+48943,"Segamat",MY,15
+28653,"Laurel-Md",US,15
+3946126,"Martano",IT,15
+51337,"Stanley",AU,15
+47997,"Santee-Sc",US,15
+8598,"Calama",CL,15
+3950084,"Kangar",MY,15
+30228,"Loja",EC,15
+25808,"Khiva",UZ,15
+30087,"Lloydminster",CA,15
+31966,"Marawila",LK,15
+53947,"Tokat",TR,15
+22150,"Hinton",CA,15
+48950,"Seget",HR,15
+3815448,"Amlwch",GB,15
+58804,"Winter Haven-Fl",US,15
+11314,"Chittaurgarh",IN,15
+13173,"Cromwell",NZ,15
+177673,"Evian Les Bains",FR,15
+52880,"Tartu",EE,15
+270299,"Padron",ES,15
+3612,"Bad Nauheim",DE,15
+19722,"Gottingen",DE,14
+53377,"Thames",NZ,14
+38534,"Orange-Ca",US,14
+23152,"Iiyama",JP,14
+34396,"Monroe-La",US,14
+39520,"Panguitch-Ut",US,14
+39302,"Palapye",BW,14
+44479,"Robe",AU,14
+17518,"Florida City-Fl",US,14
+3786552,"Frome",GB,14
+26211,"Kiruna",SE,14
+390196,"Oliva",ES,14
+7850,"Bryson City-Nc",US,14
+3690010,"Workington",GB,14
+3293,"Aviles",ES,14
+25804,"Khimki",RU,14
+51791,"Stuart-Fl",US,14
+44884,"Rosenheim",DE,14
+41036,"Plantation-Fl",US,14
+52034,"Sundsvall",SE,14
+48180,"Sao Roque Do Pico",PT,14
+3846318,"Obernai",FR,14
+1598006,"Vilas-Nc",US,14
+45236,"Russellville-Ar",US,14
+1401206,"Masukiye",TR,14
+48303,"Sarteano",IT,14
+56931,"Vinisce",HR,14
+1384206,"Montieramey",FR,14
+12710,"Corowa",AU,14
+26676,"Kopaonik",RS,14
+27110,"Kununurra",AU,14
+49902,"Silang",PH,14
+48309,"Sarvar",HU,14
+40916,"Piriapolis",UY,14
+11298,"Chita",JP,14
+1470015,"Mahesana",IN,14
+28576,"Latacunga",EC,14
+51390,"Statesboro-Ga",US,14
+7469,"Bridgetown",BB,14
+10680,"Chapel Hill-Nc",US,14
+51320,"Stamford-Ct",US,14
+15925,"Elgin",GB,14
+57260,"Vyborg",RU,14
+20239,"Griffith",AU,14
+3948400,"Villajoyosa",ES,14
+49942,"Silvassa",IN,14
+20870,"Hail",SA,14
+3945863,"Torre del Greco",IT,14
+1500425,"Fingal Bay",AU,14
+56466,"Vielha E Mijaran",ES,14
+29478,"Liberia",CR,14
+4981,"Beachwood-Oh",US,14
+5468,"Benasque",ES,14
+25849,"Kiama",AU,14
+3663253,"Bourton on the Water",GB,14
+55778,"Valkenburg Aan De Geul",NL,14
+50428,"Snyder-Tx",US,14
+39870,"Paternoster",ZA,14
+47391,"San Salvador De Jujuy",AR,14
+48282,"Sarnia",CA,14
+178689,"Les Gets",FR,14
+6850,"Bordighera",IT,14
+4302,"Bandipur",NP,14
+40412,"Peterborough",CA,14
+15448,"Eceabat",TR,14
+177242,"Cherbourg",FR,14
+16473,"Eskilstuna",SE,14
+57489,"Walldorf",DE,14
+42280,"Praia Grande",BR,14
+16802,"Fai Della Paganella",IT,14
+3848354,"Nanterre",FR,14
+55112,"Tzaneen",ZA,14
+44880,"Rosenberg-Tx",US,14
+3786516,"Haywards Heath",GB,14
+3570609,"Scansano",IT,14
+25598,"Kenner-La",US,14
+3815107,"Cowes",GB,14
+38528,"Orange Park-Fl",US,14
+29447,"Lhasa",CN,14
+27592,"La Porte-Tx",US,14
+3815478,"Kingussie",GB,14
+45239,"Russelsheim",DE,14
+723,"Akcakoca",TR,14
+1682594,"Pua",TH,14
+2097,"Antiparos",GR,14
+3689878,"Honiton",GB,14
+3814993,"Milford Haven",GB,14
+1488983,"Kebumen",ID,14
+1501296,"Sussex Inlet",AU,14
+56153,"Velingrad",BG,14
+21199,"Hardeeville-Sc",US,14
+55239,"Uljin",KR,14
+22973,"Hurricane-Ut",US,14
+180869,"Tarbes",FR,14
+1683988,"La Libertad",SV,14
+299672,"El Rocio",ES,14
+581,"Agva",TR,14
+33810,"Minamiawaji",JP,14
+3689726,"Broughton in Furness",GB,14
+35906,"Nags Head-Nc",US,14
+40252,"Perce",CA,14
+26249,"Kitakami",JP,14
+5681,"Bermuda",BM,14
+29984,"Livingston-Mt",US,14
+177506,"Dieppe",FR,14
+43632,"Reading-Pa",US,14
+53114,"Tema",GH,14
+55208,"Uji",JP,14
+44717,"Rolla-Mo",US,14
+48231,"Sarapiqui",CR,14
+1686819,"Penedo",BR,14
+1911,"Anguilla",AI,14
+1416136,"Caldaro",IT,14
+1842053,"Rende",IT,14
+32179,"Marina Di Massa",IT,14
+25573,"Kenedy-Tx",US,14
+30555,"Lourinha",PT,14
+3944938,"Porto San Giorgio",IT,14
+47741,"Santa Catarina",BR,14
+55489,"Usak",TR,14
+47522,"Sandston-Va",US,14
+25752,"Khamis Mushait",SA,14
+178339,"La Roche Sur Yon",FR,14
+18035,"Fraser-Co",US,14
+389154,"O Pino",ES,14
+3949743,"Sete",FR,14
+1548122,"Gabala",AZ,14
+35850,"Nachikatsuura",JP,14
+38764,"Oshkosh-Wi",US,14
+517,"Agnes Water",AU,14
+5884,"Bhavnagar",IN,14
+179946,"Rocamadour",FR,14
+37735,"Numana",IT,14
+32626,"Mata De Sao Joao",BR,14
+14381,"Digby",CA,14
+3946800,"Certaldo",IT,14
+49605,"Shimajiri",JP,14
+3786696,"Belper",GB,14
+39081,"Owensboro-Ky",US,14
+41849,"Port Wentworth-Ga",US,14
+58747,"Windsor Locks-Ct",US,14
+39226,"Pagosa Springs-Co",US,14
+20326,"Grossarl",AT,14
+47941,"Santa Rosa De Cabal",CO,14
+46863,"Samut Prakan",TH,14
+51926,"Sukosan",HR,14
+3802614,"Bedale",GB,14
+47914,"Santa Monica-Ca",US,14
+1575,"Amarante",PT,14
+3946869,"Carloforte",IT,14
+10718,"Charleroi",BE,14
+3948017,"Marathonas",GR,14
+16436,"Esbjerg",DK,14
+35178,"Motueka",NZ,14
+8428,"Cadaques",ES,14
+1711226,"Wheeler Peak Wilderness Area-Nm",US,14
+52341,"Szeged",HU,14
+45173,"Ruisui",TW,14
+39583,"Papenburg",DE,14
+50143,"Sitiawan",MY,14
+4303,"Bandirma",TR,14
+52968,"Taveuni Island",FJ,14
+59578,"Yokkaichi",JP,14
+179989,"Roscoff",FR,14
+17938,"Fowey",GB,14
+3786144,"Stockport",GB,14
+39933,"Pavia",IT,14
+29901,"Lithia Springs-Ga",US,14
+18045,"Frauenwald",DE,14
+55069,"Twin Falls-Id",US,14
+44583,"Rockingham",AU,14
+3411,"Ayvacik",TR,14
+32081,"Maria Alm Am Steinernen Meer",AT,14
+50921,"Southsea",GB,14
+37272,"Norden",DE,14
+30944,"Lynnwood-Wa",US,14
+59311,"Xylokastro",GR,14
+10461,"Chacras De Coria",AR,14
+2023,"Anshun",CN,14
+34034,"Mittenwald",DE,14
+56991,"Visconde De Maua",BR,14
+41720,"Port Clinton-Oh",US,14
+179247,"Montlucon",FR,14
+28161,"Lam",DE,14
+42369,"Presov",SK,14
+11673,"Clare",AU,14
+181022,"Uzes",FR,14
+59852,"Zapopan",MX,14
+270493,"Arta",ES,14
+58344,"Wetzlar",DE,14
+8883,"Campbell River",CA,14
+1489567,"Soreang",ID,14
+3567,"Bad Harzburg",DE,14
+31386,"Maizuru",JP,14
+3786349,"Watford",GB,14
+52526,"Takaoka",JP,14
+52541,"Taketomi",JP,14
+21144,"Hannibal-Mo",US,14
+20901,"Hajduszoboszlo",HU,14
+342,"Adiyaman",TR,14
+3945782,"Elenite",BG,14
+35807,"Mystic-Ct",US,14
+40112,"Pelotas",BR,14
+2134405,"Guri Si",KR,14
+39871,"Paterson",ZA,14
+26075,"Kingston-Ny",US,14
+10870,"Chau Doc",VN,14
+552973,"Praia",CV,14
+1679602,"Nilaveli",LK,14
+52154,"Sutivan",HR,14
+1842021,"Sulmona",IT,14
+31142,"Madison-Al",US,14
+3946299,"Minori",IT,14
+1139030,"Tulungagung",ID,14
+32539,"Mascali",IT,14
+59301,"Xuancheng",CN,14
+3946799,"Castiglione dOrcia",IT,14
+39409,"Palmela",PT,14
+15522,"Edmond-Ok",US,14
+44791,"Ronks-Pa",US,14
+20651,"Gunnison-Co",US,14
+4506,"Barcelos",PT,14
+3948359,"Javea",ES,14
+53112,"Teluk Intan",MY,14
+20661,"Gunzburg",DE,14
+33223,"Menfi",IT,14
+11511,"Cienfuegos",CU,14
+3945751,"Sesto San Giovanni",IT,14
+3689600,"Broadstairs",GB,14
+14750,"Dorfgastein",AT,14
+14398,"Dilijan",AM,14
+33554,"Middelburg",ZA,14
+39096,"Oxford-Ms",US,14
+24992,"Kampar",MY,14
+1618,"Amboseli National Park",KE,14
+9353,"Captiva-Fl",US,14
+3570569,"Capalbio",IT,14
+16217,"Ennis",IE,14
+45362,"Sabie",ZA,14
+10185,"Cayo Coco",CU,14
+427511,"Ofallon-Il",US,14
+3689770,"Sedbergh",GB,14
+3848381,"Rueil Malmaison",FR,14
+1612943,"Nonsan",KR,14
+3815486,"Abergavenny",GB,14
+27881,"Lagoa",PT,14
+3815879,"Dunoon",GB,14
+389038,"Mazarron",ES,14
+1567,"Amami",JP,14
+13999,"Del Rio-Tx",US,14
+54013,"Tomakomai",JP,14
+53296,"Tesero",IT,14
+211,"Acharacle",GB,14
+20356,"Groton-Ct",US,14
+34565,"Monte San Savino",IT,14
+53368,"Thale",DE,14
+3946104,"San Miniato",IT,14
+53331,"Texarkana-Tx",US,14
+3947366,"Acqui Terme",IT,14
+53203,"Tepotzotlan",MX,14
+13472,"Daanbantayan",PH,14
+28396,"Lanseria",ZA,14
+177674,"Evreux",FR,14
+59277,"Xinzhou",CN,14
+3802979,"Warminster",GB,14
+3570288,"Carpignano Salentino",IT,14
+22134,"Hinjewadi",IN,14
+3689605,"Deal",GB,14
+35294,"Mount Shasta-Ca",US,14
+38998,"Oujda",MA,14
+50741,"Sossusvlei",NA,14
+5074,"Beberibe",BR,14
+14517,"Djibouti",DJ,14
+12697,"Corona-Ca",US,14
+8738,"Caltanissetta",IT,14
+2953,"Asturias",ES,14
+47105,"San Ignacio",MX,14
+26782,"Kotka",FI,14
+38784,"Osnabruck",DE,14
+57871,"Waynesville-Nc",US,14
+6073,"Billund",DK,14
+9885,"Castellon De La Plana",ES,14
+35214,"Mount Buller",AU,14
+270575,"El Puerto De Santa Maria",ES,14
+53999,"Tolu",CO,14
+16191,"Englewood-Co",US,14
+13921,"Decatur-Tx",US,14
+51094,"Springfield-Or",US,14
+19816,"Grafton",AU,14
+12235,"Columbus-Ms",US,14
+19873,"Grand Canyon-Az",US,14
+180177,"Saint Florent",FR,14
+14259,"Dhanbad",IN,14
+177367,"Cormontreuil",FR,14
+25218,"Karlskrona",SE,14
+30831,"Luray-Va",US,14
+1842961,"La Morra",IT,14
+13254,"Crystal River-Fl",US,14
+1599,"Ambato",EC,14
+15798,"El Oro De Hidalgo",MX,14
+12288,"Comiso",IT,14
+2134418,"Jecheon Si",KR,14
+57624,"Waren",DE,14
+56593,"Vila Velha",BR,14
+1841984,"Ameglia",IT,14
+8539,"Cala Bona",ES,14
+593,"Ahmednagar",IN,14
+15557,"Effingham-Il",US,14
+58156,"West Glacier-Mt",US,14
+58363,"Whakatane",NZ,14
+178847,"Louviers",FR,14
+50217,"Skelleftea",SE,14
+3568580,"Cesena",IT,14
+17350,"Fish Creek-Wi",US,14
+56928,"Vinh",VN,14
+8635,"Caldas Da Rainha",PT,14
+18161,"Friday Harbor-Wa",US,14
+1383012,"Lisle Sur La Sorgue",FR,14
+55132,"Uberaba",BR,14
+1489798,"West Cirebon",ID,14
+3786576,"Watchet",GB,14
+33161,"Melrose",GB,14
+177160,"Chasseneuil Du Poitou",FR,14
+59821,"Zamora",ES,14
+22682,"Hounslow",GB,14
+34686,"Montes Claros",BR,14
+25526,"Kelso",GB,14
+34018,"Mitchell-Sd",US,14
+39733,"Parkes",AU,14
+49171,"Serifos",GR,14
+1458,"Altinoluk",TR,14
+180224,"Saint Herblain",FR,14
+19542,"Golden-Co",US,14
+3947784,"Saint Vincent",IT,14
+1687101,"Salinopolis",BR,14
+48255,"Sardinia",IT,14
+4910,"Bay City-Mi",US,14
+47931,"Santa Rosa-Nm",US,14
+1698917,"Goeppingen",DE,14
+42078,"Posadas",AR,14
+11975,"Coco",CR,14
+15518,"Edison-Nj",US,14
+58520,"Wicklow",IE,14
+50886,"Southampton-Ny",US,14
+693971,"Longframlington",GB,14
+1339338,"Eforie",RO,14
+43495,"Rapolano Terme",IT,14
+59694,"Yulin",CN,14
+40155,"Pendleton-Or",US,14
+425643,"Forsyth-Mo",US,14
+3815096,"Machynlleth",GB,14
+49148,"Sequim-Wa",US,14
+300163,"Nijar",ES,14
+5457,"Ben Tre",VN,14
+45443,"Sagres",PT,14
+49017,"Selimiye",TR,14
+59498,"Yellowknife",CA,14
+2183798,"Pangkor Island",MY,14
+3591,"Bad Kreuznach",DE,14
+1139027,"Sorong",ID,14
+26570,"Kollam",IN,14
+14820,"Douglasville-Ga",US,14
+41447,"Pollica",IT,14
+3944957,"Foiano della Chiana",IT,14
+52423,"Tadoussac",CA,14
+13651,"Danbury-Ct",US,14
+54466,"Trecastagni",IT,13
+47272,"San Michele Al Tagliamento",IT,13
+3802961,"Bradford on Avon",GB,13
+43734,"Redwood City-Ca",US,13
+1842928,"Cremona",IT,13
+6442,"Blue Mountains",CA,13
+55216,"Ukiah-Ca",US,13
+41686,"Port Alberni",CA,13
+26997,"Kuala Selangor",MY,13
+12523,"Cooperstown-Ny",US,13
+3815751,"Denbigh",GB,13
+33533,"Miamisburg-Oh",US,13
+15513,"Edinburg-Tx",US,13
+14322,"Dibrugarh",IN,13
+36152,"Narok",KE,13
+29397,"Levis",CA,13
+4288,"Bandar Baru Bangi",MY,13
+18449,"Gaithersburg-Md",US,13
+32544,"Mascota",MX,13
+36007,"Nampa-Id",US,13
+3898,"Bairnsdale",AU,13
+53419,"The Dalles-Or",US,13
+17545,"Flowood-Ms",US,13
+47154,"San Juan Del Rio",MX,13
+3786274,"Newmarket",GB,13
+33744,"Millersburg-Oh",US,13
+13096,"Crested Butte-Co",US,13
+12295,"Commerce-Ga",US,13
+40935,"Pisco",PE,13
+59655,"Ystad",SE,13
+1842014,"Martinsicuro",IT,13
+176965,"Carnac",FR,13
+22132,"Hinesville-Ga",US,13
+24846,"Kalapet",IN,13
+33310,"Meridian-Id",US,13
+3946823,"Monteroni DArbia",IT,13
+3786138,"Salford",GB,13
+16937,"Fang",TH,13
+22931,"Huntersville-Nc",US,13
+1116,"Alexandroupolis",GR,13
+19559,"Golfito",CR,13
+177726,"Flaine",FR,13
+22363,"Holguin",CU,13
+552824,"Hpa An",MM,13
+178886,"Macon",FR,13
+3574456,"Pozos",MX,13
+3947846,"Mogliano Veneto",IT,13
+522489,"Samnaun",CH,13
+54989,"Turlock-Ca",US,13
+51388,"Stateline-Nv",US,13
+48398,"Sault Sainte Marie-Mi",US,13
+1343496,"Termal",TR,13
+180485,"Saint Saturnin",FR,13
+50000,"Simrishamn",SE,13
+53181,"Tenterfield",AU,13
+26598,"Komatsu",JP,13
+53342,"Tezpur",IN,13
+270380,"Portonovo",ES,13
+3786312,"Bishops Stortford",GB,13
+32034,"Marechal Deodoro",BR,13
+521807,"Wisla",PL,13
+35664,"Murmansk",RU,13
+4668,"Barretos",BR,13
+12965,"Covington-La",US,13
+3903194,"Porto Santo",PT,13
+27553,"La Paloma",UY,13
+270625,"Mont Roig Del Camp",ES,13
+51851,"Subic",PH,13
+7970,"Buffalo-Wy",US,13
+51599,"Stone Ridge-Ny",US,13
+29007,"Lee-Ma",US,13
+22148,"Hinterzarten",DE,13
+36758,"Newark-Ca",US,13
+3689798,"Redruth",GB,13
+43022,"Qualicum Beach",CA,13
+1484,"Altoona-Ia",US,13
+3802891,"Grimsby",GB,13
+41667,"Pori",FI,13
+25340,"Katherine",AU,13
+181174,"Vierzon",FR,13
+27143,"Kurnool",IN,13
+52221,"Svolvaer",NO,13
+1612382,"Romblon",PH,13
+3949552,"Epinal",FR,13
+1348,"Alpbach",AT,13
+16129,"Empuriabrava",ES,13
+25335,"Kataragama",LK,13
+1692088,"Mbale",UG,13
+17398,"Flagler Beach-Fl",US,13
+3948565,"Figueres",ES,13
+34332,"Moneglia",IT,13
+1284,"Almagro",ES,13
+41689,"Port Alfred",ZA,13
+1690565,"Kimolos",GR,13
+177843,"Gap",FR,13
+16460,"Escondido-Ca",US,13
+18095,"Freiburg Im Breisgau",DE,13
+1842032,"Belvedere Marittimo",IT,13
+55890,"Valtournenche",IT,13
+34307,"Monclova",MX,13
+35258,"Mount Juliet-Tn",US,13
+40839,"Pineto",IT,13
+45841,"Saint Gilles Les Bains",RE,13
+57908,"Weggis",CH,13
+16148,"Encarnacion",PY,13
+15492,"Edgartown-Ma",US,13
+40512,"Pforzheim",DE,13
+178589,"Le Pontet",FR,13
+3663259,"Chipping Campden",GB,13
+44208,"Rimouski",CA,13
+23707,"Isle Of Arran",GB,13
+48898,"Sedgefield",ZA,13
+11625,"Ciudad Real",ES,13
+18345,"Furore",IT,13
+54361,"Toyonaka",JP,13
+51901,"Sugar Land-Tx",US,13
+25229,"Karnal",IN,13
+49484,"Sheki",AZ,13
+31885,"Manzini",SZ,13
+40226,"Penza",RU,13
+55702,"Valdaora",IT,13
+12171,"Colon",AR,13
+49036,"Selma-Tx",US,13
+10901,"Chaves",PT,13
+3802935,"Henley on Thames",GB,13
+3815717,"Lerwick",GB,13
+7656,"Brookfield-Wi",US,13
+48363,"Sattahip",TH,13
+54511,"Tremosine",IT,13
+3945099,"Sasso Marconi",IT,13
+59587,"Yomra",TR,13
+1481788,"Lescala",ES,13
+5892,"Bhilwara",IN,13
+25248,"Karratha",AU,13
+32694,"Matosinhos",PT,13
+32640,"Matamoros",MX,13
+12953,"Covenas",CO,13
+1691852,"Diego Suarez",MG,13
+48861,"Seatac-Wa",US,13
+3945961,"Porto San Paolo",IT,13
+23947,"Ixtapan De La Sal",MX,13
+10231,"Cedar Park-Tx",US,13
+180903,"Thionville",FR,13
+43073,"Queensbury-Ny",US,13
+35605,"Munising-Mi",US,13
+59462,"Yatsushiro",JP,13
+19141,"Gilgit",PK,13
+178937,"Manosque",FR,13
+11821,"Clifden",IE,13
+59814,"Zamboanga",PH,13
+3570505,"Calenzano",IT,13
+3949596,"Brignoles",FR,13
+3008,"Athlone",IE,13
+48577,"Schenectady-Ny",US,13
+1359521,"Neo Chorio",CY,13
+1682167,"Isan",TH,13
+2134330,"Siargao Islands",PH,13
+31114,"Madeira Beach-Fl",US,13
+30510,"Lostwithiel",GB,13
+26080,"Kingsville-Tx",US,13
+41190,"Pleasanton-Ca",US,13
+53062,"Tehuantepec",MX,13
+4810,"Batavia-Ny",US,13
+9946,"Castiglione Di Sicilia",IT,13
+3786123,"Oldham",GB,13
+55554,"Uttaradit",TH,13
+427816,"Point Clear-Al",US,13
+1611261,"Raub",MY,13
+36178,"Naruto",JP,13
+59582,"Yokosuka",JP,13
+29361,"Letterkenny",IE,13
+1679999,"Eluan",TW,13
+34412,"Mons",BE,13
+38367,"Omachi",JP,13
+40929,"Pisac",PE,13
+18580,"Gansbaai",ZA,13
+3786459,"Shaftesbury",GB,13
+390398,"Vinaros",ES,13
+31669,"Manchester-Tn",US,13
+29956,"Liuqiu",TW,13
+51379,"Starigrad",HR,13
+54418,"Traralgon",AU,13
+3815898,"Lockerbie",GB,13
+270175,"Comillas",ES,13
+3948343,"Elche",ES,13
+1689347,"Canoas De Punta Sal",PE,13
+27053,"Kulai",MY,13
+44485,"Robertson",ZA,13
+43522,"Rastatt",DE,13
+29059,"Lehi-Ut",US,13
+3585608,"Sierra De San Juan Cosala",MX,13
+58868,"Wittenberg",DE,13
+14898,"Drayton Valley",CA,13
+3946286,"Casal Velino",IT,13
+10848,"Chatham-Ma",US,13
+24864,"Kalgoorlie",AU,13
+43355,"Ramallah",PS,13
+3786569,"Radstock",GB,13
+5635,"Bergisch Gladbach",DE,13
+54246,"Tortola",VG,13
+22336,"Hokkaido",JP,13
+17580,"Foley-Al",US,13
+35856,"Nacogdoches-Tx",US,13
+3585780,"Rameshwaram",IN,13
+1351945,"Mittersill",AT,13
+7550,"Bristol-Va",US,13
+46413,"Saint Simons Island-Ga",US,13
+20079,"Greeley-Co",US,13
+34301,"Monchique",PT,13
+24011,"Jackson-Mi",US,13
+3815556,"Arrochar",GB,13
+177329,"Compiegne",FR,13
+21107,"Hanau",DE,13
+26953,"Krugersdorp",ZA,13
+3786449,"Blandford Forum",GB,13
+29958,"Liuzhou",CN,13
+42148,"Poughkeepsie-Ny",US,13
+16127,"Emporia-Ks",US,13
+36320,"Nea Moudania",GR,13
+3689858,"Crediton",GB,13
+30196,"Logan-Ut",US,13
+54925,"Tumut",AU,13
+35770,"Muzaffarabad",PK,13
+40943,"Pissouri",CY,13
+40291,"Perisher Valley",AU,13
+45693,"Saint Croix Island",VI,13
+13786,"Dauin",PH,13
+1216,"Alkmaar",NL,13
+28586,"Latham-Ny",US,13
+2134426,"Naju Si",KR,13
+7303,"Brazzaville",CG,13
+31779,"Manitou Springs-Co",US,13
+3585527,"Hoctun",MX,13
+959953,"Tirolo",IT,13
+105,"Aberdeen-Md",US,13
+36150,"Narni",IT,13
+36757,"Newark",GB,13
+58013,"Wels",AT,13
+9914,"Castelo Branco",PT,13
+1741,"Anacortes-Wa",US,13
+884,"Alappuzha",IN,13
+1533455,"Rosh Pinna",IL,13
+43959,"Reutlingen",DE,13
+270372,"Poio",ES,13
+21067,"Hammond-In",US,13
+5675,"Bermagui",AU,13
+48847,"Seahouses",GB,13
+24746,"Kaeng Krachan",TH,13
+2620,"Arnsberg",DE,13
+3568798,"Pozzolengo",IT,13
+3815449,"Beaumaris",GB,13
+14438,"Dingwall",GB,13
+29149,"Lenexa-Ks",US,13
+59551,"Yibin",CN,13
+43663,"Red Bluff-Ca",US,13
+429362,"Wimberley-Tx",US,13
+1597530,"Point Pleasant Beach-Nj",US,13
+3947915,"Acquapendente",IT,13
+34982,"Morgan Hill-Ca",US,13
+55594,"Vaasa",FI,13
+3803014,"Lewes",GB,13
+176242,"Andernos Les Bains",FR,13
+2134423,"Mokpo Si",KR,13
+13918,"Decatur-Ga",US,13
+3947918,"Bolsena",IT,13
+45421,"Safed",IL,13
+4007,"Balestrate",IT,13
+22010,"High Point-Nc",US,13
+6506,"Boca Del Rio",MX,13
+24816,"Kakinada",IN,13
+55543,"Utica-Ny",US,13
+299846,"Islantilla",ES,13
+56530,"Vigo Di Fassa",IT,13
+21298,"Hartford-Ct",US,13
+59983,"Zhongli",TW,13
+3949625,"Ramatuelle",FR,13
+176762,"Boulogne Sur Mer",FR,13
+1155,"Algeciras",ES,13
+15027,"Dugi Rat",HR,13
+16340,"Erding",DE,13
+860,"Alamogordo-Nm",US,13
+17490,"Florence-Al",US,13
+42361,"Presicce",IT,13
+3946807,"Impruneta",IT,13
+2784,"Aschaffenburg",DE,13
+40081,"Pelabuhan Klang",MY,13
+1488971,"Karimunjawa",ID,13
+37908,"Obergurgl",AT,13
+20010,"Gravenhurst",CA,13
+23521,"Ipatinga",BR,13
+181030,"Vaison La Romaine",FR,13
+27181,"Kutahya",TR,13
+5728,"Bertioga",BR,13
+54200,"Torrejon De Ardoz",ES,13
+1390705,"Monforte Dalba",IT,13
+14116,"Deoghar",IN,13
+3786417,"Halstead",GB,13
+38538,"Orange-Tx",US,13
+3946840,"Sovicille",IT,13
+34283,"Monahans-Tx",US,13
+3947988,"Finike",TR,13
+3888542,"Epernay",FR,13
+33618,"Midvale-Ut",US,13
+33993,"Mississauga",CA,13
+16899,"Falkenberg",SE,13
+26887,"Krefeld",DE,13
+177187,"Chateauroux",FR,13
+48008,"Santiago Do Cacem",PT,13
+12234,"Columbus-In",US,13
+5265,"Belford",GB,13
+1610303,"Karakol",KG,13
+24103,"Jamestown-Nd",US,13
+2383,"Arcos De Valdevez",PT,13
+6218,"Bispingen",DE,13
+18438,"Gainesville-Tx",US,13
+1512402,"Ouranoupoli",GR,13
+45668,"Saint Clairsville-Oh",US,13
+53085,"Tela",HN,13
+28378,"Lanjaron",ES,13
+55598,"Vacaville-Ca",US,13
+24015,"Jackson-Nh",US,13
+522305,"Lenk",CH,13
+39260,"Pak Kret",TH,13
+10425,"Cessnock",AU,13
+3569351,"Castellaneta Marina",IT,13
+59013,"Woodstock",CA,13
+176586,"Belfort",FR,13
+59228,"Xiangxi",CN,13
+23408,"Inglewood-Ca",US,13
+3878622,"Biscarrosse",FR,13
+55736,"Valenca",BR,13
+5560,"Benton Harbor-Mi",US,13
+7464,"Bridgeport-Wv",US,13
+19859,"Granbury-Tx",US,13
+5942,"Bicheno",AU,13
+2304,"Araraquara",BR,13
+1440,"Altenmarkt Im Pongau",AT,13
+23344,"Indaiatuba",BR,13
+3802972,"Marlborough",GB,13
+33276,"Merced-Ca",US,13
+26786,"Kotohira",JP,13
+56016,"Varzea Grande",BR,13
+1383827,"Mesnil Val Plage",FR,13
+7159,"Bracciano",IT,13
+12756,"Cortez-Co",US,13
+50853,"South Portland-Me",US,13
+29622,"Lillehammer",NO,13
+59708,"Yunlin",TW,13
+58000,"Wellington",ZA,13
+6288,"Blackheath",AU,13
+29637,"Lima-Oh",US,13
+11888,"Clovis-Ca",US,13
+53729,"Timmins",CA,13
+3950086,"Kulim",MY,13
+49463,"Sheboygan-Wi",US,13
+38074,"Oetz",AT,13
+57541,"Waltham-Ma",US,13
+29971,"Liverpool-Ny",US,13
+49386,"Shangqiu",CN,13
+44863,"Roseburg-Or",US,13
+51986,"Summerside",CA,13
+20152,"Greenwood Village-Co",US,13
+8384,"Cabo Santo Agostinho",BR,13
+39998,"Pec Pod Snezkou",CZ,13
+21692,"Helgoland",DE,13
+21970,"Hickory-Nc",US,13
+42832,"Punta De Mita",MX,12
+36350,"Nedumbassery",IN,12
+12501,"Cooma",AU,12
+3815404,"Beverley",GB,12
+3949610,"Gassin",FR,12
+270219,"Hervas",ES,12
+176839,"Brides Les Bains",FR,12
+3949968,"Bwejuu",TZ,12
+26404,"Ko Kood",TH,12
+12102,"College Park-Md",US,12
+15225,"Duzce",TR,12
+1577,"Amares",PT,12
+3786277,"Sudbury",GB,12
+779,"Al Bahah",SA,12
+53417,"The Colony-Tx",US,12
+1612824,"Jeongseon Gun",KR,12
+49952,"Silver Spring-Md",US,12
+6480,"Boa Vista",BR,12
+1572,"Amantea",IT,12
+52859,"Tarporley",GB,12
+3815518,"Dolwyddelan",GB,12
+27815,"Ladysmith",ZA,12
+2453399,"Delhi",IN,12
+3689623,"Margate",GB,12
+43695,"Redcar",GB,12
+23719,"Isle Of Mull",GB,12
+23648,"Iskenderun",TR,12
+4418,"Baotou",CN,12
+1679373,"Katunayaka",LK,12
+32703,"Matrei In Osttirol",AT,12
+3944969,"Terranuova Bracciolini",IT,12
+49822,"Sidney-Ne",US,12
+41690,"Port Allen-La",US,12
+25667,"Kerrville-Tx",US,12
+3786791,"Holmfirth",GB,12
+6844,"Bordentown-Nj",US,12
+3815932,"Mansfield",GB,12
+1610000,"Phuentsholing",BT,12
+30285,"London-Ky",US,12
+35776,"My Tho",VN,12
+19896,"Grand Marais-Mn",US,12
+44906,"Rosignano Marittimo",IT,12
+27919,"Lahad Datu",MY,12
+29876,"Lismore",AU,12
+178693,"Les Houches",FR,12
+50998,"Speyer",DE,12
+3815899,"Moffat",GB,12
+59963,"Zhangzhou",CN,12
+1351791,"Filzmoos",AT,12
+180999,"Trouville Sur Mer",FR,12
+3786702,"Castleton",GB,12
+55919,"Vanderbijlpark",ZA,12
+41041,"Plasencia",ES,12
+160,"Absecon-Nj",US,12
+43723,"Redmond-Or",US,12
+16448,"Eschborn",DE,12
+9255,"Cape Tribulation",AU,12
+36507,"Neuchatel",CH,12
+44094,"Richland-Wa",US,12
+8444,"Cadillac-Mi",US,12
+176415,"Aurillac",FR,12
+23075,"Ichinoseki",JP,12
+2571,"Arma Di Taggia",IT,12
+23885,"Itoman",JP,12
+12433,"Constantine",DZ,12
+8282,"Butterworth",MY,12
+1550314,"Ureki",GE,12
+180912,"Thonon Les Bains",FR,12
+44602,"Rockville-Md",US,12
+510,"Agistri",GR,12
+32604,"Masserberg",DE,12
+3786363,"Camberley",GB,12
+3803050,"Tamworth",GB,12
+3802889,"Gainsborough",GB,12
+3570577,"Gavorrano",IT,12
+50373,"Smithfield-Nc",US,12
+5896,"Bhiwadi",IN,12
+42858,"Punta Umbria",ES,12
+39107,"Oyama",JP,12
+3689920,"Teignmouth",GB,12
+3944933,"Fabriano",IT,12
+5936,"Bibinje",HR,12
+3946062,"Cascia",IT,12
+6865,"Borgholm",SE,12
+50983,"Spearfish-Sd",US,12
+60146,"Zwickau",DE,12
+19611,"Gonzales-Tx",US,12
+43897,"Renton-Wa",US,12
+40461,"Petrolina",BR,12
+32532,"Masai",MY,12
+325,"Adelboden",CH,12
+37645,"Novi Vinodolski",HR,12
+36192,"Nashville-In",US,12
+1726,"Amstelveen",NL,12
+1468815,"Alur",IN,12
+35279,"Mount Pleasant-Mi",US,12
+1488856,"Gili Meno",ID,12
+390252,"Portocolom",ES,12
+180137,"Saint Cyprien",FR,12
+39665,"Parapat",ID,12
+270166,"Cazorla",ES,12
+52969,"Taviano",IT,12
+47523,"Sandton",ZA,12
+16915,"Falls Church-Va",US,12
+1679259,"Hatton",LK,12
+22818,"Hudson-Ny",US,12
+36354,"Needles-Ca",US,12
+50796,"South Burlington-Vt",US,12
+141,"Abingdon-Va",US,12
+36016,"Namwon",KR,12
+24298,"Jesi",IT,12
+3568423,"Silvi Marina",IT,12
+28562,"Lassi",GR,12
+13695,"Dapoli",IN,12
+56414,"Victor Harbor",AU,12
+1851,"Andros Island",BS,12
+25559,"Kempten",DE,12
+1226,"Alleghe",IT,12
+3903199,"Sao Vicente",PT,12
+12605,"Cordele-Ga",US,12
+48099,"Sanyi",TW,12
+3705,"Baddeck",CA,12
+51897,"Suffolk-Va",US,12
+9077,"Cangas Del Narcea",ES,12
+19029,"Getafe",ES,12
+5760,"Bessemer-Al",US,12
+1595985,"North Captiva-Fl",US,12
+23928,"Iwami",JP,12
+39711,"Paris-Tx",US,12
+2188406,"Mount Taranaki",NZ,12
+44498,"Robinsonville-Ms",US,12
+35024,"Mornington",AU,12
+10671,"Chapada Dos Guimaraes",BR,12
+15479,"Eden Prairie-Mn",US,12
+10015,"Castries",LC,12
+18327,"Fundao",PT,12
+49625,"Shinano",JP,12
+3815913,"Stornoway",GB,12
+3570268,"San Vito dei Normanni",IT,12
+18114,"Fremantle",AU,12
+48656,"Schneverdingen",DE,12
+2113,"Antsirabe",MG,12
+1682684,"Suan Phueng",TH,12
+40840,"Pinetop-Az",US,12
+16061,"Ely-Nv",US,12
+5881,"Bhatinda",IN,12
+46614,"Salamanca",MX,12
+7191,"Braganca",PT,12
+54821,"Tsushima",JP,12
+48223,"Saraland-Al",US,12
+1842091,"Lavarone",IT,12
+270152,"Caldas De Reis",ES,12
+16396,"Ernakulam",IN,12
+3946870,"Castiadas",IT,12
+5188,"Beihai",CN,12
+8852,"Caminha",PT,12
+1139028,"Subang",ID,12
+2099,"Antipolo",PH,12
+3786518,"Horsham",GB,12
+31707,"Mandurah",AU,12
+4409,"Bao Loc",VN,12
+52155,"Sutomore",ME,12
+1842083,"San Bartolomeo Al Mare",IT,12
+176962,"Cargese",FR,12
+2780937,"St Helier",GB,12
+1689434,"Huanchaco",PE,12
+3815139,"Fort Augustus",GB,12
+10131,"Cavaion Veronese",IT,12
+29952,"Littleton-Co",US,12
+55901,"Van Horn-Tx",US,12
+54390,"Tramonti",IT,12
+56209,"Venlo",NL,12
+25664,"Kerpe",TR,12
+11772,"Cleburne-Tx",US,12
+1863685,"Ozdere",TR,12
+22064,"Hill City-Sd",US,12
+16384,"Ermelo",ZA,12
+51731,"Strbske Pleso",SK,12
+7442,"Briatico",IT,12
+3786344,"St Albans",GB,12
+3786323,"Hemel Hempstead",GB,12
+31187,"Mae Sot",TH,12
+44112,"Richmond-In",US,12
+3945245,"Colico",IT,12
+1463392,"Kashima",JP,12
+10154,"Cavendish",CA,12
+51097,"Springfield-Va",US,12
+3944959,"Lucignano",IT,12
+960024,"Leverano",IT,12
+298808,"Aracena",ES,12
+176259,"Annemasse",FR,12
+18962,"Gerakini",GR,12
+31502,"Maldonado",UY,12
+3569578,"Santa Flavia",IT,12
+552290,"Cachoeira Paulista",BR,12
+181087,"Vars",FR,12
+425739,"Garden City Beach-Sc",US,12
+21959,"Heyuan",CN,12
+31133,"Madikwe Game Reserve",ZA,12
+3156,"Augusta",IT,12
+29181,"Lenzerheide",CH,12
+3124,"Auchterarder",GB,12
+3815358,"Amble",GB,12
+57835,"Waukesha-Wi",US,12
+56545,"Vik I Myrdal",IS,12
+10224,"Cedar Falls-Ia",US,12
+23871,"Itatiaia",BR,12
+42841,"Punta Gorda-Fl",US,12
+27075,"Kumbakonam",IN,12
+2134417,"Inje Gun",KR,12
+3946919,"Sant Antioco",IT,12
+42908,"Putrajaya",MY,12
+3815480,"Newtonmore",GB,12
+215,"Achenkirch",AT,12
+4650,"Barrancabermeja",CO,12
+4707,"Bartin",TR,12
+15357,"East Stroudsburg-Pa",US,12
+51717,"Strathpeffer",GB,12
+24977,"Kamikawa",JP,12
+23516,"Iowa City-Ia",US,12
+3945412,"Sabaudia",IT,12
+20815,"Hafar Al Batin",SA,12
+3815103,"Welshpool",GB,12
+48139,"Sao Jose Dos Pinhais",BR,12
+270167,"Cee",ES,12
+14048,"Demanovska Dolina",SK,12
+13580,"Dalby",AU,12
+58887,"Woburn-Ma",US,12
+43961,"Reutte",AT,12
+57571,"Wangaratta",AU,12
+31983,"Marburg",DE,12
+5511,"Beni Mellal",MA,12
+43550,"Ratnagiri",IN,12
+40009,"Pecs",HU,12
+181236,"Villeneuve Sur Lot",FR,12
+16501,"Espinho",PT,12
+25622,"Kenton On Sea",ZA,12
+35065,"Morrow-Ga",US,12
+33686,"Milas",TR,12
+863,"Alamosa-Co",US,12
+3663331,"Tetbury",GB,12
+48527,"Scarlino",IT,12
+32192,"Marina Di Ragusa",IT,12
+26050,"Kingscliff",AU,12
+20675,"Gurnee-Il",US,12
+23631,"Isesaki",JP,12
+4988,"Beadnell",GB,12
+43413,"Ranakpur",IN,12
+1842008,"Francavilla Al Mare",IT,12
+45704,"Saint Denis",RE,12
+53814,"Tiruvannamalai",IN,12
+38909,"Otjiwarongo",NA,12
+3689946,"Cromer",GB,12
+27944,"Laigueglia",IT,12
+1542332,"Dobra Voda",ME,12
+51835,"Suao",TW,12
+40832,"Pinedale-Wy",US,12
+3948366,"Moraira",ES,12
+12228,"Columbia-Tn",US,12
+3946314,"San Giovanni a Piro",IT,12
+1381306,"La Flocelliere",FR,12
+36207,"Nasugbu",PH,12
+3946720,"Malfa",IT,12
+2770,"Asakura",JP,12
+49360,"Shakopee-Mn",US,12
+58628,"Williamstown-Ma",US,12
+45216,"Ruse",BG,12
+53661,"Tigard-Or",US,12
+47507,"Sandnes",NO,12
+41231,"Ploiesti",RO,12
+17760,"Forsyth-Ga",US,12
+3845980,"Kerobokan",ID,12
+390162,"Los Cristianos",ES,12
+3947362,"Vittorio Veneto",IT,12
+39840,"Passo Fundo",BR,12
+22758,"Huainan",CN,12
+3663651,"Llanbedr",GB,12
+3946131,"Patu",IT,12
+12893,"Cottonwood-Az",US,12
+1169048,"Ardesen",TR,12
+32421,"Marshall-Tx",US,12
+49961,"Silves",PT,12
+181189,"Villard De Lans",FR,12
+20828,"Hagen",DE,12
+51538,"Stillwater-Mn",US,12
+180347,"Saint Martin De Re",FR,12
+56216,"Ventimiglia",IT,12
+1390167,"Campo Nellelba",IT,12
+3815728,"North Berwick",GB,12
+48551,"Scharbeutz",DE,12
+24229,"Jeffersonville-In",US,12
+693547,"Gwent",GB,12
+54385,"Trairi",BR,12
+4329,"Bang Saphan",TH,12
+178706,"Les Orres",FR,12
+59012,"Woodstock-Vt",US,12
+10285,"Centennial-Co",US,12
+3946187,"Anzio",IT,12
+48463,"Savona",IT,12
+1376281,"Aubigny Au Bac",FR,12
+41492,"Pomona-Ca",US,12
+11470,"Chur",CH,12
+14988,"Dublin-Ga",US,12
+17496,"Florence-Or",US,12
+33875,"Minocqua-Wi",US,12
+176464,"Bagnoles De Lorne",FR,12
+31717,"Manfredonia",IT,12
+1106,"Alexandria",GB,12
+181067,"Valmeinier",FR,12
+42074,"Porvoo",FI,12
+9123,"Cannonvale",AU,12
+3568501,"Baia Domizia",IT,12
+50494,"Sohar",OM,12
+51093,"Springfield-Oh",US,12
+3689836,"Axminster",GB,12
+4708,"Bartlesville-Ok",US,12
+36686,"New Haven-Ct",US,12
+25053,"Kangaroo Island",AU,12
+46085,"Saint Louis",SN,12
+16815,"Fairborn-Oh",US,12
+53201,"Teplice",CZ,12
+10075,"Catemaco",MX,12
+32729,"Matthews-Nc",US,12
+32163,"Marina Di Campo",IT,12
+35305,"Mount Vernon-Il",US,12
+32718,"Matsushima",JP,12
+3786165,"Alton",GB,12
+12981,"Cowra",AU,12
+8810,"Cambridge-Oh",US,12
+18407,"Gadsden-Al",US,12
+3568413,"Roseto degli Abruzzi",IT,12
+14829,"Dourados",BR,12
+1842884,"Frosinone",IT,12
+58499,"Whyalla",AU,12
+12684,"Cornwall",CA,12
+55914,"Vandanmedu",IN,12
+31532,"Malibu-Ca",US,12
+3815238,"Rugby",GB,12
+45013,"Roubaix",FR,12
+3803064,"Church Stretton",GB,12
+38353,"Olympia-Wa",US,12
+26562,"Kolding",DK,12
+176936,"Canet En Roussillon",FR,12
+14407,"Dillon-Co",US,12
+32102,"Marianna-Fl",US,12
+49388,"Shangrila",CN,12
+27896,"Lagrange-Ga",US,12
+58436,"Whitecourt",CA,12
+46642,"Sale",AU,12
+177379,"Corte",FR,12
+54243,"Torshavn",FO,12
+14961,"Druskininkai",LT,12
+50605,"Somerset-Pa",US,12
+54546,"Tres Lagoas",BR,12
+35863,"Nador",MA,12
+1842586,"Monte Sant Angelo",IT,12
+28724,"Lawrenceville-Ga",US,12
+3786386,"Staines",GB,12
+3945842,"Nola",IT,12
+44049,"Ribe",DK,12
+37950,"Obertauern",AT,12
+8609,"Calas De Mallorca",ES,12
+31315,"Maia",PT,12
+5544,"Bensalem-Pa",US,12
+433683,"Kyllini",GR,12
+26550,"Koksijde",BE,12
+22834,"Huelva",ES,12
+3663304,"Moreton in Marsh",GB,12
+1463497,"Kumano",JP,12
+10912,"Cheboksary",RU,12
+33457,"Metung",AU,12
+47777,"Santa Croce Camerina",IT,12
+24444,"Jiuzhaigou",CN,12
+50352,"Slunj",HR,12
+2967,"Atacames",EC,12
+4070,"Ballybunion",IE,12
+18668,"Garner-Nc",US,12
+12594,"Corbin-Ky",US,12
+3945259,"Gravedona",IT,12
+3689646,"Tonbridge",GB,12
+49329,"Sfax",TN,12
+1392579,"Luz",PT,12
+38454,"Ontario-Or",US,12
+3848277,"Gennevilliers",FR,12
+178355,"La Seyne Sur Mer",FR,12
+3945035,"Castione della Presolana",IT,12
+18554,"Gandhidham",IN,12
+57568,"Wang Nam Khiao",TH,12
+715,"Akaroa",NZ,12
+3815503,"Inverurie",GB,12
+1489156,"Martapura",ID,12
+2449796,"Orient Bay",MF,12
+19985,"Grass Valley-Ca",US,12
+19545,"Goldsboro-Nc",US,12
+8152,"Burlington",CA,12
+30168,"Lodi-Ca",US,12
+1481784,"Lametlla De Mar",ES,12
+1111415,"Kythira Island",GR,12
+35869,"Nafpaktos",GR,12
+54006,"Tolyatti",RU,12
+1595749,"Port Louis",MU,12
+3815855,"Kirriemuir",GB,12
+389197,"Palas De Rei",ES,12
+19619,"Goodyear-Az",US,12
+27151,"Kursk",RU,12
+48859,"Seaside-Ca",US,12
+33114,"Melgaco",PT,12
+59652,"Yreka-Ca",US,12
+31831,"Mansfield",AU,12
+48172,"Sao Pedro Do Sul",PT,12
+3947538,"Novara",IT,12
+21842,"Hermann-Mo",US,12
+24382,"Jilin",CN,12
+34936,"Morbi",IN,12
+7088,"Bovec",SI,12
+3885224,"Chalons en Champagne",FR,12
+41270,"Plymouth-Ma",US,12
+57414,"Wakkanai",JP,12
+3882823,"Villeneuve d Ascq",FR,12
+23324,"Inca",ES,12
+3689613,"Gravesend",GB,12
+46599,"Sal",CV,12
+9657,"Caruaru",BR,12
+56357,"Vevey",CH,12
+6897,"Borlange",SE,12
+3944967,"Sansepolcro",IT,12
+29785,"Linguaglossa",IT,12
+298478,"Siwa",EG,12
+3512,"Bad Birnbach",DE,12
+20537,"Guelph",CA,12
+1551063,"Fiesch",CH,12
+3585504,"Chignahuapan",MX,12
+3945720,"Monza",IT,12
+3882785,"Saint Vincent de Pertignas",FR,12
+11783,"Clemson-Sc",US,12
+1434,"Altenberg",DE,12
+27028,"Kufstein",AT,12
+28558,"Lasko",SI,12
+17242,"Fieberbrunn",AT,12
+6019,"Biggar",GB,12
+390311,"San Jose",ES,12
+42076,"Posada",IT,12
+13693,"Daphne-Al",US,12
+1686435,"Juquei",BR,12
+7700,"Broomfield-Co",US,12
+44901,"Roseville-Mn",US,12
+32147,"Marilia",BR,12
+1039934,"Baabe",DE,12
+432909,"Kithnos",GR,12
+34345,"Monfalcone",IT,12
+12534,"Copacabana",BO,12
+39524,"Panipat",IN,12
+3846231,"Haguneau",FR,11
+5118,"Bedford-Tx",US,11
+50106,"Sirkka",FI,11
+28636,"Laughlin-Nv",US,11
+3585634,"Jasin",MY,11
+5410,"Belmopan",BZ,11
+1412631,"Trusetal",DE,11
+1500982,"Nelly Bay",AU,11
+17034,"Favara",IT,11
+52838,"Tarija",BO,11
+1489388,"Prigen",ID,11
+177996,"Gujan Mestras",FR,11
+33562,"Middleburg Heights-Oh",US,11
+2134413,"Hoengseong Gun",KR,11
+39659,"Paranaque",PH,11
+59932,"Zephyrhills-Fl",US,11
+2580,"Armamar",PT,11
+13204,"Crossville-Tn",US,11
+15942,"Elizabeth-Nj",US,11
+5537,"Bennington-Vt",US,11
+55003,"Turrialba",CR,11
+176665,"Bidart",FR,11
+18844,"Gelsenkirchen",DE,11
+28423,"Lanzarote",ES,11
+31753,"Mani",GR,11
+180519,"Saint Trojan Les Bains",FR,11
+3635,"Bad Sachsa",DE,11
+59553,"Yichang",CN,11
+32469,"Martinsburg-Wv",US,11
+429171,"Watford City-Nd",US,11
+5181,"Behror",IN,11
+14706,"Dongying",CN,11
+59137,"Wunstorf",DE,11
+1355929,"Huanggang",CN,11
+29114,"Lekki",NG,11
+3895564,"Laon",FR,11
+3944985,"Cupra Marittima",IT,11
+282,"Acworth-Ga",US,11
+28741,"Layton-Ut",US,11
+31073,"Mackinac Island-Mi",US,11
+20740,"Gyumri",AM,11
+23072,"Icheon",KR,11
+694486,"Slapton",GB,11
+53401,"That Phanom",TH,11
+177124,"Chantilly",FR,11
+3854,"Baiao",PT,11
+179740,"Pontorson",FR,11
+3815239,"Shipston on Stour",GB,11
+54496,"Trelew",AR,11
+3689637,"Sittingbourne",GB,11
+3848460,"Vitrolles",FR,11
+31746,"Manhattan Beach-Ca",US,11
+8156,"Burlington-Ia",US,11
+24813,"Kakegawa",JP,11
+14529,"Dobbiaco",IT,11
+3815235,"Nuneaton",GB,11
+53360,"Thai Nguyen",VN,11
+37764,"Nusajaya",MY,11
+42798,"Punakha",BT,11
+15982,"Ellensburg-Wa",US,11
+15344,"East Peoria-Il",US,11
+32135,"Marietta-Oh",US,11
+179775,"Porticcio",FR,11
+33555,"Middelfart",DK,11
+1352116,"Westendorf",AT,11
+3684,"Bad Windsheim",DE,11
+34906,"Moradabad",IN,11
+3570503,"Borgo San Lorenzo",IT,11
+52935,"Taunggyi",MM,11
+37036,"Nikiti",GR,11
+694567,"Stocksfield",GB,11
+20854,"Hai Duong",VN,11
+19131,"Gilbert-Az",US,11
+13648,"Dana Point-Ca",US,11
+3689825,"St Agnes",GB,11
+52005,"Sun City",ZA,11
+16328,"Erbil",IQ,11
+3948372,"Orihuela",ES,11
+270122,"Arrecife",ES,11
+4093,"Ballymena",GB,11
+42191,"Powell River",CA,11
+3945598,"Monzambano",IT,11
+1842950,"Biella",IT,11
+180769,"Six Fours Les Plages",FR,11
+58254,"Westerly-Ri",US,11
+35126,"Moss Point-Ms",US,11
+3946150,"Faenza",IT,11
+19189,"Gioiosa Marea",IT,11
+55381,"Uozu",JP,11
+33036,"Meersburg",DE,11
+21114,"Handa",JP,11
+179477,"Olmeto",FR,11
+60034,"Zingst",DE,11
+43421,"Rancho Cucamonga-Ca",US,11
+44442,"Riviere Du Loup",CA,11
+41138,"Playa Grande",CR,11
+552993,"Santiago",CV,11
+20517,"Guaymas",MX,11
+53902,"Tochigi",JP,11
+21029,"Hameln",DE,11
+7613,"Broken Arrow-Ok",US,11
+54020,"Tomball-Tx",US,11
+3945981,"Sorso",IT,11
+48891,"Secunderabad",IN,11
+1489555,"Singkawang",ID,11
+48006,"Santiago De Los Caballeros",DO,11
+14951,"Drumheller",CA,11
+4743,"Baselga Di Pine",IT,11
+47755,"Santa Clarita-Ca",US,11
+178855,"Lucciana",FR,11
+32504,"Maryland Heights-Mo",US,11
+5024,"Beauly",GB,11
+41837,"Port Stephens",AU,11
+39890,"Patnitop",IN,11
+13346,"Culpeper-Va",US,11
+57857,"Waxahachie-Tx",US,11
+3689714,"Alston",GB,11
+16151,"Encinitas-Ca",US,11
+14331,"Dickson-Tn",US,11
+3815941,"Retford",GB,11
+3903232,"Argostoli",GR,11
+34755,"Montignac",FR,11
+48855,"Searcy-Ar",US,11
+2542,"Arkhangelsk",RU,11
+50729,"Sort",ES,11
+7160,"Bracebridge",CA,11
+21016,"Hambantota",LK,11
+8397,"Cabrales",ES,11
+2134393,"Eumseong Gun",KR,11
+23964,"Iznik",TR,11
+39992,"Pearsall-Tx",US,11
+3742,"Baeza",ES,11
+57396,"Waitomo",NZ,11
+40473,"Petrozavodsk",RU,11
+43646,"Recanati",IT,11
+14296,"Diamantina",BR,11
+3975466,"Nuweiba",EG,11
+36188,"Nashua-Nh",US,11
+1489450,"Salatiga",ID,11
+53512,"Thomasville-Ga",US,11
+15382,"Eastham-Ma",US,11
+56640,"Villa Clara",CU,11
+43554,"Raton-Nm",US,11
+179982,"Roquebrune Sur Argens",FR,11
+53313,"Teton Village-Wy",US,11
+1842035,"Castrovillari",IT,11
+12670,"Corner Brook",CA,11
+3585753,"Bijapur",IN,11
+25583,"Kenitra",MA,11
+3510,"Bad Bertrich",DE,11
+22943,"Huntington-Wv",US,11
+1687420,"Urubici",BR,11
+3803060,"Bishops Castle",GB,11
+3570501,"Barberino di Mugello",IT,11
+32262,"Mariposa-Ca",US,11
+3802905,"Scunthorpe",GB,11
+2823,"Ashburton",NZ,11
+1765,"Anapolis",BR,11
+28572,"Lastovo",HR,11
+3568111,"Krkonose National Park",CZ,11
+52449,"Taguatinga",BR,11
+1679128,"Dikwella",LK,11
+13683,"Danville-Il",US,11
+177014,"Cauterets",FR,11
+750976,"La Palma",ES,11
+178600,"Le Puy En Velay",FR,11
+50117,"Sisaket",TH,11
+1700047,"Solagampatti",IN,11
+15099,"Dundalk",IE,11
+298763,"Alora",ES,11
+51179,"St George-Ut",US,11
+52260,"Sweetwater-Tx",US,11
+58101,"Wesley Chapel-Fl",US,11
+5361,"Bellevue-Ne",US,11
+1377485,"Broyes",FR,11
+30722,"Lufkin-Tx",US,11
+3108,"Auburn-Ca",US,11
+2854,"Ashland-Va",US,11
+12963,"Covington-Ga",US,11
+35055,"Morristown-Tn",US,11
+55270,"Ulverstone",AU,11
+46994,"San Felipe",MX,11
+3815489,"Monmouth",GB,11
+24659,"June Lake-Ca",US,11
+3945116,"Darfo Boario Terme",IT,11
+7222,"Brampton",CA,11
+1692020,"Gulu",UG,11
+7629,"Bromont",CA,11
+23364,"Indian Shores-Fl",US,11
+15749,"El Dorado-Ar",US,11
+1705770,"St Leonards On Sea",GB,11
+270300,"Palencia",ES,11
+31210,"Magaliesburg",ZA,11
+1596319,"Bois Blanc Island-Mi",US,11
+1489386,"Praya",ID,11
+176616,"Benodet",FR,11
+4739,"Basco",PH,11
+3786156,"Wigan",GB,11
+3689972,"Sheringham",GB,11
+12044,"Colby-Ks",US,11
+5418,"Beloit-Wi",US,11
+3945848,"Portici",IT,11
+3815040,"Barry",GB,11
+1683111,"Cao Bang",VN,11
+180157,"Saint Emilion",FR,11
+11241,"Chinchilla",AU,11
+20548,"Guerneville-Ca",US,11
+13103,"Crestview-Fl",US,11
+40137,"Penafiel",PT,11
+12761,"Cortland-Ny",US,11
+9231,"Cape Girardeau-Mo",US,11
+24144,"Jarandilla De La Vera",ES,11
+55712,"Valdidentro",IT,11
+22763,"Huamantla",MX,11
+177002,"Castres",FR,11
+1343478,"Gelibolu",TR,11
+7995,"Buk",HU,11
+3802966,"Corsham",GB,11
+45966,"Saint Johann Im Pongau",AT,11
+177143,"Charleville Mezieres",FR,11
+36965,"Niederau",AT,11
+433805,"Nea Kallikratia",GR,11
+36243,"Naumburg",DE,11
+8859,"Camogli",IT,11
+270379,"Portomarin",ES,11
+60098,"Zug",CH,11
+23690,"Island Park-Id",US,11
+3689929,"Yelverton",GB,11
+22953,"Huntsville-Tx",US,11
+3570553,"Scandicci",IT,11
+2870,"Asilah",MA,11
+51381,"Starkville-Ms",US,11
+3802987,"Coleford",GB,11
+3786822,"Todmorden",GB,11
+2749604,"Zagori",GR,11
+17597,"Fond Du Lac-Wi",US,11
+6700,"Boltenhagen",DE,11
+3786392,"Woking",GB,11
+270657,"Portinatx",ES,11
+1842592,"Santa Maria Di Leuca",IT,11
+36579,"Neuss",DE,11
+17783,"Fort Dodge-Ia",US,11
+13867,"De Kelders",ZA,11
+3802742,"Burnley",GB,11
+32358,"Marotta",IT,11
+11629,"Ciudad Rodrigo",ES,11
+2205,"Appiano Sulla Strada Del Vino",IT,11
+6358,"Blankenburg",DE,11
+58147,"West Dover-Vt",US,11
+50128,"Sissi",GR,11
+18308,"Fulpmes",AT,11
+38670,"Ornos",GR,11
+12320,"Con Son",VN,11
+54080,"Tonosho",JP,11
+1470691,"Shrirangapattana",IN,11
+26327,"Klerksdorp",ZA,11
+3945835,"Giugliano in Campania",IT,11
+3949729,"Palavas les Flots",FR,11
+3572692,"Marmara Ereglisi",TR,11
+23626,"Iseo",IT,11
+19999,"Gravata",BR,11
+9131,"Canon City-Co",US,11
+49672,"Shiyan",CN,11
+55433,"Urbandale-Ia",US,11
+27852,"Lages",BR,11
+1379302,"Donnazac",FR,11
+177197,"Chatellerault",FR,11
+59860,"Zarautz",ES,11
+6297,"Blacksburg-Va",US,11
+58805,"Winter Park-Co",US,11
+178645,"Lens",FR,11
+32310,"Marlborough-Ma",US,11
+19497,"Gohren",DE,11
+1489484,"Sedayu",ID,11
+3621,"Bad Oeynhausen",DE,11
+1692362,"Norfolk Island",NF,11
+4893,"Bautzen",DE,11
+50466,"Sodertalje",SE,11
+1642,"Amersfoort",NL,11
+13018,"Cranberry-Pa",US,11
+43551,"Ratnapura",LK,11
+18213,"Front Royal-Va",US,11
+31276,"Maha Sarakham",TH,11
+38789,"Osorno",CL,11
+178663,"Les Arcs",FR,11
+13515,"Dagupan",PH,11
+9128,"Canoas",BR,11
+26358,"Klosters",CH,11
+39342,"Palestine-Tx",US,11
+3786251,"Walsall",GB,11
+19527,"Golden Bay",NZ,11
+51188,"St Helens",AU,11
+180801,"Souillac",FR,11
+1683493,"Vinh Yen",VN,11
+5042,"Beaupre",CA,11
+3570279,"Alessano",IT,11
+43875,"Renesse",NL,11
+4424,"Baqueira",ES,11
+28392,"Lansdowne",IN,11
+17744,"Forrest City-Ar",US,11
+1705437,"Forest Of Dean",GB,11
+9515,"Carmel-In",US,11
+178888,"Macot La Plagne",FR,11
+35997,"Nambucca Heads",AU,11
+1370,"Alpine-Tx",US,11
+23858,"Itapema",BR,11
+3786374,"Farnham",GB,11
+3569390,"Baja Sardinia",IT,11
+3570329,"Racale",IT,11
+19592,"Gondar",ET,11
+38965,"Oualidia",MA,11
+300983,"Comarruga",ES,11
+43231,"Racine-Wi",US,11
+55514,"Ussuriysk",RU,11
+3949605,"Draguignan",FR,11
+57803,"Watertown-Sd",US,11
+521667,"Ostroda",PL,11
+43424,"Rancho Mirage-Ca",US,11
+30700,"Ludlow-Vt",US,11
+176460,"Bagneres De Bigorre",FR,11
+3650,"Bad Schandau",DE,11
+27155,"Kurukshetra",IN,11
+59232,"Xianning",CN,11
+177052,"Cesson Sevigne",FR,11
+32226,"Marina-Ca",US,11
+43724,"Redmond-Wa",US,11
+31192,"Maebashi",JP,11
+33357,"Merritt",CA,11
+1512417,"Palaiochora",GR,11
+1351841,"Hermagor",AT,11
+12699,"Coronado-Ca",US,11
+17355,"Fishers-In",US,11
+179284,"Moreilles",FR,11
+20931,"Half Moon Bay-Ca",US,11
+16405,"Errachidia",MA,11
+55875,"Valparai",IN,11
+43719,"Redlands-Ca",US,11
+38176,"Okeechobee-Fl",US,11
+39875,"Pathankot",IN,11
+21288,"Harstad",NO,11
+3845934,"Kathu",TH,11
+54212,"Torres Del Paine",CL,11
+34927,"Moravske Toplice",SI,11
+58996,"Woodland-Ca",US,11
+3815251,"Corby",GB,11
+3569357,"Giovinazzo",IT,11
+30260,"Lompoc-Ca",US,11
+3946076,"Marsciano",IT,11
+2263,"Arad",RO,11
+9399,"Carboneras",ES,11
+58816,"Winterthur",CH,11
+2134447,"Yangyang Gun",KR,11
+2169,"Apeldoorn",NL,11
+179919,"Ribeauville",FR,11
+8357,"Cabeceiras De Basto",PT,11
+21652,"Heiligenblut",AT,11
+520956,"Stykkisholmur",IS,11
+960129,"Maranza",IT,11
+176281,"Apt",FR,11
+3815488,"Chepstow",GB,11
+9611,"Carrizo Springs-Tx",US,11
+18762,"Gavle",SE,11
+41768,"Port Hedland",AU,11
+7364,"Brenham-Tx",US,11
+33236,"Menlo Park-Ca",US,11
+180421,"Saint Paul Les Dax",FR,11
+41191,"Pleasanton-Tx",US,11
+35753,"Mutare",ZW,11
+10742,"Charlevoix-Mi",US,11
+16746,"Exton-Pa",US,11
+3947781,"Pre Saint Didier",IT,11
+1489054,"Kuningan",ID,11
+55431,"Urbana-Il",US,11
+51760,"Stromboli",IT,11
+48904,"See",AT,11
+21403,"Haugesund",NO,11
+29658,"Limeira",BR,11
+3585495,"Calakmul Biosphere Reserve",MX,11
+7232,"Brand",AT,11
+23005,"Hvammstangi",IS,11
+42456,"Princeton-Wv",US,11
+44900,"Roseville-Mi",US,11
+44054,"Ribeira Grande",PT,11
+50643,"Sonderborg",DK,11
+15566,"Eger",HU,11
+14731,"Doolin",IE,11
+34534,"Monte Carlo",MC,11
+3946796,"Castelfiorentino",IT,11
+14122,"Depoe Bay-Or",US,11
+178825,"Lorgues",FR,11
+48519,"Scarborough-Me",US,11
+3815789,"St Asaph",GB,11
+10972,"Chenzhou",CN,11
+2124,"Anyang",CN,11
+47339,"San Pedro Del Pinatar",ES,11
+53764,"Tinley Park-Il",US,11
+57591,"Wanning",CN,11
+53205,"Tequesquitengo",MX,11
+3948353,"Guardamar Segura",ES,11
+1679986,"Dahan",TW,11
+3803013,"Hove",GB,11
+9158,"Canton-Mi",US,11
+48144,"Sao Jose",BR,11
+48878,"Sebring-Fl",US,11
+2998,"Athens-Oh",US,11
+16128,"Emporia-Va",US,11
+26231,"Kiso",JP,11
+433975,"Stalida",GR,11
+59994,"Zhuangwei",TW,11
+180604,"Samoens",FR,11
+16686,"Evanston-Wy",US,11
+3944988,"Bevagna",IT,11
+34528,"Monte Argentario",IT,11
+37677,"Nowra",AU,11
+53061,"Tehuacan",MX,11
+53590,"Thung Song",TH,11
+14494,"Diu",IN,11
+44685,"Rohnert Park-Ca",US,11
+58215,"West Springfield-Ma",US,11
+388983,"Los Alcazares",ES,11
+3946066,"Citta della Pieve",IT,11
+46582,"Sakaide",JP,11
+939,"Albert Lea-Mn",US,11
+433472,"Corinth",GR,11
+51378,"Stari Grad",HR,11
+177967,"Greoux Les Bains",FR,11
+36849,"Newry",GB,11
+25595,"Kennebunk-Me",US,11
+18436,"Gainesville-Ga",US,11
+8775,"Camarillo-Ca",US,11
+1385902,"Regusse",FR,11
+51509,"Stevens Point-Wi",US,11
+57146,"Volta Redonda",BR,11
+3569032,"Portovenere",IT,11
+23107,"Ifrane",MA,11
+29410,"Lewisburg-Wv",US,11
+49313,"Seymour-In",US,11
+3948290,"Priego de Cordoba",ES,11
+3848543,"Valbonne",FR,11
+9217,"Cape Canaveral-Fl",US,11
+18307,"Fullerton-Ca",US,11
+1544964,"Bukowina Tatrzanska",PL,11
+18706,"Gaspe",CA,11
+28005,"Lake Forest-Ca",US,11
+3946835,"Roccastrada",IT,11
+58835,"Wirral",GB,11
+50580,"Solothurn",CH,11
+59644,"Youngstown-Oh",US,11
+36084,"Nanzhuang",TW,11
+3802887,"Cleethorpes",GB,11
+19625,"Goondiwindi",AU,11
+32669,"Matheran",IN,11
+59393,"Yangjiang",CN,11
+36910,"Ngorongoro",TZ,11
+522532,"Silvaplana",CH,11
+3815495,"Alford",GB,11
+26822,"Koya",JP,11
+50966,"Sparks-Nv",US,11
+45049,"Rovereto",IT,11
+57185,"Voss",NO,11
+9921,"Castelrotto",IT,11
+178783,"Lisieux",FR,11
+40814,"Pine Bluff-Ar",US,11
+6943,"Boscastle",GB,11
+3786544,"Castle Cary",GB,11
+3815354,"Redditch",GB,11
+3905,"Baishan",CN,11
+3570517,"Empoli",IT,11
+2134455,"Yongin Si",KR,11
+33344,"Merrijig",AU,11
+59870,"Zarzis",TN,11
+46869,"San Agustin",CO,11
+14630,"Dominical",CR,11
+16644,"Euless-Tx",US,11
+3949826,"6th of October",EG,11
+20194,"Gressoney La Trinite",IT,11
+6588,"Boerne-Tx",US,11
+4725,"Barueri",BR,11
+3865387,"Villeurbanne",FR,11
+1818,"Anderson-In",US,11
+22843,"Huesca",ES,11
+40463,"Petropavlovsk Kamchatskiy",RU,11
+40725,"Piesendorf",AT,11
+51845,"Subbiano",IT,11
+521693,"Polanica Zdroj",PL,11
+54640,"Trinity Beach",AU,11
+3815350,"Evesham",GB,11
+35134,"Mossoro",BR,11
+1684684,"Valle De Anton",PA,11
+36664,"New Cumberland-Pa",US,11
+43859,"Remscheid",DE,11
+39232,"Pahoa-Hi",US,11
+54676,"Troia",PT,11
+26456,"Kodungallur",IN,11
+50687,"Sopron",HU,11
+40784,"Pilar",AR,11
+57738,"Wasilla-Ak",US,11
+27531,"La Molina",ES,11
+1551,"Amagasaki",JP,11
+52122,"Surgut",RU,11
+3689913,"South Molton",GB,11
+1699975,"Peralam",IN,11
+1352057,"Sankt Michael im Lungau",AT,11
+1488869,"Gorontalo",ID,11
+3946090,"Torgiano",IT,11
+176744,"Bormes Les Mimosas",FR,11
+20291,"Gromitz",DE,11
+3569356,"Gioia del Colle",IT,11
+31109,"Madalena",PT,11
+22988,"Hutchinson-Ks",US,11
+7121,"Bowral",AU,11
+21368,"Hastings-Ne",US,11
+179216,"Montelimar",FR,11
+59020,"Woodward-Ok",US,11
+270424,"Siguenza",ES,11
+1489805,"Wonosari",ID,11
+26988,"Kuala Besut",MY,11
+5799,"Betim",BR,11
+48038,"Santo Andre",BR,11
+10846,"Chatham",CA,11
+33448,"Metsovo",GR,11
+693748,"Keith",GB,11
+21284,"Harsewinkel",DE,11
+53563,"Thousand Oaks-Ca",US,11
+47417,"San Simeon-Ca",US,11
+7812,"Brunswick-Me",US,11
+520949,"Seydisfjordur",IS,11
+43558,"Rattvik",SE,11
+6579,"Boeblingen",DE,11

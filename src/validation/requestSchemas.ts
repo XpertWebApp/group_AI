@@ -229,7 +229,11 @@ export const ToggleProposalHotelSchema = z.object({
 // ── Send Proposal ─────────────────────────────────────────────────────────
 export const SendProposalSchema = z.object({
     sendToEmail: z.string().email().optional(),
-});
+    sendToEmails: z.array(z.string().email()).min(1).max(20).optional(),
+}).refine(
+    (d) => !(d.sendToEmail && d.sendToEmails),
+    { message: 'Provide either sendToEmail or sendToEmails, not both' },
+);
 
 // ── Approve / Decline Proposal ───────────────────────────────────────────────
 export const ApproveProposalSchema = z.object({
