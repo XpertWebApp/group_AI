@@ -72,6 +72,7 @@ export class RequestService {
             budget: data.budget ?? null,
             groupType: data.groupType ?? null,
             groupSize: data.groupSize ?? null,
+            averageAge: data.averageAge ?? null,
             currencyCode: data.currencyCode ?? 'EUR',
             nationalityCode: data.nationalityCode ?? null,
 
@@ -131,7 +132,7 @@ export class RequestService {
         // Step 1 – Trip Details
         for (const f of [
             'destinationId', 'destinationName', 'starRating', 'budgetRange',
-            'budget', 'groupType', 'groupSize', 'currencyCode', 'nationalityCode',
+            'budget', 'groupType', 'groupSize', 'averageAge', 'currencyCode', 'nationalityCode',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];
         }

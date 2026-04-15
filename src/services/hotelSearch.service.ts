@@ -796,11 +796,20 @@ export class HotelSearchService {
         const dominantRoomType = getDominantRoomType((request as any).rooms);
         const expandedRooms = expandRequestRooms((request as any).rooms);
 
-        // Resolve candidate hotels from DB
+        // Resolve candidate hotels from DB.
+        // Star filter uses ±0.49 tolerance per listed value, so we must list EVERY
+        // half-star-step between (star-1) and (star+1). Otherwise a 3.5★ search
+        // would only check [2.5, 3.5, 4.5] — missing 3.0 and 4.0 hotels entirely.
         const primaryStars = requestedStarRating ? [requestedStarRating] : [];
-        const altStars = includeAlternativeStars && requestedStarRating
-            ? [requestedStarRating - 1, requestedStarRating + 1].filter((s) => s >= 1 && s <= 5)
-            : [];
+        const altStars: number[] = [];
+        if (includeAlternativeStars && requestedStarRating) {
+            const minStar = Math.max(1, requestedStarRating - 1);
+            const maxStar = Math.min(5, requestedStarRating + 1);
+            for (let s = minStar; s <= maxStar + 0.01; s += 0.5) {
+                const rounded = Math.round(s * 2) / 2;
+                if (rounded !== requestedStarRating) altStars.push(rounded);
+            }
+        }
         const allSearchStars = [...new Set([...primaryStars, ...altStars])];
 
         let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(

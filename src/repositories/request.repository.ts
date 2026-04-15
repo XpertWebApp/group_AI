@@ -28,6 +28,7 @@ const FULL_SELECT = {
     budget: true,
     groupType: true,
     groupSize: true,
+    averageAge: true,
     currencyCode: true,
     nationalityCode: true,
     // Step 2 – Room & Accommodations

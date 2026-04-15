@@ -174,6 +174,7 @@ export class WebhookService {
             budgetRange: data.budget ? String(data.budget) : null,
             groupType: data.group_type ?? null,
             groupSize,
+            averageAge: data.average_age != null ? Number(data.average_age) : null,
             currencyCode: 'EUR',
 
             // Room & accommodations

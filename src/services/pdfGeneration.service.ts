@@ -16,6 +16,7 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger';
+import { formatDateEU } from '../utils/dateFormatter';
 
 // ─── Types (kept intact for compatibility with proposals.service.ts) ─────────
 
@@ -114,14 +115,12 @@ function getLogoPath(): string | null {
     return null;
 }
 
+/**
+ * European date format (DD.MM.YYYY) per Oliver's requirement.
+ * All SETT partners use this format. See src/utils/dateFormatter.ts.
+ */
 function formatDate(dateStr: string | null): string {
-    if (!dateStr) return 'N/A';
-    try {
-        const d = new Date(dateStr);
-        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    } catch {
-        return dateStr;
-    }
+    return formatDateEU(dateStr);
 }
 
 // ─── Main Generator: Demo Placeholder PDF ───────────────────────────────────

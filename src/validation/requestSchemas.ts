@@ -31,6 +31,7 @@ export const CreateBookingRequestSchema = z
         budget: z.number().positive().optional(),
         groupType: z.string().max(100).optional(),
         groupSize: z.number().int().min(1).optional(),
+        averageAge: z.number().int().min(1).max(120).optional(),
         currencyCode: z.string().min(2).max(10).optional(),
         nationalityCode: z.string().min(1).max(10).optional(),
 
@@ -76,6 +77,15 @@ export const CreateBookingRequestSchema = z
             return true;
         },
         { message: 'Either nights or checkoutDate must be provided and checkout must be after checkin' },
+    )
+    .refine(
+        (d) => {
+            if (!d.groupType) return true;
+            const normalized = d.groupType.toLowerCase().replace(/[\s-]+/g, '_');
+            const ageRequired = normalized === 'youth_group' || normalized === 'school_group';
+            return !ageRequired || typeof d.averageAge === 'number';
+        },
+        { message: 'averageAge is required when groupType is Youth Group or School Group', path: ['averageAge'] },
     );
 
 export const UpdateBookingRequestSchema = z.object({
@@ -90,6 +100,7 @@ export const UpdateBookingRequestSchema = z.object({
     budget: z.number().positive().optional(),
     groupType: z.string().max(100).optional(),
     groupSize: z.number().int().min(1).optional(),
+    averageAge: z.number().int().min(1).max(120).nullable().optional(),
     currencyCode: z.string().min(2).max(10).optional(),
     nationalityCode: z.string().min(1).max(10).optional(),
     // Step 2
@@ -117,6 +128,17 @@ export const UpdateBookingRequestSchema = z.object({
     // System
     source: z.string().optional(),
     status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined']).optional(),
+}).superRefine((d, ctx) => {
+    if (d.groupType === undefined) return;
+    const normalized = (d.groupType ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+    const ageRequired = normalized === 'youth_group' || normalized === 'school_group';
+    if (ageRequired && (d.averageAge === undefined || d.averageAge === null)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['averageAge'],
+            message: 'averageAge is required when groupType is Youth Group or School Group',
+        });
+    }
 });
 
 // ── Group Requests list (pagination + search + filter) ─────────────────────
