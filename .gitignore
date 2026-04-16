@@ -35,8 +35,10 @@ coverage/
 # IDE and OS
 .vscode/
 .idea/
+.claude/
 .DS_Store
 Thumbs.db
+
 
 # Documentation & diagrams (keep README.md only)
 *.md
