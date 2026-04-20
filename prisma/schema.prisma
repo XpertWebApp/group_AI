@@ -423,6 +423,8 @@ model ProposalHotel {
   rooms                Json?
   latitude             Decimal?  @db.Decimal(10, 7)
   longitude            Decimal?  @db.Decimal(10, 7)
+  starRating           Int?      @map("star_rating")
+  hotelRef             String?   @map("hotel_ref") @db.VarChar(32)
   optionDetailsId      String?   @map("option_details_id") @db.Uuid
   createdAt            DateTime  @default(now()) @map("created_at")
   deletedAt            DateTime? @map("deleted_at")
@@ -435,6 +437,7 @@ model ProposalHotel {
   @@index([tid])
   @@index([optionDetailsId])
   @@index([proposalId, deletedAt])
+  @@unique([proposalId, hotelRef], map: "proposal_hotels_proposal_id_hotel_ref_key")
   @@map("proposal_hotels")
   @@schema("app")
 }

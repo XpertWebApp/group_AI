@@ -190,6 +190,7 @@ export const AddProposalHotelSchema = z.object({
     optionDetailsId: z.string().uuid().optional(),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
+    starRating: z.number().int().min(1).max(5).optional().nullable(),
 });
 
 export const AdjustHotelPricingSchema = z.object({

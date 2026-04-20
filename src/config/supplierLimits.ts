@@ -14,6 +14,11 @@ export interface SupplierLimit {
     name: string;
     maxRooms: number | null; // null = unlimited
     groupsAllowed: boolean;
+    /**
+     * If false, this supplier's rates are wholesale/net-only and must NOT be shown to customers.
+     * Defaults to true (customer-facing) when omitted.
+     */
+    customerFacing?: boolean;
     notes?: string;
 }
 
@@ -132,4 +137,14 @@ export function isGroupAllowed(supplierCode: string): boolean {
     const limit = SUPPLIER_LIMITS[supplierCode?.toUpperCase?.() ?? ''];
     if (!limit) return true; // default: assume allowed
     return limit.groupsAllowed;
+}
+
+/**
+ * Returns true if this supplier's rates can be shown to customers.
+ * Defaults to true unless explicitly set false (wholesale-only suppliers).
+ */
+export function isCustomerFacing(supplierCode: string): boolean {
+    const limit = SUPPLIER_LIMITS[supplierCode?.toUpperCase?.() ?? ''];
+    if (!limit) return true; // default: assume customer-facing
+    return limit.customerFacing !== false;
 }

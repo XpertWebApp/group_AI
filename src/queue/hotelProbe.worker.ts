@@ -12,6 +12,7 @@ import wbeClientService from '../services/wbe.client.service';
 import { broadcast } from '../services/sseManager';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
 import logger from '../utils/logger';
+import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import {
     PROBE_BATCH_SIZE,
     PROBE_WAIT_SECONDS,
@@ -28,11 +29,6 @@ function field<T>(obj: any, ...keys: string[]): T | undefined {
         if (obj != null && obj[k] !== undefined) return obj[k] as T;
     }
     return undefined;
-}
-
-function normalisePricePerRoomPerNight(rawPrice: number, nights: number, batchSize: number): number {
-    if (!rawPrice || !nights || !batchSize) return 0;
-    return rawPrice / (batchSize * nights);
 }
 
 function deduplicateBySupplier(options: any[]): any[] {
@@ -180,11 +176,18 @@ function parseProbeOptions(wbeHotelOptions: any[], nights: number, batchSize: nu
             .map((r) => field<string>(r, 'Description', 'description', 'RoomName', 'roomName') ?? '')
             .filter(Boolean);
 
+        // Divide by the ACTUAL number of rooms WBE returned in this option, not
+        // the hardcoded batchSize. WBE may return options with fewer rooms than
+        // requested (partial availability), and using batchSize in those cases
+        // under-divides the price. Fall back to batchSize only if Rooms is empty.
+        const roomsInOption = rawRooms.length > 0 ? rawRooms.length : batchSize;
+
         result.push({
             tid,
             supplierCode,
-            pricePerRoomPerNight: normalisePricePerRoomPerNight(rawPrice, nights, batchSize),
+            pricePerRoomPerNight: normalisePricePerRoomPerNight(rawPrice, roomsInOption, nights, { tid, supplierCode }),
             rawTotalPrice: rawPrice,
+            roomsInOption,
             currency,
             freeCancellation,
             onRequest,
@@ -315,9 +318,15 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                     break;
                 }
 
-                // Tag options with roomType + sessionId for downstream use (Step 3.4 needs sessionId)
+                // Tag options with the requested roomType (for grouping/allocation) +
+                // requestedRoomType (what the client asked for) + sessionId.
+                // Preserve the ACTUAL WBE room description separately so the UI can
+                // show the real room name (e.g. "Double Room, Terrace (1 Double Bed)")
+                // instead of just "Single" — per M5 data-integrity requirement.
                 for (const opt of roomTypeFiltered) {
-                    opt.roomType = target.roomType;
+                    opt.requestedRoomType = target.roomType;
+                    opt.roomType = target.roomType;                       // kept for backwards compat (allocation logic)
+                    opt.actualRoomDescription = opt.roomDescriptions?.[0] ?? null;
                     opt.sessionId = sessionId;
                 }
 
@@ -923,12 +932,23 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         // Count validated rooms for this type (some suppliers may have been removed in Step 3.4)
         const validatedForType = validatedSplit.filter((e: any) => e.roomType === type);
         const validatedTypeRooms = validatedForType.reduce((s: number, e: any) => s + e.rooms, 0);
+
+        // M5 — Collect the ACTUAL WBE room descriptions for this type so the UI can
+        // show the real room name (e.g. "Double Room, Terrace (1 Double Bed)") instead
+        // of just the requested type label (e.g. "Single"). Deduplicate and cap to 5.
+        const actualDescriptions = Array.from(new Set(
+            (optionsByType.get(type) ?? [])
+                .map((o: any) => o.actualRoomDescription ?? o.roomDescriptions?.[0])
+                .filter(Boolean),
+        )).slice(0, 5);
+
         return {
             roomType: type,
             requested: data.requested,
             roomsAllocated: validatedTypeRooms,
             highestMidRangePrice: data.highestMidRangePrice,
             supplierCount: validatedForType.length,
+            actualDescriptions,
         };
     }).filter((t) => t.roomsAllocated > 0); // Only include types that have rooms
 

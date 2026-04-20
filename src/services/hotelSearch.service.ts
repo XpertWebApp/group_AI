@@ -7,6 +7,7 @@ import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import wbeClientService from './wbe.client.service';
 import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
+import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
 import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
 import type { ExpandedRoom, RoomTypeProbeTarget } from '../queue/hotelProbeJob.types';
@@ -366,10 +367,7 @@ function field<T>(obj: any, ...keys: string[]): T | undefined {
  * Normalise the price from WBE option to a per-room-per-night value.
  * WBE returns a total for the searched configuration (SEARCH_ROOMS × nights).
  */
-function normalisePricePerRoomPerNight(rawPrice: number, nights: number): number {
-    if (!rawPrice || !nights) return 0;
-    return rawPrice / (SEARCH_ROOMS * nights);
-}
+// normalisePricePerRoomPerNight moved to src/utils/pricing.ts (shared with the probe worker).
 
 /**
  * Skip the bottom `trimPct`% and top `trimPct`% of prices.
@@ -609,7 +607,10 @@ function parseWbeOptions(wbeHotelOptions: any[], nights: number): ProcessedOptio
             .map((r) => field<string>(r, 'Description', 'description', 'RoomName', 'roomName') ?? '')
             .filter(Boolean);
 
-        const pricePerRoomPerNight = normalisePricePerRoomPerNight(rawPrice, nights);
+        // Use the actual number of rooms WBE returned in this option (not a hardcoded batch size).
+        // WBE can return options with fewer rooms than requested when partial availability exists.
+        const roomsInOption = rawRooms.length > 0 ? rawRooms.length : SEARCH_ROOMS;
+        const pricePerRoomPerNight = normalisePricePerRoomPerNight(rawPrice, roomsInOption, nights, { tid, supplierCode });
         const maxRoomsFromSupplier = getSupplierMaxRooms(supplierCode);
 
         result.push({
