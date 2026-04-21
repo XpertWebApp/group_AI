@@ -233,6 +233,34 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     let roomsFound = 0;
     let lastProbeRange = '';
 
+    // Capture hotel metadata from WBE responses as fallback when DB is missing it
+    // (address, lat/lng etc). Used when dbHotel doesn't have this data populated.
+    const wbeHotelMeta: {
+        latitude?: number;
+        longitude?: number;
+        address?: string;
+        hotelName?: string;
+    } = {};
+    const captureWbeHotelMeta = (h: any) => {
+        if (!h) return;
+        const lat = field<number>(h, 'Latitude', 'latitude');
+        const lng = field<number>(h, 'Longitude', 'longitude');
+        if (wbeHotelMeta.latitude === undefined && typeof lat === 'number' && lat !== 0) {
+            wbeHotelMeta.latitude = Number(lat);
+        }
+        if (wbeHotelMeta.longitude === undefined && typeof lng === 'number' && lng !== 0) {
+            wbeHotelMeta.longitude = Number(lng);
+        }
+        if (!wbeHotelMeta.address) {
+            const addr = field<string>(h, 'Address', 'address');
+            if (addr) wbeHotelMeta.address = String(addr);
+        }
+        if (!wbeHotelMeta.hotelName) {
+            const name = field<string>(h, 'HotelName', 'hotelName', 'Name', 'name');
+            if (name) wbeHotelMeta.hotelName = String(name);
+        }
+    };
+
     // Per-room-type progress tracking
     const typeProgressMap = new Map<string, RoomTypeProbeProgress>();
 
@@ -294,6 +322,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 const wbeHotel = hotelEntries.find(
                     (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
                 );
+                captureWbeHotelMeta(wbeHotel);
 
                 if (!wbeHotel) {
                     logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No hotel entry — stopping probes for this type');
@@ -411,6 +440,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             const wbeHotel = hotelEntries.find(
                 (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
             );
+            captureWbeHotelMeta(wbeHotel);
 
             if (!wbeHotel) {
                 logger.info({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
@@ -942,6 +972,14 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 .filter(Boolean),
         )).slice(0, 5);
 
+        // Rate basis — pick from the cheapest mid-range option for this room type,
+        // fallback to any option for this type. Default "RO" (Room Only) when absent.
+        const sourceOption =
+            data.midRangeOptions?.[0] ??
+            (optionsByType.get(type) ?? [])[0];
+        const mealType = sourceOption?.mealType?.toString().trim() || 'RO';
+        const mealName = sourceOption?.mealName?.toString().trim() || 'Room only';
+
         return {
             roomType: type,
             requested: data.requested,
@@ -949,6 +987,8 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             highestMidRangePrice: data.highestMidRangePrice,
             supplierCount: validatedForType.length,
             actualDescriptions,
+            mealType,
+            mealName,
         };
     }).filter((t) => t.roomsAllocated > 0); // Only include types that have rooms
 
@@ -959,14 +999,15 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     const resultJson = {
         hotelCode,
-        hotelName: dbHotel?.name ?? hotelCode,
+        hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
         starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
         imageUrl,
         description: dbHotel?.description ?? null,
+        address: (dbHotel as any)?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,
-        latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,
-        longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : null,
+        latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : (wbeHotelMeta.latitude ?? null),
+        longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : (wbeHotelMeta.longitude ?? null),
         roomsFound,
         roomsAllocated: validatedRoomsAllocated,
         capacityStatus,
