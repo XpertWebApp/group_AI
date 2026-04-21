@@ -6,10 +6,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const webhook_controller_1 = __importDefault(require("../controllers/webhook.controller"));
+const webhookAuth_middleware_1 = require("../middlewares/webhookAuth.middleware");
 const router = (0, express_1.Router)();
 /**
  * Rate limit: allow a reasonable burst for form submissions from the SETT website.
- * 60 submissions per 15 minutes per IP.
+ * 60 submissions per 15 minutes per IP (shared across both endpoints).
  */
 const webhookLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
@@ -17,28 +18,13 @@ const webhookLimiter = (0, express_rate_limit_1.default)({
     message: { error: { code: 'rate_limited', message: 'Too many webhook requests' } },
 });
 /**
- * Shared secret authentication.
- * The SETT website must include the secret in `x-webhook-secret` header.
- * If WEBHOOK_SECRET is not set in .env, auth is skipped (dev mode only).
+ * Legacy Wix webhook.
+ * Auth: x-webhook-secret header.
  */
-function webhookAuth(req, res, next) {
-    const secret = process.env.WEBHOOK_SECRET;
-    if (!secret) {
-        // No secret configured — allow in development, warn in production
-        if (process.env.NODE_ENV === 'production') {
-            return res.status(500).json({
-                error: { code: 'misconfigured', message: 'WEBHOOK_SECRET is not set' },
-            });
-        }
-        return next();
-    }
-    const provided = req.headers['x-webhook-secret'];
-    if (!provided || provided !== secret) {
-        return res.status(401).json({
-            error: { code: 'unauthorized', message: 'Invalid or missing webhook secret' },
-        });
-    }
-    next();
-}
-router.post('/', webhookLimiter, webhookAuth, webhook_controller_1.default.handleWebhook);
+router.post('/', webhookLimiter, webhookAuth_middleware_1.verifyWixSecretHeader, webhook_controller_1.default.handleWebhook);
+/**
+ * WordPress group form webhook (https://www.s-e-t-t.com/groups/).
+ * Auth: HMAC-SHA256 via X-Signature header.
+ */
+router.post('/wordpress', webhookLimiter, webhookAuth_middleware_1.verifyWordpressSignature, webhook_controller_1.default.handleWordpressWebhook);
 exports.default = router;

@@ -5,6 +5,7 @@ exports.refreshSupplierLimitsCache = refreshSupplierLimitsCache;
 exports.getSupplierMaxRooms = getSupplierMaxRooms;
 exports.getCappedMax = getCappedMax;
 exports.isGroupAllowed = isGroupAllowed;
+exports.isCustomerFacing = isCustomerFacing;
 /**
  * Supplier code → room limits and group booking rules.
  *
@@ -126,4 +127,14 @@ function isGroupAllowed(supplierCode) {
     if (!limit)
         return true; // default: assume allowed
     return limit.groupsAllowed;
+}
+/**
+ * Returns true if this supplier's rates can be shown to customers.
+ * Defaults to true unless explicitly set false (wholesale-only suppliers).
+ */
+function isCustomerFacing(supplierCode) {
+    const limit = exports.SUPPLIER_LIMITS[supplierCode?.toUpperCase?.() ?? ''];
+    if (!limit)
+        return true; // default: assume customer-facing
+    return limit.customerFacing !== false;
 }

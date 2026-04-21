@@ -14,6 +14,7 @@ const hotelProbeJob_repository_1 = __importDefault(require("../repositories/hote
 const wbe_client_service_1 = __importDefault(require("./wbe.client.service"));
 const hotelProbe_publisher_1 = require("../queue/hotelProbe.publisher");
 const logger_1 = __importDefault(require("../utils/logger"));
+const pricing_1 = require("../utils/pricing");
 const supplierLimits_1 = require("../config/supplierLimits");
 const probeConfig_1 = require("../config/probeConfig");
 const roomUtils_1 = require("../utils/roomUtils");
@@ -122,11 +123,7 @@ function field(obj, ...keys) {
  * Normalise the price from WBE option to a per-room-per-night value.
  * WBE returns a total for the searched configuration (SEARCH_ROOMS × nights).
  */
-function normalisePricePerRoomPerNight(rawPrice, nights) {
-    if (!rawPrice || !nights)
-        return 0;
-    return rawPrice / (SEARCH_ROOMS * nights);
-}
+// normalisePricePerRoomPerNight moved to src/utils/pricing.ts (shared with the probe worker).
 /**
  * Skip the bottom `trimPct`% and top `trimPct`% of prices.
  * Returns prices that fall in the mid-range band.
@@ -330,7 +327,10 @@ function parseWbeOptions(wbeHotelOptions, nights) {
         const roomDescriptions = rawRooms
             .map((r) => field(r, 'Description', 'description', 'RoomName', 'roomName') ?? '')
             .filter(Boolean);
-        const pricePerRoomPerNight = normalisePricePerRoomPerNight(rawPrice, nights);
+        // Use the actual number of rooms WBE returned in this option (not a hardcoded batch size).
+        // WBE can return options with fewer rooms than requested when partial availability exists.
+        const roomsInOption = rawRooms.length > 0 ? rawRooms.length : SEARCH_ROOMS;
+        const pricePerRoomPerNight = (0, pricing_1.normalisePricePerRoomPerNight)(rawPrice, roomsInOption, nights, { tid, supplierCode });
         const maxRoomsFromSupplier = (0, supplierLimits_1.getSupplierMaxRooms)(supplierCode);
         result.push({
             tid,

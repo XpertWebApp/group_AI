@@ -11,6 +11,7 @@ const wbe_client_service_1 = __importDefault(require("../services/wbe.client.ser
 const sseManager_1 = require("../services/sseManager");
 const supplierLimits_1 = require("../config/supplierLimits");
 const logger_1 = __importDefault(require("../utils/logger"));
+const pricing_1 = require("../utils/pricing");
 const probeConfig_1 = require("../config/probeConfig");
 // ─── Re-use filter helpers inline (avoid circular imports) ────────────────────
 function field(obj, ...keys) {
@@ -19,11 +20,6 @@ function field(obj, ...keys) {
             return obj[k];
     }
     return undefined;
-}
-function normalisePricePerRoomPerNight(rawPrice, nights, batchSize) {
-    if (!rawPrice || !nights || !batchSize)
-        return 0;
-    return rawPrice / (batchSize * nights);
 }
 function deduplicateBySupplier(options) {
     const map = new Map();
@@ -163,11 +159,17 @@ function parseProbeOptions(wbeHotelOptions, nights, batchSize) {
         const roomDescriptions = rawRooms
             .map((r) => field(r, 'Description', 'description', 'RoomName', 'roomName') ?? '')
             .filter(Boolean);
+        // Divide by the ACTUAL number of rooms WBE returned in this option, not
+        // the hardcoded batchSize. WBE may return options with fewer rooms than
+        // requested (partial availability), and using batchSize in those cases
+        // under-divides the price. Fall back to batchSize only if Rooms is empty.
+        const roomsInOption = rawRooms.length > 0 ? rawRooms.length : batchSize;
         result.push({
             tid,
             supplierCode,
-            pricePerRoomPerNight: normalisePricePerRoomPerNight(rawPrice, nights, batchSize),
+            pricePerRoomPerNight: (0, pricing_1.normalisePricePerRoomPerNight)(rawPrice, roomsInOption, nights, { tid, supplierCode }),
             rawTotalPrice: rawPrice,
+            roomsInOption,
             currency,
             freeCancellation,
             onRequest,
@@ -191,6 +193,31 @@ async function processJob(payload) {
     const allOptions = [];
     let roomsFound = 0;
     let lastProbeRange = '';
+    // Capture hotel metadata from WBE responses as fallback when DB is missing it
+    // (address, lat/lng etc). Used when dbHotel doesn't have this data populated.
+    const wbeHotelMeta = {};
+    const captureWbeHotelMeta = (h) => {
+        if (!h)
+            return;
+        const lat = field(h, 'Latitude', 'latitude');
+        const lng = field(h, 'Longitude', 'longitude');
+        if (wbeHotelMeta.latitude === undefined && typeof lat === 'number' && lat !== 0) {
+            wbeHotelMeta.latitude = Number(lat);
+        }
+        if (wbeHotelMeta.longitude === undefined && typeof lng === 'number' && lng !== 0) {
+            wbeHotelMeta.longitude = Number(lng);
+        }
+        if (!wbeHotelMeta.address) {
+            const addr = field(h, 'Address', 'address');
+            if (addr)
+                wbeHotelMeta.address = String(addr);
+        }
+        if (!wbeHotelMeta.hotelName) {
+            const name = field(h, 'HotelName', 'hotelName', 'Name', 'name');
+            if (name)
+                wbeHotelMeta.hotelName = String(name);
+        }
+    };
     // Per-room-type progress tracking
     const typeProgressMap = new Map();
     if (roomTypeTargets && roomTypeTargets.length > 0) {
@@ -239,6 +266,7 @@ async function processJob(payload) {
                     hotelEntries.push(...polled);
                 }
                 const wbeHotel = hotelEntries.find((h) => (field(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode);
+                captureWbeHotelMeta(wbeHotel);
                 if (!wbeHotel) {
                     logger_1.default.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No hotel entry — stopping probes for this type');
                     break;
@@ -255,9 +283,15 @@ async function processJob(payload) {
                     logger_1.default.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No usable options — stopping probes for this type');
                     break;
                 }
-                // Tag options with roomType + sessionId for downstream use (Step 3.4 needs sessionId)
+                // Tag options with the requested roomType (for grouping/allocation) +
+                // requestedRoomType (what the client asked for) + sessionId.
+                // Preserve the ACTUAL WBE room description separately so the UI can
+                // show the real room name (e.g. "Double Room, Terrace (1 Double Bed)")
+                // instead of just "Single" — per M5 data-integrity requirement.
                 for (const opt of roomTypeFiltered) {
-                    opt.roomType = target.roomType;
+                    opt.requestedRoomType = target.roomType;
+                    opt.roomType = target.roomType; // kept for backwards compat (allocation logic)
+                    opt.actualRoomDescription = opt.roomDescriptions?.[0] ?? null;
                     opt.sessionId = sessionId;
                 }
                 typeRoomsFound += probeConfig_1.PROBE_BATCH_SIZE;
@@ -327,6 +361,7 @@ async function processJob(payload) {
                 hotelEntries.push(...polled);
             }
             const wbeHotel = hotelEntries.find((h) => (field(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode);
+            captureWbeHotelMeta(wbeHotel);
             if (!wbeHotel) {
                 logger_1.default.info({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
                 break;
@@ -655,6 +690,28 @@ async function processJob(payload) {
             entry.cxlDeadline = optionDate;
             entry.cxlConditions = rawConditions;
             entry.roomBreakdown = roomBreakdown;
+            // Recompute per-room-per-night from the AUTHORITATIVE OptionDetailsV2 total.
+            // WBE search can return a bogus-low rawTotalPrice; OptionDetailsV2 reflects the
+            // real booking total. Use detail.Rooms.length as the divisor (not allocated
+            // rooms, which is a different concept).
+            const detailRoomsCount = roomBreakdown.length > 0 ? roomBreakdown.length : (entry.roomsInOption ?? 1);
+            if (detailTotalPrice && detailRoomsCount > 0 && nights > 0) {
+                entry.detailPricePerRoomPerNight = detailTotalPrice / (detailRoomsCount * nights);
+                // Log when search vs detail diverge by >30% — useful to spot WBE data
+                // inconsistencies like the one Oliver's team reported on Bella Sky.
+                const searchPPRPN = entry.pricePerRoomPerNight ?? 0;
+                if (searchPPRPN > 0) {
+                    const ratio = entry.detailPricePerRoomPerNight / searchPPRPN;
+                    if (ratio > 1.3 || ratio < 0.77) {
+                        logger_1.default.warn({
+                            hotelCode, tid: entry.tid, supplierCode: entry.supplierCode,
+                            searchPPRPN, detailPPRPN: entry.detailPricePerRoomPerNight,
+                            searchTotal: entry.rawTotalPrice, detailTotal: detailTotalPrice,
+                            detailRoomsCount, nights,
+                        }, 'Step 3.4: Search vs OptionDetails price divergence detected — trusting OptionDetails');
+                    }
+                }
+            }
             validatedSplit.push(entry);
             console.log(`[Step 3.4] ✅ ${entry.supplierCode}: cxlDeadline=${optionDate}, totalPrice=${detailTotalPrice}, rooms=${entry.rooms}`);
             logger_1.default.info({
@@ -742,7 +799,15 @@ async function processJob(payload) {
         imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
     }
     // Calculate sell price — uses HIGHEST mid-range price across ALL room types (Step 4.1)
-    const buyingPriceBase = overallHighestMidRangePrice;
+    // Prefer OptionDetailsV2-derived prices (authoritative) over search prices (WBE
+    // sometimes returns bogus-low rawTotalPrice in search that doesn't match the real
+    // booking total — see Oliver's M* pricing issue).
+    const detailPPRPNs = validatedSplit
+        .map((e) => e.detailPricePerRoomPerNight)
+        .filter((p) => typeof p === 'number' && p > 0);
+    const buyingPriceBase = detailPPRPNs.length > 0
+        ? Math.max(...detailPPRPNs)
+        : overallHighestMidRangePrice;
     const raw = buyingPriceBase * (1 + markupPercent / 100);
     const rounded = Math.ceil(raw);
     let sellingPrice = rounded;
@@ -782,12 +847,34 @@ async function processJob(payload) {
         // Count validated rooms for this type (some suppliers may have been removed in Step 3.4)
         const validatedForType = validatedSplit.filter((e) => e.roomType === type);
         const validatedTypeRooms = validatedForType.reduce((s, e) => s + e.rooms, 0);
+        // M5 — Collect the ACTUAL WBE room descriptions for this type so the UI can
+        // show the real room name (e.g. "Double Room, Terrace (1 Double Bed)") instead
+        // of just the requested type label (e.g. "Single"). Deduplicate and cap to 5.
+        const actualDescriptions = Array.from(new Set((optionsByType.get(type) ?? [])
+            .map((o) => o.actualRoomDescription ?? o.roomDescriptions?.[0])
+            .filter(Boolean))).slice(0, 5);
+        // Rate basis — pick from the cheapest mid-range option for this room type,
+        // fallback to any option for this type. Default "RO" (Room Only) when absent.
+        const sourceOption = data.midRangeOptions?.[0] ??
+            (optionsByType.get(type) ?? [])[0];
+        const mealType = sourceOption?.mealType?.toString().trim() || 'RO';
+        const mealName = sourceOption?.mealName?.toString().trim() || 'Room only';
+        // Prefer validated OptionDetails prices over search-time prices for this type
+        const typeDetailPPRPNs = validatedForType
+            .map((e) => e.detailPricePerRoomPerNight)
+            .filter((p) => typeof p === 'number' && p > 0);
+        const highestMidRangePrice = typeDetailPPRPNs.length > 0
+            ? Math.max(...typeDetailPPRPNs)
+            : data.highestMidRangePrice;
         return {
             roomType: type,
             requested: data.requested,
             roomsAllocated: validatedTypeRooms,
-            highestMidRangePrice: data.highestMidRangePrice,
+            highestMidRangePrice,
             supplierCount: validatedForType.length,
+            actualDescriptions,
+            mealType,
+            mealName,
         };
     }).filter((t) => t.roomsAllocated > 0); // Only include types that have rooms
     console.log(`[EC3] Per-type allocations for ${hotelCode}:`);
@@ -796,14 +883,15 @@ async function processJob(payload) {
     }
     const resultJson = {
         hotelCode,
-        hotelName: dbHotel?.name ?? hotelCode,
+        hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
         starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
         imageUrl,
         description: dbHotel?.description ?? null,
+        address: dbHotel?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,
-        latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,
-        longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : null,
+        latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : (wbeHotelMeta.latitude ?? null),
+        longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : (wbeHotelMeta.longitude ?? null),
         roomsFound,
         roomsAllocated: validatedRoomsAllocated,
         capacityStatus,
@@ -814,7 +902,7 @@ async function processJob(payload) {
         totalSupplierClaim,
         physicalCapacity,
         cxlDeadline: earliestCxlDeadline,
-        highestMidRangePrice: overallHighestMidRangePrice,
+        highestMidRangePrice: buyingPriceBase,
         sellingPricePerRoomPerNight: sellingPrice,
         currency: allOptions[0]?.currency ?? currencyCode,
         supplierSplit: validatedSplit,

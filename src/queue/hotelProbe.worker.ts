@@ -829,6 +829,33 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             entry.cxlConditions = rawConditions;
             entry.roomBreakdown = roomBreakdown;
 
+            // Recompute per-room-per-night from the AUTHORITATIVE OptionDetailsV2 total.
+            // WBE search can return a bogus-low rawTotalPrice; OptionDetailsV2 reflects the
+            // real booking total. Use detail.Rooms.length as the divisor (not allocated
+            // rooms, which is a different concept).
+            const detailRoomsCount = roomBreakdown.length > 0 ? roomBreakdown.length : (entry.roomsInOption ?? 1);
+            if (detailTotalPrice && detailRoomsCount > 0 && nights > 0) {
+                entry.detailPricePerRoomPerNight = detailTotalPrice / (detailRoomsCount * nights);
+
+                // Log when search vs detail diverge by >30% — useful to spot WBE data
+                // inconsistencies like the one Oliver's team reported on Bella Sky.
+                const searchPPRPN = entry.pricePerRoomPerNight ?? 0;
+                if (searchPPRPN > 0) {
+                    const ratio = entry.detailPricePerRoomPerNight / searchPPRPN;
+                    if (ratio > 1.3 || ratio < 0.77) {
+                        logger.warn(
+                            {
+                                hotelCode, tid: entry.tid, supplierCode: entry.supplierCode,
+                                searchPPRPN, detailPPRPN: entry.detailPricePerRoomPerNight,
+                                searchTotal: entry.rawTotalPrice, detailTotal: detailTotalPrice,
+                                detailRoomsCount, nights,
+                            },
+                            'Step 3.4: Search vs OptionDetails price divergence detected — trusting OptionDetails',
+                        );
+                    }
+                }
+            }
+
             validatedSplit.push(entry);
 
             console.log(`[Step 3.4] ✅ ${entry.supplierCode}: cxlDeadline=${optionDate}, totalPrice=${detailTotalPrice}, rooms=${entry.rooms}`);
@@ -922,7 +949,15 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     }
 
     // Calculate sell price — uses HIGHEST mid-range price across ALL room types (Step 4.1)
-    const buyingPriceBase = overallHighestMidRangePrice;
+    // Prefer OptionDetailsV2-derived prices (authoritative) over search prices (WBE
+    // sometimes returns bogus-low rawTotalPrice in search that doesn't match the real
+    // booking total — see Oliver's M* pricing issue).
+    const detailPPRPNs: number[] = validatedSplit
+        .map((e: any) => e.detailPricePerRoomPerNight)
+        .filter((p: any) => typeof p === 'number' && p > 0);
+    const buyingPriceBase = detailPPRPNs.length > 0
+        ? Math.max(...detailPPRPNs)
+        : overallHighestMidRangePrice;
     const raw = buyingPriceBase * (1 + markupPercent / 100);
     const rounded = Math.ceil(raw);
     let sellingPrice = rounded;
@@ -980,11 +1015,19 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         const mealType = sourceOption?.mealType?.toString().trim() || 'RO';
         const mealName = sourceOption?.mealName?.toString().trim() || 'Room only';
 
+        // Prefer validated OptionDetails prices over search-time prices for this type
+        const typeDetailPPRPNs = validatedForType
+            .map((e: any) => e.detailPricePerRoomPerNight)
+            .filter((p: any) => typeof p === 'number' && p > 0);
+        const highestMidRangePrice = typeDetailPPRPNs.length > 0
+            ? Math.max(...typeDetailPPRPNs)
+            : data.highestMidRangePrice;
+
         return {
             roomType: type,
             requested: data.requested,
             roomsAllocated: validatedTypeRooms,
-            highestMidRangePrice: data.highestMidRangePrice,
+            highestMidRangePrice,
             supplierCount: validatedForType.length,
             actualDescriptions,
             mealType,
@@ -1018,7 +1061,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         totalSupplierClaim,
         physicalCapacity,
         cxlDeadline: earliestCxlDeadline,
-        highestMidRangePrice: overallHighestMidRangePrice,
+        highestMidRangePrice: buyingPriceBase,
         sellingPricePerRoomPerNight: sellingPrice,
         currency: allOptions[0]?.currency ?? currencyCode,
         supplierSplit: validatedSplit,

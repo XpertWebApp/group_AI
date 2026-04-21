@@ -36,6 +36,12 @@ const config = {
         username: process.env.GIATA_USERNAME || '',
         password: process.env.GIATA_PASSWORD || '',
     },
+    webhook: {
+        // Wix (legacy, plain secret header)
+        wixSecret: process.env.WEBHOOK_SECRET || '',
+        // WordPress (HMAC-SHA256)
+        wordpressSecret: process.env.WP_WEBHOOK_SECRET || '',
+    },
     s3: {
         endpoint: process.env.S3_ENDPOINT || '',
         region: process.env.S3_REGION || 'fsn1',

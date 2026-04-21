@@ -111,6 +111,16 @@ class ProposalRepository {
                 });
                 optionDetailsFetched = !!cachedByTid;
             }
+            // Generate stable hotel reference: SETT-{requestRef}-{seq 3-digit}.
+            // Counts ALL rows (including soft-deleted) so refs are append-only and never collide.
+            const parent = await tx.proposal.findUnique({
+                where: { id: proposalId },
+                select: { bookingRequest: { select: { referenceNumber: true } } },
+            });
+            const refNum = parent?.bookingRequest?.referenceNumber;
+            const count = await tx.proposalHotel.count({ where: { proposalId } });
+            const seq = String(count + 1).padStart(3, '0');
+            const hotelRef = refNum ? `SETT-${refNum}-${seq}` : null;
             const hotel = await tx.proposalHotel.create({
                 data: {
                     proposalId,
@@ -129,6 +139,8 @@ class ProposalRepository {
                     optionDetailsFetched,
                     latitude: hotelData.latitude != null ? new decimal_js_1.default(hotelData.latitude).toFixed(7) : null,
                     longitude: hotelData.longitude != null ? new decimal_js_1.default(hotelData.longitude).toFixed(7) : null,
+                    starRating: hotelData.starRating ?? null,
+                    hotelRef,
                 },
             });
             const proposal = await tx.proposal.findUnique({ where: { id: proposalId }, select: { markupSettings: true } });

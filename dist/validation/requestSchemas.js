@@ -175,6 +175,7 @@ exports.AddProposalHotelSchema = zod_1.z.object({
     optionDetailsId: zod_1.z.string().uuid().optional(),
     latitude: zod_1.z.number().min(-90).max(90).optional().nullable(),
     longitude: zod_1.z.number().min(-180).max(180).optional().nullable(),
+    starRating: zod_1.z.number().int().min(1).max(5).optional().nullable(),
 });
 exports.AdjustHotelPricingSchema = zod_1.z.object({
     rooms: zod_1.z.record(zod_1.z.string(), zod_1.z.object({

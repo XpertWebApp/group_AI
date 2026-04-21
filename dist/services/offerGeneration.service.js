@@ -274,6 +274,11 @@ class OfferGenerationService {
                                     sell: unifiedSellingPrice,
                                     qty: typeAlloc.roomsAllocated,
                                     nights,
+                                    // M5 — Store the actual WBE room names so the UI
+                                    // shows what the supplier actually returned (e.g.
+                                    // "Double Room, Terrace") instead of just the
+                                    // requested type label (e.g. "Single").
+                                    actualDescriptions: typeAlloc.actualDescriptions ?? [],
                                     ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
                                 },
                             },
