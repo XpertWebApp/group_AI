@@ -69,23 +69,44 @@ function parseHotelLocation(raw: string | undefined | null): 'central' | 'outsid
 }
 
 /**
- * Try to resolve destination ID from city name (case-insensitive, partial match).
+ * Try to resolve destination ID from city name.
+ * Strategy (in order of preference):
+ *   1. EXACT case-insensitive match ("Dubai" → "Dubai", not "Dubai Airports")
+ *   2. "Starts with" match ("Dubai" → "Dubai Marina")
+ *   3. "Contains" match as last resort
  * Returns 0 if not found (stored as unresolved — staff can correct manually).
  */
 async function resolveDestinationId(cityName: string): Promise<{ id: number; name: string }> {
-    if (!cityName?.trim()) return { id: 0, name: cityName };
+    const name = cityName?.trim();
+    if (!name) return { id: 0, name: cityName };
 
-    const dest = await prisma.destination.findFirst({
-        where: { name: { contains: cityName.trim(), mode: 'insensitive' } },
+    // 1. Exact (case-insensitive) match — prefer this
+    const exact = await prisma.destination.findFirst({
+        where: { name: { equals: name, mode: 'insensitive' } },
         select: { id: true, name: true },
         orderBy: { id: 'asc' },
     });
+    if (exact) return { id: exact.id, name: exact.name };
 
-    if (dest) return { id: dest.id, name: dest.name };
+    // 2. Starts-with match — e.g. "Dubai" → "Dubai Marina"
+    const startsWith = await prisma.destination.findFirst({
+        where: { name: { startsWith: name, mode: 'insensitive' } },
+        select: { id: true, name: true },
+        orderBy: { id: 'asc' },
+    });
+    if (startsWith) return { id: startsWith.id, name: startsWith.name };
 
-    // Fallback: try a word-boundary search on the first word of the city name
-    const firstWord = cityName.trim().split(/\s+/)[0];
-    if (firstWord && firstWord !== cityName.trim()) {
+    // 3. Contains match — last resort
+    const contains = await prisma.destination.findFirst({
+        where: { name: { contains: name, mode: 'insensitive' } },
+        select: { id: true, name: true },
+        orderBy: { id: 'asc' },
+    });
+    if (contains) return { id: contains.id, name: contains.name };
+
+    // 4. Fallback: try first-word search
+    const firstWord = name.split(/\s+/)[0];
+    if (firstWord && firstWord !== name) {
         const partial = await prisma.destination.findFirst({
             where: { name: { contains: firstWord, mode: 'insensitive' } },
             select: { id: true, name: true },
@@ -95,7 +116,7 @@ async function resolveDestinationId(cityName: string): Promise<{ id: number; nam
     }
 
     logger.warn({ cityName }, 'Webhook: destination not found in DB — stored with id=0');
-    return { id: 0, name: cityName.trim() };
+    return { id: 0, name };
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
