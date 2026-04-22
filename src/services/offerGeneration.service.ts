@@ -301,11 +301,17 @@ export class OfferGenerationService {
                 const perTypeAllocs: any[] = result.perTypeAllocations ?? [];
 
                 if (perTypeAllocs.length > 0) {
-                    // ── EC3: Per-room-type entries ──────────────────────────────
+                    // ── Consolidated: one ProposalHotel per hotel with ALL room types bundled ──
+                    // This matches the frontend's "Add Hotel" flow and avoids showing the
+                    // same hotel as multiple cards in the proposal.
+                    const rooms: Record<string, any> = {};
+                    let hotelTotal = 0;
+                    let totalAllocated = 0;
+                    let cheapestAcrossTypes: any = null;
+
                     for (const typeAlloc of perTypeAllocs) {
                         if (typeAlloc.roomsAllocated <= 0) continue;
 
-                        // Find the cheapest supplier for THIS room type
                         const typeSplitEntries = (result.supplierSplit ?? [])
                             .filter((e: any) => e.roomType === typeAlloc.roomType);
                         const cheapest = [...typeSplitEntries].sort(
@@ -314,43 +320,48 @@ export class OfferGenerationService {
                         if (!cheapest) continue;
 
                         const typeTotal = unifiedSellingPrice * typeAlloc.roomsAllocated * nights;
+                        hotelTotal += typeTotal;
+                        totalAllocated += typeAlloc.roomsAllocated;
 
-                        console.log(
-                            `[Step 4.2] Adding ${result.hotelName} — ${typeAlloc.roomType}: ${typeAlloc.roomsAllocated} rooms × ${unifiedSellingPrice}/night × ${nights} nights = ${typeTotal} ${unifiedCurrency}`,
-                        );
+                        // Track the cheapest entry across all room types for the hotel-level
+                        // TID/supplierCode fields.
+                        if (!cheapestAcrossTypes || cheapest.pricePerRoomPerNight < cheapestAcrossTypes.pricePerRoomPerNight) {
+                            cheapestAcrossTypes = cheapest;
+                        }
 
-                        // Include bonus alternative flag if detected
-                        const hotelNameWithBonus = result.bonusAlternative
-                            ? `${result.hotelName ?? result.hotelCode} ★ BONUS`
-                            : (result.hotelName ?? undefined);
-
-                        await proposalRepository.addHotelTx(proposal.id, {
-                            hotelCode: result.hotelCode,
-                            hotelName: hotelNameWithBonus,
-                            tid: cheapest.tid,
-                            currency: unifiedCurrency,
-                            totalPrice: typeTotal,
-                            freeCancellation: true,
-                            cancelDeadline: result.cxlDeadline ?? null,
-                            supplierCode: cheapest.supplierCode,
-                            latitude: result.latitude ?? null,
-                            longitude: result.longitude ?? null,
-                            rooms: {
-                                [typeAlloc.roomType]: {
-                                    net: cheapest.pricePerRoomPerNight,
-                                    sell: unifiedSellingPrice,
-                                    qty: typeAlloc.roomsAllocated,
-                                    nights,
-                                    // M5 — Store the actual WBE room names so the UI
-                                    // shows what the supplier actually returned (e.g.
-                                    // "Double Room, Terrace") instead of just the
-                                    // requested type label (e.g. "Single").
-                                    actualDescriptions: typeAlloc.actualDescriptions ?? [],
-                                    ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
-                                },
-                            },
-                        });
+                        rooms[typeAlloc.roomType] = {
+                            net: cheapest.pricePerRoomPerNight,
+                            sell: unifiedSellingPrice,
+                            qty: typeAlloc.roomsAllocated,
+                            nights,
+                            actualDescriptions: typeAlloc.actualDescriptions ?? [],
+                            ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
+                        };
                     }
+
+                    if (!cheapestAcrossTypes || totalAllocated === 0) continue;
+
+                    console.log(
+                        `[Step 4.2] Adding ${result.hotelName}: ${totalAllocated} rooms across ${Object.keys(rooms).length} room type(s) × ${unifiedSellingPrice}/night × ${nights} nights = ${hotelTotal} ${unifiedCurrency}`,
+                    );
+
+                    const hotelNameWithBonus = result.bonusAlternative
+                        ? `${result.hotelName ?? result.hotelCode} ★ BONUS`
+                        : (result.hotelName ?? undefined);
+
+                    await proposalRepository.addHotelTx(proposal.id, {
+                        hotelCode: result.hotelCode,
+                        hotelName: hotelNameWithBonus,
+                        tid: cheapestAcrossTypes.tid,
+                        currency: unifiedCurrency,
+                        totalPrice: hotelTotal,
+                        freeCancellation: true,
+                        cancelDeadline: result.cxlDeadline ?? null,
+                        supplierCode: cheapestAcrossTypes.supplierCode,
+                        latitude: result.latitude ?? null,
+                        longitude: result.longitude ?? null,
+                        rooms,
+                    });
                 } else {
                     // ── Fallback: old-style single aggregate entry ─────────────
                     const cheapestSplit = [...result.supplierSplit].sort(

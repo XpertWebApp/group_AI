@@ -28,31 +28,44 @@ const EXPECTED_FORM_ID = 'cdd7652b-be36-4756-a985-9e390fa1477e';
 
 /**
  * Parse "Hotel 3* ⭐️⭐️⭐️" → 3
- * Accepts patterns like "3*", "Hotel 4*", "4 star", "4-star"
+ * Accepts patterns like "3*", "Hotel 4*", "4 star", "4-star", "Hotel 4 Sterne" (DE)
  */
 function parseStarRating(raw: string | undefined | null): number | null {
     if (!raw) return null;
-    const m = raw.match(/(\d)[\s*]?[\s*star]/i) ?? raw.match(/(\d)\*/);
+    // Try: "4*" or "4 star" or "4 Sterne" or "4-star" or "4 stars"
+    const m =
+        raw.match(/(\d)\s*\*/) ??
+        raw.match(/(\d)[-\s]*(?:star|sterne)/i) ??
+        raw.match(/(?:star|sterne)[-\s]*(\d)/i);
     return m ? parseInt(m[1]!, 10) : null;
 }
 
 /**
  * Parse breakfast field → 'BB' | 'RO'
- * "Yes, with breakfast" → "BB"
- * "No, without breakfast" → "RO"
+ * EN: "Yes, with breakfast" → BB, "No" → RO
+ * DE: "Ja, mit Frühstück" → BB, "Nein, ohne Frühstück" → RO
  */
 function parseBreakfast(raw: string | undefined | null): 'BB' | 'RO' {
     if (!raw) return 'RO';
-    return /yes|with breakfast|breakfast/i.test(raw) ? 'BB' : 'RO';
+    const s = raw.toLowerCase();
+    // Explicit "no/nein/ohne" overrides any accidental match on "breakfast/frühstück"
+    if (/\b(no|nein|ohne|without)\b/i.test(raw)) return 'RO';
+    // Positive matches for English + German
+    return /yes|ja|with breakfast|mit frühstück|breakfast|frühstück|fruhstuck/i.test(s)
+        ? 'BB'
+        : 'RO';
 }
 
 /**
  * Parse hotel_location → 'central' | 'outside_city_center'
- * "Save money – stay outside the city center" → "outside_city_center"
+ * EN: "City center" → central, "Outside the city" → outside_city_center
+ * DE: "Stadtzentrum"/"Innenstadt" → central, "Außerhalb der Stadt" → outside_city_center
  */
 function parseHotelLocation(raw: string | undefined | null): 'central' | 'outside_city_center' {
     if (!raw) return 'central';
-    return /outside|outside the city|save money/i.test(raw) ? 'outside_city_center' : 'central';
+    return /outside|save money|außerhalb|ausserhalb|außerstadt/i.test(raw)
+        ? 'outside_city_center'
+        : 'central';
 }
 
 /**
@@ -107,10 +120,56 @@ export class WebhookService {
         }
 
         const checkin = new Date(checkinDate);
+        if (isNaN(checkin.getTime())) {
+            throw { status: 400, message: 'arrival_date is not a valid date', code: 'INVALID_DATE' };
+        }
         const checkout = checkoutDate ? new Date(checkoutDate) : null;
+        if (checkout && isNaN(checkout.getTime())) {
+            throw { status: 400, message: 'departure_date is not a valid date', code: 'INVALID_DATE' };
+        }
+        if (checkout && checkout.getTime() <= checkin.getTime()) {
+            throw {
+                status: 400,
+                message: 'departure_date must be after arrival_date',
+                code: 'INVALID_DATE_RANGE',
+            };
+        }
         const nights = checkout
             ? Math.max(1, Math.round((checkout.getTime() - checkin.getTime()) / 86_400_000))
             : 1;
+
+        // 2b. Validate email — required and must be a plausible email format
+        const rawEmail: string | undefined = data.email ?? data.contactEmail;
+        if (!rawEmail || typeof rawEmail !== 'string' || rawEmail.trim() === '') {
+            throw { status: 400, message: 'email is required', code: 'MISSING_FIELD' };
+        }
+        const emailNormalized = rawEmail.trim().toLowerCase();
+        // Simple RFC-5322-ish check: local@domain.tld
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalized)) {
+            throw { status: 400, message: 'email is not a valid email address', code: 'INVALID_EMAIL' };
+        }
+
+        // 2c. Idempotency — reject duplicate submissionId (if provided)
+        if (submissionId) {
+            const existing = await prisma.bookingRequest.findFirst({
+                where: { externalRequestId: submissionId },
+                select: { id: true, referenceNumber: true, status: true },
+            });
+            if (existing) {
+                logger.info(
+                    { submissionId, existingId: existing.id },
+                    'Webhook: duplicate submissionId — returning existing request',
+                );
+                return {
+                    id: existing.id,
+                    referenceNumber: (existing as any).referenceNumber,
+                    status: existing.status,
+                    destinationName: null,
+                    message: 'Request already received — returning existing record (idempotent).',
+                    duplicate: true,
+                };
+            }
+        }
 
         // 3. Resolve destination
         const rawCity: string = data.destination_by_city ?? data.destination ?? data.DestinationName ?? '';
@@ -175,7 +234,7 @@ export class WebhookService {
             firstName: firstName || null,
             lastName: lastName || null,
             contactName,
-            contactEmail: data.email ?? data.contactEmail ?? null,
+            contactEmail: emailNormalized,
             ...(() => {
                 const parsed = parsePhoneWithCountryCode(data.phone ?? data.contactPhone);
                 return {
