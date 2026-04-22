@@ -97,8 +97,10 @@ export class RequestService {
             termsAndConditions: data.termsAndConditions ?? null,
             cancellationConditions: data.cancellationConditions ?? null,
 
-            // Assign to the logged-in user (for Gmail sending)
-            assignedUserId: userId ?? null,
+            // Ownership starts unassigned — creating a request is not an owning action.
+            // Ownership is claimed on the first add/remove hotel, add/remove service,
+            // send, or decline (see proposals.service.ts::claimForRequest).
+            assignedUserId: null,
 
             status: (data.status as BookingRequestStatus) ?? BookingRequestStatus.pending,
         };
@@ -199,6 +201,38 @@ export class RequestService {
 
     async updateRequestStatus(id: string, status: string) {
         return requestRepository.updateStatus(id, status as BookingRequestStatus);
+    }
+
+    /**
+     * Claim ownership of a booking request if currently unassigned.
+     * Idempotent: no-op if already claimed. Audit-logs only on the winning claim.
+     * Never throws — callers can fire-and-forget (e.g. from middleware).
+     *
+     * @param trigger 'auto' for first-action middleware, 'explicit' for /claim endpoint
+     */
+    async claimOwnershipIfUnassigned(
+        requestId: string,
+        userId: string,
+        ip?: string,
+        trigger: 'auto' | 'explicit' = 'auto',
+    ): Promise<{ claimed: boolean; ownerId: string | null }> {
+        if (!requestId || !userId) return { claimed: false, ownerId: null };
+        try {
+            const result = await requestRepository.claimOwnershipIfUnassigned(requestId, userId);
+            if (result.claimed) {
+                await logAuditEvent({
+                    userId,
+                    action: 'claim_ownership',
+                    entity: 'booking_request',
+                    entityId: requestId,
+                    details: { trigger },
+                    ipAddress: ip,
+                });
+            }
+            return result;
+        } catch {
+            return { claimed: false, ownerId: null };
+        }
     }
 }
 

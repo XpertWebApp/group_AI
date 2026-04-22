@@ -15,7 +15,6 @@
 
 import { PrismaClient, BookingRequestStatus } from '@prisma/client';
 import offerGenerationService from './offerGeneration.service';
-import userRepository from '../repositories/user.repository';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
 import { parsePhoneWithCountryCode } from '../utils/phoneParser';
@@ -143,26 +142,14 @@ export class WebhookService {
         const lastName: string = data.last_name ?? data.lastName ?? '';
         const contactName = [firstName, lastName].filter(Boolean).join(' ') || null;
 
-        // 6. Match webhook email to a SETT staff user (for Gmail sending)
-        let assignedUserId: string | null = null;
-        const webhookEmail = data.email ?? data.contactEmail;
-        if (webhookEmail) {
-            const matchedUser = await userRepository.findByEmail(webhookEmail);
-            if (matchedUser) {
-                assignedUserId = matchedUser.id;
-                logger.info({ email: webhookEmail, userId: matchedUser.id }, 'Webhook: matched email to staff user');
-            } else {
-                logger.info({ email: webhookEmail }, 'Webhook: email does not match any staff user — SMTP fallback');
-            }
-        }
-
-        // 7. Create the booking request
+        // 6. Create the booking request — ownership stays unassigned; first staff
+        // action (or explicit /claim) will set assignedUserId.
         const requestPayload = {
             rawPayload: payload,
             externalRequestId: submissionId ?? null,
             source: 'webhook',
             sourceIp: ip,
-            assignedUserId,
+            assignedUserId: null,
 
             // Trip details
             destinationId: destination.id,

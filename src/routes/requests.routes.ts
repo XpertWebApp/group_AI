@@ -53,6 +53,10 @@ router.patch(
     requestsController.update,
 );
 
+// Explicit self-claim from the dashboard. No auto-claim middleware — the
+// controller handles the claim + conflict response itself.
+router.post('/:id/actions/claim', authMiddleware, requestsController.claim);
+
 // ── Hotel Search Flow (Create Request → Search → Option Details) ───────────
 
 /**
@@ -124,7 +128,11 @@ router.post(
 
 router.get('/:id/attachments', authMiddleware, attachmentsController.list);
 
-router.delete('/:id/attachments/:attachmentId', authMiddleware, attachmentsController.delete);
+router.delete(
+    '/:id/attachments/:attachmentId',
+    authMiddleware,
+    attachmentsController.delete,
+);
 
 // ── Create Proposal on a Request ───────────────────────────────────────────
 

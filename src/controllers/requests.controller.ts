@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import requestsService from '../services/requests.service';
 import proposalsService from '../services/proposals.service';
+import requestRepository from '../repositories/request.repository';
 import { sendResponse } from '../utils/response';
 
 export class RequestsController {
@@ -82,6 +83,39 @@ export class RequestsController {
             const result = await proposalsService.createForRequest(req.params['requestId'] as string, body, userId, ip);
             res.setHeader('Location', `/api/v1/proposals/${result.id}`);
             return sendResponse(res, 201, result, 'Proposal created');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * Explicit self-claim. 200 if claimed (or already owned by the same user),
+     * 409 if another user already owns it.
+     */
+    async claim(req: Request, res: Response, next: NextFunction) {
+        try {
+            const requestId = req.params['id'] as string;
+            const userId = (req as any).user?.id;
+            if (!userId) {
+                return sendResponse(res, 401, null, 'Unauthorized', 'UNAUTHORIZED');
+            }
+            const result = await requestsService.claimOwnershipIfUnassigned(
+                requestId,
+                userId,
+                req.ip,
+                'explicit',
+            );
+            if (!result.claimed && result.ownerId && result.ownerId !== userId) {
+                const owner = await requestRepository.findOwner(requestId);
+                return sendResponse(res, 409, { owner }, 'Request already assigned');
+            }
+            const owner = await requestRepository.findOwner(requestId);
+            return sendResponse(
+                res,
+                200,
+                { owner },
+                result.claimed ? 'Claimed' : 'Already owned by you',
+            );
         } catch (error) {
             next(error);
         }

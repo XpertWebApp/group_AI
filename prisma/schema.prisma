@@ -67,6 +67,7 @@ model User {
   googleTokenExpiry  DateTime? @map("google_token_expiry")
   googleEmail        String?   @map("google_email") @db.VarChar(255)
   role               UserRole  @relation(fields: [roleId], references: [id])
+  assignedRequests   BookingRequest[] @relation("BookingRequestAssignee")
 
   @@index([roleId])
   @@map("users")
@@ -321,6 +322,7 @@ model BookingRequest {
   termsAndConditions     String?                    @map("terms_and_conditions")
   cancellationConditions String?                    @map("cancellation_conditions")
   assignedUserId         String?                    @map("assigned_user_id") @db.Uuid
+  assignedUser           User?                      @relation("BookingRequestAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
   attachments            BookingRequestAttachment[]
   proposals              Proposal[]
 

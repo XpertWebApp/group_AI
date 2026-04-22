@@ -7,12 +7,18 @@ export interface ExpandedRoom {
 
 /** Per-room-type probe target — how many of each type to probe (requested × PROBE_MULTIPLIER). */
 export interface RoomTypeProbeTarget {
-    roomType: string;       // 'single' | 'double' | 'twin' | 'triple' | 'quadruple' | 'suites' | 'standardDoubleBeds' | 'twinBeds'
-    requested: number;      // original count from booking request
+    roomType: string;       // 'single' | 'double' | 'twin' | 'triple' | 'quadruple' | 'suites' | 'standardDoubleBeds' | 'twinBeds' | 'quadruple__sub_double'
+    requested: number;      // original count from booking request (in target-type units — e.g. rooms, not guests)
     probeLimit: number;     // requested * PROBE_MULTIPLIER
     adults: number;         // from ROOM_TYPE_ADULTS config
     children: number;
     childrenAges: number[];
+    /** If set, this target is a fallback/substitute for another room type (e.g. quadruple). */
+    substituteFor?: string;
+    /** Ratio of substitute rooms needed per 1 of the original type (e.g. 2 doubles per 1 quadruple). */
+    substituteRatio?: number;
+    /** Description keyword used for WBE option matching (e.g. 'double' accepts double+twin). */
+    matchKeyword?: string;
 }
 
 /** Per-room-type progress tracked during probing. */
@@ -21,6 +27,10 @@ export interface RoomTypeProbeProgress {
     requested: number;
     probeLimit: number;
     roomsFound: number;
+    /** If set, this progress row is a fallback/substitute for another room type. */
+    substituteFor?: string;
+    /** Ratio of substitute rooms per 1 of the original type (e.g. 2 doubles per 1 quadruple). */
+    substituteRatio?: number;
 }
 
 /** Payload published to the RabbitMQ hotel_probe_jobs queue. */

@@ -4,6 +4,7 @@ import {
     HotelProbeCompletedEvent,
     HotelProbeProgressEvent,
     RoomTypeProbeProgress,
+    RoomTypeProbeTarget,
     ExpandedRoom,
 } from './hotelProbeJob.types';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
@@ -15,7 +16,7 @@ import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import {
     PROBE_BATCH_SIZE,
-    PROBE_WAIT_SECONDS,
+    PROBE_MULTIPLIER,
     PROBE_POLL_INTERVAL_MS,
     PROBE_POLL_TIMEOUT_MS,
     MULTI_SUPPLIER_OVERLAP_THRESHOLD,
@@ -276,6 +277,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         }
 
         let globalRoomId = 1; // Running RoomID across all type phases
+        const substituteTargets: RoomTypeProbeTarget[] = []; // Quadruple fallback targets added during probing
 
         for (const target of roomTypeTargets) {
             const typeBatches = Math.ceil(target.probeLimit / PROBE_BATCH_SIZE);
@@ -400,6 +402,158 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 { jobId, hotelCode, roomType: target.roomType, typeRoomsFound, probeLimit: target.probeLimit },
                 'Per-type probe phase finished',
             );
+
+            // ── Quadruple fallback: if quads came up short, probe doubles (2 doubles = 1 quad).
+            // Secondary fallback (2 twins) collapses into this phase because matchesRoomType('double', ...)
+            // already accepts "twin" descriptions — doubles preferred, twins allowed.
+            if (target.roomType === 'quadruple' && typeRoomsFound < target.requested) {
+                const quadShortfall = target.requested - typeRoomsFound;
+                const fallbackRoomsNeeded = quadShortfall * 2;
+                const fallbackProbeLimit = fallbackRoomsNeeded * PROBE_MULTIPLIER;
+                const fallbackBatches = Math.ceil(fallbackProbeLimit / PROBE_BATCH_SIZE);
+                let fallbackRoomsFound = 0;
+
+                const fallbackTarget: RoomTypeProbeTarget = {
+                    roomType: 'quadruple__sub_double',
+                    requested: fallbackRoomsNeeded,
+                    probeLimit: fallbackProbeLimit,
+                    adults: 2,
+                    children: 0,
+                    childrenAges: [],
+                    substituteFor: 'quadruple',
+                    substituteRatio: 2,
+                    matchKeyword: 'double',
+                };
+
+                typeProgressMap.set('quadruple__sub_double', {
+                    roomType: 'quadruple__sub_double',
+                    requested: fallbackRoomsNeeded,
+                    probeLimit: fallbackProbeLimit,
+                    roomsFound: 0,
+                    substituteFor: 'quadruple',
+                    substituteRatio: 2,
+                });
+
+                logger.info(
+                    { jobId, hotelCode, quadShortfall, fallbackRoomsNeeded, fallbackProbeLimit, fallbackBatches },
+                    'Starting quadruple fallback probe (doubles, twin allowed)',
+                );
+
+                for (let fb = 0; fb < fallbackBatches; fb++) {
+                    const startRoomId = globalRoomId;
+                    const endRoomId = startRoomId + PROBE_BATCH_SIZE - 1;
+                    lastProbeRange = `R${startRoomId}-R${endRoomId}`;
+                    globalRoomId += PROBE_BATCH_SIZE;
+
+                    let wbeResult: any;
+                    try {
+                        wbeResult = await wbeClientService.searchAndGetByHotelsV2({
+                            HotelIds: [hotelCode],
+                            CheckInDate: checkinDate,
+                            Nights: nights,
+                            WaitSeconds: waitSeconds,
+                            CurrencyCode: currencyCode,
+                            NationalityCode: nationalityCode,
+                            Rooms: buildHomogeneousBatch(2, 0, [], startRoomId),
+                        });
+                    } catch (err: any) {
+                        logger.warn({ jobId, hotelCode, lastProbeRange, error: err.message }, 'Quadruple fallback WBE call failed');
+                        break;
+                    }
+
+                    if (!wbeResult) break;
+
+                    const sessionId = field<string>(wbeResult, 'SessionID', 'sessionId', 'SessionId') ?? '';
+                    const isFinished = field<boolean>(wbeResult, 'Finished', 'finished') ?? true;
+                    let hotelEntries: any[] = field<any[]>(wbeResult, 'Data', 'data', 'Hotels', 'hotels') ?? [];
+
+                    if (!isFinished && sessionId) {
+                        const polled = await pollUntilFinished(sessionId);
+                        hotelEntries.push(...polled);
+                    }
+
+                    const wbeHotel = hotelEntries.find(
+                        (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
+                    );
+                    captureWbeHotelMeta(wbeHotel);
+
+                    if (!wbeHotel) {
+                        logger.info({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no hotel entry — stopping');
+                        break;
+                    }
+
+                    const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
+                    const batchOptions = parseProbeOptions(rawOptions, nights, PROBE_BATCH_SIZE);
+
+                    const mealFiltered = mealType
+                        ? batchOptions.filter((o) => o.mealType?.toUpperCase() === mealType.toUpperCase())
+                        : batchOptions;
+
+                    // matchesRoomType('double', ...) accepts double + twin — secondary "2 twins" fallback is subsumed here.
+                    const roomTypeFiltered = mealFiltered.filter((o) =>
+                        matchesRoomType(o.roomDescriptions, 'double'),
+                    );
+
+                    if (roomTypeFiltered.length === 0) {
+                        logger.info({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no double/twin matches — stopping');
+                        break;
+                    }
+
+                    // Tag as synthetic substitute type so EC3 allocation groups these separately
+                    for (const opt of roomTypeFiltered) {
+                        opt.requestedRoomType = 'quadruple';
+                        opt.roomType = 'quadruple__sub_double';
+                        opt.substituteFor = 'quadruple';
+                        opt.substituteRatio = 2;
+                        opt.actualRoomDescription = opt.roomDescriptions?.[0] ?? null;
+                        opt.sessionId = sessionId;
+                    }
+
+                    fallbackRoomsFound += PROBE_BATCH_SIZE;
+                    roomsFound += PROBE_BATCH_SIZE;
+                    allOptions.push(...roomTypeFiltered);
+
+                    const subProgress = typeProgressMap.get('quadruple__sub_double')!;
+                    subProgress.roomsFound = fallbackRoomsFound;
+
+                    const typeProgressArray = Array.from(typeProgressMap.values());
+                    const progressSummary = typeProgressArray
+                        .map((tp) => `${tp.roomsFound}/${tp.probeLimit} ${tp.roomType}s`)
+                        .join(', ');
+
+                    await hotelProbeJobRepository.updateProbing(jobId, {
+                        roomsFound,
+                        lastProbeRange,
+                        optionsSnapshot: allOptions,
+                    });
+
+                    const progressEvent: HotelProbeProgressEvent = {
+                        hotelCode,
+                        status: 'PROBING',
+                        roomsFound,
+                        lastProbeRange,
+                        percentComplete: Math.min(100, Math.round((roomsFound / probeLimit) * 100)),
+                        message: `Probing quadruple fallback (double) ${lastProbeRange}: ${progressSummary}`,
+                        roomTypeProgress: typeProgressArray,
+                    };
+                    broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
+
+                    if (fallbackRoomsFound >= fallbackRoomsNeeded) break;
+                }
+
+                substituteTargets.push(fallbackTarget);
+
+                logger.info(
+                    { jobId, hotelCode, fallbackRoomsFound, fallbackRoomsNeeded },
+                    'Quadruple fallback phase finished',
+                );
+            }
+        }
+
+        // Append substitute targets so the capacity check + EC3 allocation see them.
+        // Done after the main per-type loop so the for-of above doesn't re-iterate them.
+        if (substituteTargets.length > 0) {
+            roomTypeTargets.push(...substituteTargets);
         }
     } else {
         // ── LEGACY: Aggregate probing (backward compat for old jobs) ──────────
@@ -506,11 +660,31 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         const insufficientTypes: string[] = [];
 
         for (const target of roomTypeTargets) {
+            // Substitute targets (e.g. quadruple__sub_double) are credited against their parent
+            // type below — they don't stand on their own.
+            if (target.substituteFor) continue;
+
             const found = typeProgressMap.get(target.roomType)?.roomsFound ?? 0;
-            if (found < target.requested) {
+
+            // Sum credits from any substitute targets that back this room type.
+            // Each substitute room counts as 1/ratio of its parent type (2 doubles = 1 quad).
+            const substituteCredit = roomTypeTargets
+                .filter((t) => t.substituteFor === target.roomType)
+                .reduce((sum, sub) => {
+                    const subFound = typeProgressMap.get(sub.roomType)?.roomsFound ?? 0;
+                    const ratio = sub.substituteRatio ?? 1;
+                    return sum + Math.floor(subFound / ratio);
+                }, 0);
+
+            const effectiveFound = found + substituteCredit;
+
+            if (effectiveFound < target.requested) {
                 anyInsufficient = true;
-                insufficientTypes.push(`${target.roomType}: found ${found}, need ${target.requested}`);
-            } else if (found === target.requested) {
+                const detail = substituteCredit > 0
+                    ? `found ${found} + ${substituteCredit} substitute`
+                    : `found ${found}`;
+                insufficientTypes.push(`${target.roomType}: ${detail}, need ${target.requested}`);
+            } else if (effectiveFound === target.requested) {
                 allConfirmed = false;
             }
         }
@@ -1023,6 +1197,19 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             ? Math.max(...typeDetailPPRPNs)
             : data.highestMidRangePrice;
 
+        // Substitution metadata — carried from the synthetic target (e.g. quadruple__sub_double).
+        // The source is the first option in the group since all options in a synthetic type share
+        // the same substituteFor/substituteRatio tags.
+        const firstOption = (optionsByType.get(type) ?? [])[0];
+        const substituteFor = firstOption?.substituteFor as string | undefined;
+        const substituteRatio = firstOption?.substituteRatio as number | undefined;
+        const substituteUnitsCovered = substituteFor && substituteRatio
+            ? Math.floor(validatedTypeRooms / substituteRatio)
+            : undefined;
+        const substitutionNote = substituteFor && substituteUnitsCovered
+            ? `In place of ${substituteUnitsCovered} ${substituteFor} room${substituteUnitsCovered === 1 ? '' : 's'}`
+            : undefined;
+
         return {
             roomType: type,
             requested: data.requested,
@@ -1032,6 +1219,10 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             actualDescriptions,
             mealType,
             mealName,
+            substituteFor,
+            substituteRatio,
+            substituteUnitsCovered,
+            substitutionNote,
         };
     }).filter((t) => t.roomsAllocated > 0); // Only include types that have rooms
 
