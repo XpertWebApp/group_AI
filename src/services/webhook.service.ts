@@ -123,6 +123,11 @@ async function resolveDestinationId(cityName: string): Promise<{ id: number; nam
 
 export class WebhookService {
     async processWebhook(payload: any, ip: string) {
+        // Dry-run mode: run all validation + parsing but do NOT persist or trigger
+        // offer generation. Used by integration partners to verify field mapping
+        // without polluting the database.
+        const dryRun = payload?.dryRun === true || payload?.dry_run === true;
+
         // 1. Validate formId
         if (payload.formId && payload.formId !== EXPECTED_FORM_ID) {
             logger.warn({ formId: payload.formId }, 'Webhook received with unexpected formId');
@@ -170,8 +175,9 @@ export class WebhookService {
             throw { status: 400, message: 'email is not a valid email address', code: 'INVALID_EMAIL' };
         }
 
-        // 2c. Idempotency — reject duplicate submissionId (if provided)
-        if (submissionId) {
+        // 2c. Idempotency — reject duplicate submissionId (if provided).
+        // Skipped in dry-run so partners can safely replay the same test payload.
+        if (submissionId && !dryRun) {
             const existing = await prisma.bookingRequest.findFirst({
                 where: { externalRequestId: submissionId },
                 select: { id: true, referenceNumber: true, status: true },
@@ -268,6 +274,31 @@ export class WebhookService {
 
             status: BookingRequestStatus.pending,
         };
+
+        // Dry-run: return the simulated payload without persisting or triggering
+        // offer generation. All validation & parsing above has already run, so
+        // partners get full parity with real-mode errors.
+        if (dryRun) {
+            logger.info(
+                {
+                    destinationName: requestPayload.destinationName,
+                    destinationId: requestPayload.destinationId,
+                    email: requestPayload.contactEmail,
+                    rooms,
+                    breakfastPreference,
+                    hotelLocation,
+                    starRating,
+                },
+                'Webhook dry-run received',
+            );
+            const { rawPayload: _rawPayload, sourceIp: _sourceIp, assignedUserId: _assigned, status: _status, ...wouldCreate } = requestPayload;
+            return {
+                mode: 'dryRun',
+                valid: true,
+                wouldCreate,
+                message: 'Dry-run validation successful. No BookingRequest created.',
+            };
+        }
 
         const bookingRequest = await prisma.bookingRequest.create({
             data: requestPayload as any,
