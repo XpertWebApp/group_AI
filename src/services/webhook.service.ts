@@ -27,17 +27,29 @@ const EXPECTED_FORM_ID = 'cdd7652b-be36-4756-a985-9e390fa1477e';
 // ─── Field parsers ─────────────────────────────────────────────────────────────
 
 /**
- * Parse "Hotel 3* ⭐️⭐️⭐️" → 3
- * Accepts patterns like "3*", "Hotel 4*", "4 star", "4-star", "Hotel 4 Sterne" (DE)
+ * Parse star rating from strings like:
+ *   "3*", "Hotel 4*", "4 star", "4-star", "Hotel 4 Sterne" (DE),
+ *   "Hotel 3⭐⭐⭐", "⭐⭐⭐⭐⭐", "Hotel 3 ★★★"
  */
 function parseStarRating(raw: string | undefined | null): number | null {
     if (!raw) return null;
-    // Try: "4*" or "4 star" or "4 Sterne" or "4-star" or "4 stars"
-    const m =
-        raw.match(/(\d)\s*\*/) ??
+
+    // 1. Try: digit followed by a star symbol ( *, ⭐, ★, ☆ ) or "star"/"sterne"
+    const withDigit =
+        raw.match(/(\d)\s*[\*⭐★☆]/u) ??
         raw.match(/(\d)[-\s]*(?:star|sterne)/i) ??
         raw.match(/(?:star|sterne)[-\s]*(\d)/i);
-    return m ? parseInt(m[1]!, 10) : null;
+    if (withDigit) return parseInt(withDigit[1]!, 10);
+
+    // 2. Fallback: count star emojis/symbols when no digit is given
+    //    (e.g. "⭐⭐⭐⭐" from a form that used only emoji).
+    //    Limit to 1–7 to avoid matching random asterisk noise.
+    const starSymbols = raw.match(/[⭐★]/gu);
+    if (starSymbols && starSymbols.length >= 1 && starSymbols.length <= 7) {
+        return starSymbols.length;
+    }
+
+    return null;
 }
 
 /**
