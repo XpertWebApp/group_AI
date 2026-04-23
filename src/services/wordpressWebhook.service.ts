@@ -52,6 +52,9 @@ export class WordpressWebhookService {
                 source: 'wordpress',
                 submissionId: payload.submissionId ?? payload.submission_id ?? undefined,
                 rawWordpressPayload: payload,  // preserved in rawPayload for audit
+                // Forward the dryRun flag from the WordPress root payload so the
+                // core webhook service can skip DB write + offer trigger.
+                dryRun: payload?.dryRun === true || payload?.dry_run === true,
                 data: normalized,
             },
             ip,

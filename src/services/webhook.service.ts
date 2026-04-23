@@ -125,8 +125,13 @@ export class WebhookService {
     async processWebhook(payload: any, ip: string) {
         // Dry-run mode: run all validation + parsing but do NOT persist or trigger
         // offer generation. Used by integration partners to verify field mapping
-        // without polluting the database.
-        const dryRun = payload?.dryRun === true || payload?.dry_run === true;
+        // without polluting the database. Accept the flag from either the outer
+        // wrapper payload or from inside `data` (depends on how the caller wraps it).
+        const dryRun =
+            payload?.dryRun === true ||
+            payload?.dry_run === true ||
+            payload?.data?.dryRun === true ||
+            payload?.data?.dry_run === true;
 
         // 1. Validate formId
         if (payload.formId && payload.formId !== EXPECTED_FORM_ID) {
