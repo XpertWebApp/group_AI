@@ -105,6 +105,8 @@ class GiataRepository {
                     urlSmall: img.urlSmall ?? null,
                     urlMedium: img.urlMedium ?? null,
                     urlLarge: img.urlLarge ?? null,
+                    urlFullHd: img.urlFullHd ?? null,
+                    urlOriginal: img.urlOriginal ?? null,
                     lastUpdate: img.lastUpdate ? new Date(img.lastUpdate) : null,
                 })),
             });

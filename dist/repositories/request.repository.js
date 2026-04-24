@@ -63,6 +63,9 @@ const LIST_SELECT = {
     rooms: true,
     status: true,
     createdAt: true,
+    assignedUser: {
+        select: { id: true, firstName: true, lastName: true, email: true },
+    },
     proposals: {
         select: {
             id: true,
@@ -179,6 +182,35 @@ class RequestRepository {
             data: { status },
             select: { id: true, referenceNumber: true, status: true },
         });
+    }
+    /**
+     * Atomically claim ownership if the request is currently unassigned.
+     * Uses a conditional UPDATE so concurrent callers race at the DB level —
+     * exactly one winner, losers see `claimed: false` with the current ownerId.
+     */
+    async claimOwnershipIfUnassigned(requestId, userId) {
+        const result = await prisma.bookingRequest.updateMany({
+            where: { id: requestId, assignedUserId: null },
+            data: { assignedUserId: userId },
+        });
+        if (result.count === 1)
+            return { claimed: true, ownerId: userId };
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id: requestId },
+            select: { assignedUserId: true },
+        });
+        return { claimed: false, ownerId: row?.assignedUserId ?? null };
+    }
+    async findOwner(requestId) {
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id: requestId },
+            select: {
+                assignedUser: {
+                    select: { id: true, firstName: true, lastName: true, email: true },
+                },
+            },
+        });
+        return row?.assignedUser ?? null;
     }
     // ── Dashboard aggregates ─────────────────────────────────────────────────
     async countAll() {

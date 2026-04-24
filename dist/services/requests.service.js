@@ -87,8 +87,10 @@ class RequestService {
             // Step 4 – Policies
             termsAndConditions: data.termsAndConditions ?? null,
             cancellationConditions: data.cancellationConditions ?? null,
-            // Assign to the logged-in user (for Gmail sending)
-            assignedUserId: userId ?? null,
+            // Ownership starts unassigned — creating a request is not an owning action.
+            // Ownership is claimed on the first add/remove hotel, add/remove service,
+            // send, or decline (see proposals.service.ts::claimForRequest).
+            assignedUserId: null,
             status: data.status ?? client_1.BookingRequestStatus.pending,
         };
         const request = await request_repository_1.default.create(payload);
@@ -181,6 +183,34 @@ class RequestService {
     }
     async updateRequestStatus(id, status) {
         return request_repository_1.default.updateStatus(id, status);
+    }
+    /**
+     * Claim ownership of a booking request if currently unassigned.
+     * Idempotent: no-op if already claimed. Audit-logs only on the winning claim.
+     * Never throws — callers can fire-and-forget (e.g. from middleware).
+     *
+     * @param trigger 'auto' for first-action middleware, 'explicit' for /claim endpoint
+     */
+    async claimOwnershipIfUnassigned(requestId, userId, ip, trigger = 'auto') {
+        if (!requestId || !userId)
+            return { claimed: false, ownerId: null };
+        try {
+            const result = await request_repository_1.default.claimOwnershipIfUnassigned(requestId, userId);
+            if (result.claimed) {
+                await (0, audit_1.logAuditEvent)({
+                    userId,
+                    action: 'claim_ownership',
+                    entity: 'booking_request',
+                    entityId: requestId,
+                    details: { trigger },
+                    ipAddress: ip,
+                });
+            }
+            return result;
+        }
+        catch {
+            return { claimed: false, ownerId: null };
+        }
     }
 }
 exports.RequestService = RequestService;

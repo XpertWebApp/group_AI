@@ -1243,6 +1243,10 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
         starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
         imageUrl,
+        // Public SETTHub detail page URL — frontend wraps the hotel name in a
+        // link to open it (Oliver's "no duplicate detail page, just link out" ask).
+        // Null when masterHotelId isn't synced yet — frontend renders plain text.
+        sethubDetailsUrl: dbHotel?.sethubDetailsUrl ?? null,
         description: dbHotel?.description ?? null,
         address: (dbHotel as any)?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,

@@ -299,5 +299,49 @@ class GiataClientService {
             return null;
         }
     }
+    /**
+     * Fetch a GIATA image binary using Basic Auth credentials.
+     * Used by the backend proxy endpoint `GET /api/v1/hotels/giata-image`.
+     *
+     * Only accepts URLs on GIATA's official image hosts to prevent SSRF:
+     *   - ghgml.giatamedia.com (sizes 74 / 320 / 800)
+     *   - i.giatamedia.com     (sizes 1920 / 3840 — Full HD + 4K)
+     * Returns null on auth / network / not-found failures.
+     */
+    async fetchImage(imageUrl) {
+        if (!this.isConfigured())
+            return null;
+        // SSRF guard — allow only GIATA's official image hosts.
+        const ALLOWED_HOSTS = new Set(['ghgml.giatamedia.com', 'i.giatamedia.com']);
+        let host;
+        try {
+            host = new URL(imageUrl).hostname;
+        }
+        catch {
+            return null;
+        }
+        if (!ALLOWED_HOSTS.has(host))
+            return null;
+        try {
+            const response = await axios_1.default.get(imageUrl, {
+                auth: {
+                    username: config_1.default.giata.username,
+                    password: config_1.default.giata.password,
+                },
+                responseType: 'arraybuffer',
+                timeout: 15000,
+            });
+            return {
+                data: Buffer.from(response.data),
+                contentType: response.headers['content-type'] ?? 'image/jpeg',
+            };
+        }
+        catch (err) {
+            if (err?.response?.status === 404)
+                return null;
+            logger_1.default.warn({ err: err.message, imageUrl }, 'GIATA: fetchImage failed');
+            return null;
+        }
+    }
 }
 exports.default = new GiataClientService();

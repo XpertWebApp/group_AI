@@ -10,6 +10,7 @@ const validate_middleware_1 = require("../middlewares/validate.middleware");
 const requestSchemas_1 = require("../validation/requestSchemas");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const wbe_client_service_1 = __importDefault(require("../services/wbe.client.service"));
+const giata_client_service_1 = __importDefault(require("../services/giata.client.service"));
 const hotelSearch_repository_1 = __importDefault(require("../repositories/hotelSearch.repository"));
 const response_1 = require("../utils/response");
 const router = (0, express_1.Router)();
@@ -81,6 +82,35 @@ router.get('/image', imageLimiter, async (req, res, next) => {
         }
         res.set('Content-Type', result.contentType);
         res.set('Cache-Control', 'public, max-age=86400'); // cache 24h
+        res.send(result.data);
+    }
+    catch (err) {
+        next(err);
+    }
+});
+/**
+ * Server-side proxy for GIATA hotel images.
+ * GIATA's image URLs (ghgml.giatamedia.com) require HTTP Basic Auth, so the
+ * browser can't fetch them directly. This endpoint authenticates via the
+ * backend and streams the bytes back.
+ *
+ * Only the GIATA media host is allowed (SSRF guard in giataClientService.fetchImage).
+ * No auth required on our side — these are already-public hotel photos.
+ */
+router.get('/giata-image', imageLimiter, async (req, res, next) => {
+    try {
+        const url = String(req.query.url ?? '').trim();
+        if (!url) {
+            res.status(400).json({ error: { code: 'bad_request', message: 'url parameter is required' } });
+            return;
+        }
+        const result = await giata_client_service_1.default.fetchImage(url);
+        if (!result) {
+            res.status(404).json({ error: { code: 'not_found', message: 'GIATA image not available' } });
+            return;
+        }
+        res.set('Content-Type', result.contentType);
+        res.set('Cache-Control', 'public, max-age=604800'); // cache 7d (GIATA images are stable)
         res.send(result.data);
     }
     catch (err) {

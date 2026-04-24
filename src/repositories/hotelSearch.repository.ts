@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { pickBestGiataImage } from '../config/imagePriority';
+import { buildSethubDetailsUrl } from '../config/sethubUrl';
 
 const prisma = new PrismaClient();
 
@@ -23,6 +24,14 @@ export interface HotelCodeRow {
      * Null when the hotel has no GIATA images synced yet.
      */
     giataImageUrl?: string | null;
+    /** SETTHub numeric hotel ID used to build the public detail page URL. */
+    masterHotelId?: number | null;
+    /**
+     * Full SETTHub hotel-detail URL (e.g. https://booking.s-e-t-t.com/Availability/Hotel/Details/<b64>).
+     * Null when masterHotelId is missing — frontend should render the hotel
+     * name as plain text in that case.
+     */
+    sethubDetailsUrl?: string | null;
     /** Short description extracted from metadata.Location (or metadata.Description fallback). */
     description?: string | null;
 }
@@ -85,6 +94,7 @@ export class HotelSearchRepository {
                     latitude: true,
                     longitude: true,
                     totalRooms: true,
+                    masterHotelId: true,
                     metadata: true,
                 },
             }),
@@ -96,6 +106,7 @@ export class HotelSearchRepository {
                 select: { hotelCode: true, imageKey: true },
             }),
             // GIATA categorised images — preferred over WBE's first image.
+            // Pick widest size available per image; picker below prefers 4K > FullHD > large > medium > small.
             prisma.hotelGiataImage.findMany({
                 where: { hotelCode: { in: hotelCodes } },
                 select: {
@@ -105,6 +116,8 @@ export class HotelSearchRepository {
                     urlSmall: true,
                     urlMedium: true,
                     urlLarge: true,
+                    urlFullHd: true,
+                    urlOriginal: true,
                 },
             }),
         ]);
@@ -130,8 +143,10 @@ export class HotelSearchRepository {
             // GIATA URLs need HTTP Basic Auth, so we wrap them in our proxy endpoint
             // (GET /api/v1/hotels/giata-image?url=<encoded>) which authenticates and streams.
             const bestGiata = pickBestGiataImage(giataByHotel.get(h.hotelCode) ?? []);
+            // Prefer the largest available size: 4K (urlOriginal) → Full HD → large → medium → small.
+            // Older rows not yet re-synced will fall back to urlLarge (800px) seamlessly.
             const rawGiataUrl = bestGiata
-                ? (bestGiata.urlLarge ?? bestGiata.urlMedium ?? bestGiata.urlSmall ?? null)
+                ? (bestGiata.urlOriginal ?? bestGiata.urlFullHd ?? bestGiata.urlLarge ?? bestGiata.urlMedium ?? bestGiata.urlSmall ?? null)
                 : null;
             const giataImageUrl = rawGiataUrl
                 ? `/api/v1/hotels/giata-image?url=${encodeURIComponent(rawGiataUrl)}`
@@ -142,6 +157,7 @@ export class HotelSearchRepository {
                 ...hotelFields,
                 primaryImageKey: imageMap.get(h.hotelCode) ?? null,
                 giataImageUrl,
+                sethubDetailsUrl: buildSethubDetailsUrl(h.masterHotelId),
                 description,
             });
         }

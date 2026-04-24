@@ -20,7 +20,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WebhookService = void 0;
 const client_1 = require("@prisma/client");
 const offerGeneration_service_1 = __importDefault(require("./offerGeneration.service"));
-const user_repository_1 = __importDefault(require("../repositories/user.repository"));
 const audit_1 = require("../utils/audit");
 const logger_1 = __importDefault(require("../utils/logger"));
 const phoneParser_1 = require("../utils/phoneParser");
@@ -29,51 +28,96 @@ const prisma = new client_1.PrismaClient();
 const EXPECTED_FORM_ID = 'cdd7652b-be36-4756-a985-9e390fa1477e';
 // ─── Field parsers ─────────────────────────────────────────────────────────────
 /**
- * Parse "Hotel 3* ⭐️⭐️⭐️" → 3
- * Accepts patterns like "3*", "Hotel 4*", "4 star", "4-star"
+ * Parse star rating from strings like:
+ *   "3*", "Hotel 4*", "4 star", "4-star", "Hotel 4 Sterne" (DE),
+ *   "Hotel 3⭐⭐⭐", "⭐⭐⭐⭐⭐", "Hotel 3 ★★★"
  */
 function parseStarRating(raw) {
     if (!raw)
         return null;
-    const m = raw.match(/(\d)[\s*]?[\s*star]/i) ?? raw.match(/(\d)\*/);
-    return m ? parseInt(m[1], 10) : null;
+    // 1. Try: digit followed by a star symbol ( *, ⭐, ★, ☆ ) or "star"/"sterne"
+    const withDigit = raw.match(/(\d)\s*[\*⭐★☆]/u) ??
+        raw.match(/(\d)[-\s]*(?:star|sterne)/i) ??
+        raw.match(/(?:star|sterne)[-\s]*(\d)/i);
+    if (withDigit)
+        return parseInt(withDigit[1], 10);
+    // 2. Fallback: count star emojis/symbols when no digit is given
+    //    (e.g. "⭐⭐⭐⭐" from a form that used only emoji).
+    //    Limit to 1–7 to avoid matching random asterisk noise.
+    const starSymbols = raw.match(/[⭐★]/gu);
+    if (starSymbols && starSymbols.length >= 1 && starSymbols.length <= 7) {
+        return starSymbols.length;
+    }
+    return null;
 }
 /**
  * Parse breakfast field → 'BB' | 'RO'
- * "Yes, with breakfast" → "BB"
- * "No, without breakfast" → "RO"
+ * EN: "Yes, with breakfast" → BB, "No" → RO
+ * DE: "Ja, mit Frühstück" → BB, "Nein, ohne Frühstück" → RO
  */
 function parseBreakfast(raw) {
     if (!raw)
         return 'RO';
-    return /yes|with breakfast|breakfast/i.test(raw) ? 'BB' : 'RO';
+    const s = raw.toLowerCase();
+    // Explicit "no/nein/ohne" overrides any accidental match on "breakfast/frühstück"
+    if (/\b(no|nein|ohne|without)\b/i.test(raw))
+        return 'RO';
+    // Positive matches for English + German
+    return /yes|ja|with breakfast|mit frühstück|breakfast|frühstück|fruhstuck/i.test(s)
+        ? 'BB'
+        : 'RO';
 }
 /**
  * Parse hotel_location → 'central' | 'outside_city_center'
- * "Save money – stay outside the city center" → "outside_city_center"
+ * EN: "City center" → central, "Outside the city" → outside_city_center
+ * DE: "Stadtzentrum"/"Innenstadt" → central, "Außerhalb der Stadt" → outside_city_center
  */
 function parseHotelLocation(raw) {
     if (!raw)
         return 'central';
-    return /outside|outside the city|save money/i.test(raw) ? 'outside_city_center' : 'central';
+    return /outside|save money|außerhalb|ausserhalb|außerstadt/i.test(raw)
+        ? 'outside_city_center'
+        : 'central';
 }
 /**
- * Try to resolve destination ID from city name (case-insensitive, partial match).
+ * Try to resolve destination ID from city name.
+ * Strategy (in order of preference):
+ *   1. EXACT case-insensitive match ("Dubai" → "Dubai", not "Dubai Airports")
+ *   2. "Starts with" match ("Dubai" → "Dubai Marina")
+ *   3. "Contains" match as last resort
  * Returns 0 if not found (stored as unresolved — staff can correct manually).
  */
 async function resolveDestinationId(cityName) {
-    if (!cityName?.trim())
+    const name = cityName?.trim();
+    if (!name)
         return { id: 0, name: cityName };
-    const dest = await prisma.destination.findFirst({
-        where: { name: { contains: cityName.trim(), mode: 'insensitive' } },
+    // 1. Exact (case-insensitive) match — prefer this
+    const exact = await prisma.destination.findFirst({
+        where: { name: { equals: name, mode: 'insensitive' } },
         select: { id: true, name: true },
         orderBy: { id: 'asc' },
     });
-    if (dest)
-        return { id: dest.id, name: dest.name };
-    // Fallback: try a word-boundary search on the first word of the city name
-    const firstWord = cityName.trim().split(/\s+/)[0];
-    if (firstWord && firstWord !== cityName.trim()) {
+    if (exact)
+        return { id: exact.id, name: exact.name };
+    // 2. Starts-with match — e.g. "Dubai" → "Dubai Marina"
+    const startsWith = await prisma.destination.findFirst({
+        where: { name: { startsWith: name, mode: 'insensitive' } },
+        select: { id: true, name: true },
+        orderBy: { id: 'asc' },
+    });
+    if (startsWith)
+        return { id: startsWith.id, name: startsWith.name };
+    // 3. Contains match — last resort
+    const contains = await prisma.destination.findFirst({
+        where: { name: { contains: name, mode: 'insensitive' } },
+        select: { id: true, name: true },
+        orderBy: { id: 'asc' },
+    });
+    if (contains)
+        return { id: contains.id, name: contains.name };
+    // 4. Fallback: try first-word search
+    const firstWord = name.split(/\s+/)[0];
+    if (firstWord && firstWord !== name) {
         const partial = await prisma.destination.findFirst({
             where: { name: { contains: firstWord, mode: 'insensitive' } },
             select: { id: true, name: true },
@@ -83,11 +127,19 @@ async function resolveDestinationId(cityName) {
             return { id: partial.id, name: partial.name };
     }
     logger_1.default.warn({ cityName }, 'Webhook: destination not found in DB — stored with id=0');
-    return { id: 0, name: cityName.trim() };
+    return { id: 0, name };
 }
 // ─── Service ──────────────────────────────────────────────────────────────────
 class WebhookService {
     async processWebhook(payload, ip) {
+        // Dry-run mode: run all validation + parsing but do NOT persist or trigger
+        // offer generation. Used by integration partners to verify field mapping
+        // without polluting the database. Accept the flag from either the outer
+        // wrapper payload or from inside `data` (depends on how the caller wraps it).
+        const dryRun = payload?.dryRun === true ||
+            payload?.dry_run === true ||
+            payload?.data?.dryRun === true ||
+            payload?.data?.dry_run === true;
         // 1. Validate formId
         if (payload.formId && payload.formId !== EXPECTED_FORM_ID) {
             logger_1.default.warn({ formId: payload.formId }, 'Webhook received with unexpected formId');
@@ -102,10 +154,52 @@ class WebhookService {
             throw { status: 400, message: 'arrival_date is required', code: 'MISSING_FIELD' };
         }
         const checkin = new Date(checkinDate);
+        if (isNaN(checkin.getTime())) {
+            throw { status: 400, message: 'arrival_date is not a valid date', code: 'INVALID_DATE' };
+        }
         const checkout = checkoutDate ? new Date(checkoutDate) : null;
+        if (checkout && isNaN(checkout.getTime())) {
+            throw { status: 400, message: 'departure_date is not a valid date', code: 'INVALID_DATE' };
+        }
+        if (checkout && checkout.getTime() <= checkin.getTime()) {
+            throw {
+                status: 400,
+                message: 'departure_date must be after arrival_date',
+                code: 'INVALID_DATE_RANGE',
+            };
+        }
         const nights = checkout
             ? Math.max(1, Math.round((checkout.getTime() - checkin.getTime()) / 86400000))
             : 1;
+        // 2b. Validate email — required and must be a plausible email format
+        const rawEmail = data.email ?? data.contactEmail;
+        if (!rawEmail || typeof rawEmail !== 'string' || rawEmail.trim() === '') {
+            throw { status: 400, message: 'email is required', code: 'MISSING_FIELD' };
+        }
+        const emailNormalized = rawEmail.trim().toLowerCase();
+        // Simple RFC-5322-ish check: local@domain.tld
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalized)) {
+            throw { status: 400, message: 'email is not a valid email address', code: 'INVALID_EMAIL' };
+        }
+        // 2c. Idempotency — reject duplicate submissionId (if provided).
+        // Skipped in dry-run so partners can safely replay the same test payload.
+        if (submissionId && !dryRun) {
+            const existing = await prisma.bookingRequest.findFirst({
+                where: { externalRequestId: submissionId },
+                select: { id: true, referenceNumber: true, status: true },
+            });
+            if (existing) {
+                logger_1.default.info({ submissionId, existingId: existing.id }, 'Webhook: duplicate submissionId — returning existing request');
+                return {
+                    id: existing.id,
+                    referenceNumber: existing.referenceNumber,
+                    status: existing.status,
+                    destinationName: null,
+                    message: 'Request already received — returning existing record (idempotent).',
+                    duplicate: true,
+                };
+            }
+        }
         // 3. Resolve destination
         const rawCity = data.destination_by_city ?? data.destination ?? data.DestinationName ?? '';
         const destination = await resolveDestinationId(rawCity);
@@ -130,26 +224,14 @@ class WebhookService {
         const firstName = data.first_name ?? data.firstName ?? '';
         const lastName = data.last_name ?? data.lastName ?? '';
         const contactName = [firstName, lastName].filter(Boolean).join(' ') || null;
-        // 6. Match webhook email to a SETT staff user (for Gmail sending)
-        let assignedUserId = null;
-        const webhookEmail = data.email ?? data.contactEmail;
-        if (webhookEmail) {
-            const matchedUser = await user_repository_1.default.findByEmail(webhookEmail);
-            if (matchedUser) {
-                assignedUserId = matchedUser.id;
-                logger_1.default.info({ email: webhookEmail, userId: matchedUser.id }, 'Webhook: matched email to staff user');
-            }
-            else {
-                logger_1.default.info({ email: webhookEmail }, 'Webhook: email does not match any staff user — SMTP fallback');
-            }
-        }
-        // 7. Create the booking request
+        // 6. Create the booking request — ownership stays unassigned; first staff
+        // action (or explicit /claim) will set assignedUserId.
         const requestPayload = {
             rawPayload: payload,
             externalRequestId: submissionId ?? null,
             source: 'webhook',
             sourceIp: ip,
-            assignedUserId,
+            assignedUserId: null,
             // Trip details
             destinationId: destination.id,
             destinationName: destination.name || rawCity,
@@ -172,7 +254,7 @@ class WebhookService {
             firstName: firstName || null,
             lastName: lastName || null,
             contactName,
-            contactEmail: data.email ?? data.contactEmail ?? null,
+            contactEmail: emailNormalized,
             ...(() => {
                 const parsed = (0, phoneParser_1.parsePhoneWithCountryCode)(data.phone ?? data.contactPhone);
                 return {
@@ -183,6 +265,27 @@ class WebhookService {
             guestListFileKey: data.name_list && typeof data.name_list === 'string' ? data.name_list : null,
             status: client_1.BookingRequestStatus.pending,
         };
+        // Dry-run: return the simulated payload without persisting or triggering
+        // offer generation. All validation & parsing above has already run, so
+        // partners get full parity with real-mode errors.
+        if (dryRun) {
+            logger_1.default.info({
+                destinationName: requestPayload.destinationName,
+                destinationId: requestPayload.destinationId,
+                email: requestPayload.contactEmail,
+                rooms,
+                breakfastPreference,
+                hotelLocation,
+                starRating,
+            }, 'Webhook dry-run received');
+            const { rawPayload: _rawPayload, sourceIp: _sourceIp, assignedUserId: _assigned, status: _status, ...wouldCreate } = requestPayload;
+            return {
+                mode: 'dryRun',
+                valid: true,
+                wouldCreate,
+                message: 'Dry-run validation successful. No BookingRequest created.',
+            };
+        }
         const bookingRequest = await prisma.bookingRequest.create({
             data: requestPayload,
         });

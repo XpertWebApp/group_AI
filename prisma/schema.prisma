@@ -254,6 +254,10 @@ model HotelGiataImage {
   urlSmall     String?   @map("url_small")
   urlMedium    String?   @map("url_medium")
   urlLarge     String?   @map("url_large")
+  /// Full HD variant (maxwidth=1920, typically 1624×1080). Populated on re-sync.
+  urlFullHd    String?   @map("url_full_hd")
+  /// Original / 4K variant (maxwidth=3840, typically 3248×2160). Populated on re-sync.
+  urlOriginal  String?   @map("url_original")
   lastUpdate   DateTime? @map("last_update")
   syncedAt     DateTime  @default(now()) @map("synced_at")
 

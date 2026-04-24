@@ -62,6 +62,9 @@ router.get('/', auth_middleware_1.authMiddleware, (0, validate_middleware_1.vali
 router.get('/:id', auth_middleware_1.authMiddleware, requests_controller_1.default.get);
 router.get('/:id/summary', auth_middleware_1.authMiddleware, requests_controller_1.default.getSummary);
 router.patch('/:id', auth_middleware_1.authMiddleware, (0, validate_middleware_1.validate)(requestSchemas_1.UpdateBookingRequestSchema, 'body'), requests_controller_1.default.update);
+// Explicit self-claim from the dashboard. No auto-claim middleware — the
+// controller handles the claim + conflict response itself.
+router.post('/:id/actions/claim', auth_middleware_1.authMiddleware, requests_controller_1.default.claim);
 // ── Hotel Search Flow (Create Request → Search → Option Details) ───────────
 /**
  * POST /requests/:id/hotel-search

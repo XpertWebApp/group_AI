@@ -420,20 +420,23 @@ class GiataClientService {
      * Fetch a GIATA image binary using Basic Auth credentials.
      * Used by the backend proxy endpoint `GET /api/v1/hotels/giata-image`.
      *
-     * Only accepts URLs on the ghgml.giatamedia.com host to prevent SSRF.
+     * Only accepts URLs on GIATA's official image hosts to prevent SSRF:
+     *   - ghgml.giatamedia.com (sizes 74 / 320 / 800)
+     *   - i.giatamedia.com     (sizes 1920 / 3840 — Full HD + 4K)
      * Returns null on auth / network / not-found failures.
      */
     async fetchImage(imageUrl: string): Promise<{ data: Buffer; contentType: string } | null> {
         if (!this.isConfigured()) return null;
 
-        // SSRF guard — allow only GIATA's image host.
+        // SSRF guard — allow only GIATA's official image hosts.
+        const ALLOWED_HOSTS = new Set(['ghgml.giatamedia.com', 'i.giatamedia.com']);
         let host: string;
         try {
             host = new URL(imageUrl).hostname;
         } catch {
             return null;
         }
-        if (host !== 'ghgml.giatamedia.com') return null;
+        if (!ALLOWED_HOSTS.has(host)) return null;
 
         try {
             const response = await axios.get(imageUrl, {

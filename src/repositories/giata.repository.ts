@@ -121,6 +121,8 @@ export class GiataRepository {
         urlSmall?: string;
         urlMedium?: string;
         urlLarge?: string;
+        urlFullHd?: string;
+        urlOriginal?: string;
         lastUpdate?: string | null;
     }>): Promise<void> {
         // Delete existing images for this hotel and re-insert (simpler than complex upsert logic)
@@ -136,6 +138,8 @@ export class GiataRepository {
                     urlSmall: img.urlSmall ?? null,
                     urlMedium: img.urlMedium ?? null,
                     urlLarge: img.urlLarge ?? null,
+                    urlFullHd: img.urlFullHd ?? null,
+                    urlOriginal: img.urlOriginal ?? null,
                     lastUpdate: img.lastUpdate ? new Date(img.lastUpdate) : null,
                 })),
             });

@@ -8,6 +8,7 @@ const proposal_repository_1 = __importDefault(require("../repositories/proposal.
 const notification_service_1 = __importDefault(require("./notification.service"));
 const pdfGeneration_service_1 = require("./pdfGeneration.service");
 const request_repository_1 = __importDefault(require("../repositories/request.repository"));
+const requests_service_1 = __importDefault(require("./requests.service"));
 const settings_service_1 = __importDefault(require("./settings.service"));
 const audit_1 = require("../utils/audit");
 const client_1 = require("@prisma/client");
@@ -77,6 +78,17 @@ function assertNotLocked(proposal, requestingUserId) {
     }
 }
 class ProposalService {
+    /**
+     * Fire-and-forget owner-claim on the underlying BookingRequest — called at
+     * the start of every mutating proposal action so the first staff member to
+     * touch the request becomes its owner. No-ops if requestId/userId missing
+     * or the request is already owned.
+     */
+    claimForRequest(requestId, userId, ip) {
+        if (userId && requestId) {
+            void requests_service_1.default.claimOwnershipIfUnassigned(requestId, userId, ip, 'auto');
+        }
+    }
     async getAllProposals() {
         return proposal_repository_1.default.findAll();
     }
@@ -124,6 +136,7 @@ class ProposalService {
             throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
         assertModifiable(existing);
         assertNotLocked(existing, userId);
+        this.claimForRequest(existing.requestId, userId, ip);
         const result = await proposal_repository_1.default.addHotelTx(id, hotelData, existing.markupSettings ?? undefined);
         await (0, audit_1.logAuditEvent)({
             userId,
@@ -152,6 +165,7 @@ class ProposalService {
             };
         }
         assertNotLocked(existing, userId);
+        this.claimForRequest(existing.requestId, userId);
         const hotel = existing.hotels.find((h) => h.id === hotelId);
         if (!hotel)
             throw { status: 404, message: 'Hotel not found on this proposal', code: 'NOT_FOUND' };
@@ -217,6 +231,7 @@ class ProposalService {
             throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
         assertModifiable(existing);
         assertNotLocked(existing, userId);
+        this.claimForRequest(existing.requestId, userId, ip);
         const result = await proposal_repository_1.default.addServiceTx(id, serviceData, existing.markupSettings ?? undefined);
         await (0, audit_1.logAuditEvent)({
             userId,
@@ -263,6 +278,7 @@ class ProposalService {
             throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
         assertModifiable(existing);
         assertNotLocked(existing, userId);
+        this.claimForRequest(existing.requestId, userId, ip);
         const service = existing.services.find((s) => s.id === serviceId);
         if (!service)
             throw { status: 404, message: 'Service not found on this proposal', code: 'NOT_FOUND' };
@@ -316,6 +332,7 @@ class ProposalService {
         const existing = await proposal_repository_1.default.findById(id);
         if (!existing)
             throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        this.claimForRequest(existing.requestId, userId, ip);
         // Re-sending a `sent` proposal is now allowed — the second send becomes
         // the final offer (after the client picks a hotel). The backend auto-detects
         // type via offerNumber count.
@@ -678,6 +695,7 @@ class ProposalService {
         const existing = await proposal_repository_1.default.findById(id);
         if (!existing)
             throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        this.claimForRequest(existing.requestId, userId, ip);
         if (!DECLINABLE_STATUSES.includes(existing.status)) {
             throw {
                 status: 409,

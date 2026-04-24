@@ -137,7 +137,6 @@ class OfferGenerationService {
         const destinationName = request.destinationName ?? 'Unknown destination';
         const roomsNeeded = (0, roomUtils_1.countTotalRooms)(request.rooms);
         const requestedStarRating = request.starRating ? Number(request.starRating) : null;
-        const assignedUserId = request.assignedUserId ?? undefined;
         await request_repository_1.default.updateStatus(requestId, client_1.BookingRequestStatus.processing);
         try {
             // Step 1: Queue probe jobs
@@ -241,49 +240,57 @@ class OfferGenerationService {
                     continue;
                 const perTypeAllocs = result.perTypeAllocations ?? [];
                 if (perTypeAllocs.length > 0) {
-                    // ── EC3: Per-room-type entries ──────────────────────────────
+                    // ── Consolidated: one ProposalHotel per hotel with ALL room types bundled ──
+                    // This matches the frontend's "Add Hotel" flow and avoids showing the
+                    // same hotel as multiple cards in the proposal.
+                    const rooms = {};
+                    let hotelTotal = 0;
+                    let totalAllocated = 0;
+                    let cheapestAcrossTypes = null;
                     for (const typeAlloc of perTypeAllocs) {
                         if (typeAlloc.roomsAllocated <= 0)
                             continue;
-                        // Find the cheapest supplier for THIS room type
                         const typeSplitEntries = (result.supplierSplit ?? [])
                             .filter((e) => e.roomType === typeAlloc.roomType);
                         const cheapest = [...typeSplitEntries].sort((a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight)[0];
                         if (!cheapest)
                             continue;
                         const typeTotal = unifiedSellingPrice * typeAlloc.roomsAllocated * nights;
-                        console.log(`[Step 4.2] Adding ${result.hotelName} — ${typeAlloc.roomType}: ${typeAlloc.roomsAllocated} rooms × ${unifiedSellingPrice}/night × ${nights} nights = ${typeTotal} ${unifiedCurrency}`);
-                        // Include bonus alternative flag if detected
-                        const hotelNameWithBonus = result.bonusAlternative
-                            ? `${result.hotelName ?? result.hotelCode} ★ BONUS`
-                            : (result.hotelName ?? undefined);
-                        await proposal_repository_1.default.addHotelTx(proposal.id, {
-                            hotelCode: result.hotelCode,
-                            hotelName: hotelNameWithBonus,
-                            tid: cheapest.tid,
-                            currency: unifiedCurrency,
-                            totalPrice: typeTotal,
-                            freeCancellation: true,
-                            cancelDeadline: result.cxlDeadline ?? null,
-                            supplierCode: cheapest.supplierCode,
-                            latitude: result.latitude ?? null,
-                            longitude: result.longitude ?? null,
-                            rooms: {
-                                [typeAlloc.roomType]: {
-                                    net: cheapest.pricePerRoomPerNight,
-                                    sell: unifiedSellingPrice,
-                                    qty: typeAlloc.roomsAllocated,
-                                    nights,
-                                    // M5 — Store the actual WBE room names so the UI
-                                    // shows what the supplier actually returned (e.g.
-                                    // "Double Room, Terrace") instead of just the
-                                    // requested type label (e.g. "Single").
-                                    actualDescriptions: typeAlloc.actualDescriptions ?? [],
-                                    ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
-                                },
-                            },
-                        });
+                        hotelTotal += typeTotal;
+                        totalAllocated += typeAlloc.roomsAllocated;
+                        // Track the cheapest entry across all room types for the hotel-level
+                        // TID/supplierCode fields.
+                        if (!cheapestAcrossTypes || cheapest.pricePerRoomPerNight < cheapestAcrossTypes.pricePerRoomPerNight) {
+                            cheapestAcrossTypes = cheapest;
+                        }
+                        rooms[typeAlloc.roomType] = {
+                            net: cheapest.pricePerRoomPerNight,
+                            sell: unifiedSellingPrice,
+                            qty: typeAlloc.roomsAllocated,
+                            nights,
+                            actualDescriptions: typeAlloc.actualDescriptions ?? [],
+                            ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
+                        };
                     }
+                    if (!cheapestAcrossTypes || totalAllocated === 0)
+                        continue;
+                    console.log(`[Step 4.2] Adding ${result.hotelName}: ${totalAllocated} rooms across ${Object.keys(rooms).length} room type(s) × ${unifiedSellingPrice}/night × ${nights} nights = ${hotelTotal} ${unifiedCurrency}`);
+                    const hotelNameWithBonus = result.bonusAlternative
+                        ? `${result.hotelName ?? result.hotelCode} ★ BONUS`
+                        : (result.hotelName ?? undefined);
+                    await proposal_repository_1.default.addHotelTx(proposal.id, {
+                        hotelCode: result.hotelCode,
+                        hotelName: hotelNameWithBonus,
+                        tid: cheapestAcrossTypes.tid,
+                        currency: unifiedCurrency,
+                        totalPrice: hotelTotal,
+                        freeCancellation: true,
+                        cancelDeadline: result.cxlDeadline ?? null,
+                        supplierCode: cheapestAcrossTypes.supplierCode,
+                        latitude: result.latitude ?? null,
+                        longitude: result.longitude ?? null,
+                        rooms,
+                    });
                 }
                 else {
                     // ── Fallback: old-style single aggregate entry ─────────────

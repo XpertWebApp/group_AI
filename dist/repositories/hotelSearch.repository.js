@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HotelSearchRepository = void 0;
 const client_1 = require("@prisma/client");
 const decimal_js_1 = __importDefault(require("decimal.js"));
+const imagePriority_1 = require("../config/imagePriority");
+const sethubUrl_1 = require("../config/sethubUrl");
 const prisma = new client_1.PrismaClient();
 class HotelSearchRepository {
     /**
@@ -45,7 +47,7 @@ class HotelSearchRepository {
     async getHotelsByCode(hotelCodes) {
         if (hotelCodes.length === 0)
             return new Map();
-        const [hotels, images] = await Promise.all([
+        const [hotels, images, giataImages] = await Promise.all([
             prisma.hotel.findMany({
                 where: { hotelCode: { in: hotelCodes } },
                 select: {
@@ -58,6 +60,7 @@ class HotelSearchRepository {
                     latitude: true,
                     longitude: true,
                     totalRooms: true,
+                    masterHotelId: true,
                     metadata: true,
                 },
             }),
@@ -68,19 +71,55 @@ class HotelSearchRepository {
                 },
                 select: { hotelCode: true, imageKey: true },
             }),
+            // GIATA categorised images — preferred over WBE's first image.
+            // Pick widest size available per image; picker below prefers 4K > FullHD > large > medium > small.
+            prisma.hotelGiataImage.findMany({
+                where: { hotelCode: { in: hotelCodes } },
+                select: {
+                    hotelCode: true,
+                    imageType: true,
+                    displayOrder: true,
+                    urlSmall: true,
+                    urlMedium: true,
+                    urlLarge: true,
+                    urlFullHd: true,
+                    urlOriginal: true,
+                },
+            }),
         ]);
         const imageMap = new Map();
         for (const img of images)
             imageMap.set(img.hotelCode, img.imageKey);
+        // Group GIATA images by hotelCode so we can pick the best one per hotel.
+        const giataByHotel = new Map();
+        for (const img of giataImages) {
+            const arr = giataByHotel.get(img.hotelCode) ?? [];
+            arr.push(img);
+            giataByHotel.set(img.hotelCode, arr);
+        }
         const map = new Map();
         for (const h of hotels) {
             // Extract short description from metadata JSON (Location is a brief summary, Description is often empty/long)
             const meta = h.metadata;
             const description = meta?.Location || meta?.Description || null;
+            // Pick the best GIATA image per Oliver's priority (exterior → room → lobby → ...).
+            // GIATA URLs need HTTP Basic Auth, so we wrap them in our proxy endpoint
+            // (GET /api/v1/hotels/giata-image?url=<encoded>) which authenticates and streams.
+            const bestGiata = (0, imagePriority_1.pickBestGiataImage)(giataByHotel.get(h.hotelCode) ?? []);
+            // Prefer the largest available size: 4K (urlOriginal) → Full HD → large → medium → small.
+            // Older rows not yet re-synced will fall back to urlLarge (800px) seamlessly.
+            const rawGiataUrl = bestGiata
+                ? (bestGiata.urlOriginal ?? bestGiata.urlFullHd ?? bestGiata.urlLarge ?? bestGiata.urlMedium ?? bestGiata.urlSmall ?? null)
+                : null;
+            const giataImageUrl = rawGiataUrl
+                ? `/api/v1/hotels/giata-image?url=${encodeURIComponent(rawGiataUrl)}`
+                : null;
             const { metadata: _meta, ...hotelFields } = h;
             map.set(h.hotelCode, {
                 ...hotelFields,
                 primaryImageKey: imageMap.get(h.hotelCode) ?? null,
+                giataImageUrl,
+                sethubDetailsUrl: (0, sethubUrl_1.buildSethubDetailsUrl)(h.masterHotelId),
                 description,
             });
         }

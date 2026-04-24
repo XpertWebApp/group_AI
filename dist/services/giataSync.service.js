@@ -74,12 +74,16 @@ class GiataSyncService {
                     const small = img.sizes.find((s) => s.maxwidth === '74');
                     const medium = img.sizes.find((s) => s.maxwidth === '320');
                     const large = img.sizes.find((s) => s.maxwidth === '800');
+                    const fullHd = img.sizes.find((s) => s.maxwidth === '1920');
+                    const original = img.sizes.find((s) => s.maxwidth === '3840');
                     return {
                         imageType: img.type,
                         displayOrder: order++,
                         urlSmall: small?.url,
                         urlMedium: medium?.url,
                         urlLarge: large?.url,
+                        urlFullHd: fullHd?.url,
+                        urlOriginal: original?.url,
                         lastUpdate: img.lastUpdate,
                     };
                 });
