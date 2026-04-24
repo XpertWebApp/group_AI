@@ -5,6 +5,7 @@ import { validate } from '../middlewares/validate.middleware';
 import { HotelSearchQuerySchema } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
 import wbeClientService from '../services/wbe.client.service';
+import giataClientService from '../services/giata.client.service';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import { sendResponse } from '../utils/response';
 
@@ -89,6 +90,37 @@ router.get('/image', imageLimiter, async (req: Request, res: Response, next: Nex
 
         res.set('Content-Type', result.contentType);
         res.set('Cache-Control', 'public, max-age=86400'); // cache 24h
+        res.send(result.data);
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * Server-side proxy for GIATA hotel images.
+ * GIATA's image URLs (ghgml.giatamedia.com) require HTTP Basic Auth, so the
+ * browser can't fetch them directly. This endpoint authenticates via the
+ * backend and streams the bytes back.
+ *
+ * Only the GIATA media host is allowed (SSRF guard in giataClientService.fetchImage).
+ * No auth required on our side — these are already-public hotel photos.
+ */
+router.get('/giata-image', imageLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const url = String(req.query.url ?? '').trim();
+        if (!url) {
+            res.status(400).json({ error: { code: 'bad_request', message: 'url parameter is required' } });
+            return;
+        }
+
+        const result = await giataClientService.fetchImage(url);
+        if (!result) {
+            res.status(404).json({ error: { code: 'not_found', message: 'GIATA image not available' } });
+            return;
+        }
+
+        res.set('Content-Type', result.contentType);
+        res.set('Cache-Control', 'public, max-age=604800'); // cache 7d (GIATA images are stable)
         res.send(result.data);
     } catch (err) {
         next(err);

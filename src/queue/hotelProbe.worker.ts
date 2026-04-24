@@ -1114,13 +1114,20 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     console.log(`[Step 3.4] PASS ${hotelCode}: validatedRooms=${validatedRoomsAllocated}, suppliers=${validatedSplit.length}, earliestCxlDeadline=${earliestCxlDeadline}`);
 
     // ── Enrich with DB hotel info ────────────────────────────────────────────
-    const rawImageKey = dbHotel?.primaryImageKey ?? null;
+    // Prefer GIATA's categorised image (exterior → room → lobby → …) over WBE's
+    // arbitrary first image, which is often a random facility shot.
     let imageUrl: string | null = null;
-    if (rawImageKey) {
-        let decodedKey = rawImageKey;
-        try { decodedKey = decodeURIComponent(rawImageKey); } catch { /* use as-is */ }
+    let imageSource: 'giata' | 'wbe' | 'none' = 'none';
+    if (dbHotel?.giataImageUrl) {
+        imageUrl = dbHotel.giataImageUrl;
+        imageSource = 'giata';
+    } else if (dbHotel?.primaryImageKey) {
+        let decodedKey = dbHotel.primaryImageKey;
+        try { decodedKey = decodeURIComponent(dbHotel.primaryImageKey); } catch { /* use as-is */ }
         imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
+        imageSource = 'wbe';
     }
+    logger.debug({ hotelCode, imageSource }, 'Primary image source');
 
     // Calculate sell price — uses HIGHEST mid-range price across ALL room types (Step 4.1)
     // Prefer OptionDetailsV2-derived prices (authoritative) over search prices (WBE
