@@ -1,7 +1,21 @@
 import requestRepository from '../repositories/request.repository';
+import notificationService from './notification.service';
 import { logAuditEvent } from '../utils/audit';
+import logger from '../utils/logger';
 import { BookingRequestStatus } from '@prisma/client';
 import type { ListRequestsOptions } from '../repositories/request.repository';
+
+/**
+ * Comma-separated list of BookingRequestStatus transitions that fire a status-change
+ * email to staff. Read once at module load. Adding/removing a transition is a config
+ * change in `.env` (`NOTIFY_STATUS_TRANSITIONS=sent,completed,cancelled`) — no code change.
+ */
+const NOTIFY_STATUS_TRANSITIONS = new Set(
+    (process.env.NOTIFY_STATUS_TRANSITIONS ?? 'sent,completed,cancelled')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+);
 
 /** Derive nights (integer days) from ISO date strings. */
 function calcNights(checkin: string, checkout: string): number {
@@ -120,6 +134,39 @@ export class RequestService {
             ipAddress: ip,
         });
 
+        // Fire portal notifications (staff alert + customer confirmation). Fire-and-forget —
+        // never block the create response on email delivery; notification.service handles
+        // retry + dead-letter internally.
+        const refNum = (request as any).referenceNumber;
+        const reqId = (request as any).id;
+        const displayName = contactName ?? data.companyName ?? 'Customer';
+        const destName = data.destinationName ?? 'Unknown destination';
+        const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+
+        if (staffEmail) {
+            void notificationService
+                .notifyNewRequestStaff({
+                    requestId: reqId,
+                    referenceNumber: refNum,
+                    contactName: displayName,
+                    destinationName: destName,
+                    source: 'portal',
+                    staffEmail,
+                })
+                .catch((err) => logger.warn({ err: err.message, reqId }, 'notifyNewRequestStaff failed'));
+        }
+        if (data.contactEmail) {
+            void notificationService
+                .notifyNewRequestContact({
+                    requestId: reqId,
+                    referenceNumber: refNum,
+                    contactEmail: data.contactEmail,
+                    contactName: displayName,
+                    destinationName: destName,
+                })
+                .catch((err) => logger.warn({ err: err.message, reqId }, 'notifyNewRequestContact failed'));
+        }
+
         return request;
     }
 
@@ -200,7 +247,38 @@ export class RequestService {
     }
 
     async updateRequestStatus(id: string, status: string) {
-        return requestRepository.updateStatus(id, status as BookingRequestStatus);
+        // Capture previous status BEFORE the update so we can decide whether to email
+        // and what to put in the "from" field. A missing previous-status row means the
+        // request doesn't exist; let the update call surface the failure.
+        const before = await requestRepository.findById(id).catch(() => null);
+        const fromStatus = (before as any)?.status as string | undefined;
+
+        const updated = await requestRepository.updateStatus(id, status as BookingRequestStatus);
+
+        // Fire status-change email if the new state is in the configured trigger list
+        // and we actually transitioned (not a no-op write).
+        if (NOTIFY_STATUS_TRANSITIONS.has(status) && fromStatus && fromStatus !== status) {
+            const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+            if (staffEmail) {
+                const full = (before as any) ?? {};
+                const refNum = full.referenceNumber ?? 0;
+                const displayName = full.contactName ?? full.companyName ?? full.firstName ?? 'Customer';
+                const destName = full.destinationName ?? 'Unknown destination';
+                void notificationService
+                    .notifyStatusChange({
+                        requestId: id,
+                        referenceNumber: refNum,
+                        contactName: displayName,
+                        destinationName: destName,
+                        fromStatus,
+                        toStatus: status,
+                        staffEmail,
+                    })
+                    .catch((err) => logger.warn({ err: err.message, id }, 'notifyStatusChange failed'));
+            }
+        }
+
+        return updated;
     }
 
     /**

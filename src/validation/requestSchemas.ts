@@ -127,7 +127,7 @@ export const UpdateBookingRequestSchema = z.object({
     cancellationConditions: z.string().optional(),
     // System
     source: z.string().optional(),
-    status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined']).optional(),
+    status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling']).optional(),
 }).superRefine((d, ctx) => {
     if (d.groupType === undefined) return;
     const normalized = (d.groupType ?? '').toLowerCase().replace(/[\s-]+/g, '_');
@@ -147,7 +147,7 @@ export const ListRequestsQuerySchema = z.object({
     limit: z.string().optional().transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 20)),
     search: z.string().optional(),
     status: z
-        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', ''])
+        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling', ''])
         .optional()
         .transform((v) => v || undefined),
     dateFrom: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid dateFrom' }),

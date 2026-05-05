@@ -74,6 +74,19 @@ router.post(
 );
 
 /**
+ * POST /requests/:id/hotel-search/alternatives
+ * User-triggered relaxed-criteria search ("Show alternatives" button).
+ * Returns hotels at wider star/meal/location/facility criteria, excluding
+ * those already in the main results.
+ */
+router.post(
+    '/:id/hotel-search/alternatives',
+    authMiddleware,
+    searchLimiter,
+    hotelSearchController.searchAlternatives,
+);
+
+/**
  * GET /requests/:id/hotel-search/events
  * SSE stream — real-time hotel probe progress + completed events.
  */

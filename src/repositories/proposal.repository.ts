@@ -1,5 +1,6 @@
 import { PrismaClient, ProposalStatus, Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
+import { floorStarRating } from '../utils/starRating';
 
 const prisma = new PrismaClient();
 
@@ -172,7 +173,7 @@ export class ProposalRepository {
                     optionDetailsFetched,
                     latitude: hotelData.latitude != null ? new Decimal(hotelData.latitude).toFixed(7) : null,
                     longitude: hotelData.longitude != null ? new Decimal(hotelData.longitude).toFixed(7) : null,
-                    starRating: hotelData.starRating ?? null,
+                    starRating: floorStarRating(hotelData.starRating ?? null),
                     hotelRef,
                 },
             });

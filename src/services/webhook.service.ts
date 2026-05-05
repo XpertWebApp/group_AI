@@ -15,6 +15,7 @@
 
 import { PrismaClient, BookingRequestStatus } from '@prisma/client';
 import offerGenerationService from './offerGeneration.service';
+import notificationService from './notification.service';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
 import { parsePhoneWithCountryCode } from '../utils/phoneParser';
@@ -344,7 +345,42 @@ export class WebhookService {
             ipAddress: ip,
         });
 
-        // 7. Trigger async offer generation (non-blocking)
+        // 7. Fire transactional notifications (staff alert + customer confirmation).
+        // Fire-and-forget — never block the webhook response on email delivery.
+        const refNum = (bookingRequest as any).referenceNumber as number;
+        const displayName = (requestPayload as any).contactName ?? (requestPayload as any).companyName ?? 'Customer';
+        const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+
+        // Webhooks can come from Wix (default) or WordPress (delegated via wordpressWebhook.service).
+        // The delegating service sets `source: 'wordpress'` on the payload it forwards.
+        const webhookSource: 'wix' | 'wordpress' = payload?.source === 'wordpress' ? 'wordpress' : 'wix';
+
+        if (staffEmail) {
+            void notificationService
+                .notifyNewRequestStaff({
+                    requestId: bookingRequest.id,
+                    referenceNumber: refNum,
+                    contactName: displayName,
+                    destinationName: destination.name,
+                    source: webhookSource,
+                    staffEmail,
+                })
+                .catch((err) => logger.warn({ err: err.message, id: bookingRequest.id }, 'Webhook notifyNewRequestStaff failed'));
+        }
+        const contactEmail = (requestPayload as any).contactEmail;
+        if (contactEmail) {
+            void notificationService
+                .notifyNewRequestContact({
+                    requestId: bookingRequest.id,
+                    referenceNumber: refNum,
+                    contactEmail,
+                    contactName: displayName,
+                    destinationName: destination.name,
+                })
+                .catch((err) => logger.warn({ err: err.message, id: bookingRequest.id }, 'Wix notifyNewRequestContact failed'));
+        }
+
+        // 8. Trigger async offer generation (non-blocking)
         offerGenerationService.triggerAsync(bookingRequest.id);
 
         return {

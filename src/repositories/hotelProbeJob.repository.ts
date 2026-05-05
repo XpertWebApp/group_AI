@@ -9,8 +9,22 @@ export class HotelProbeJobRepository {
         hotelCode: string;
         requestedRooms: number;
         probeLimit: number;
+        /** 'main' (default) or 'alternative' — see schema doc. */
+        searchKind?: 'main' | 'alternative';
+        /** Short label, set when searchKind = 'alternative'. */
+        alternativeReason?: string | null;
     }) {
-        return prisma.hotelProbeJob.create({ data });
+        return prisma.hotelProbeJob.create({
+            data: {
+                id: data.id,
+                searchRequestId: data.searchRequestId,
+                hotelCode: data.hotelCode,
+                requestedRooms: data.requestedRooms,
+                probeLimit: data.probeLimit,
+                searchKind: data.searchKind ?? 'main',
+                alternativeReason: data.alternativeReason ?? null,
+            },
+        });
     }
 
     async setRunning(id: string) {

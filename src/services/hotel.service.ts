@@ -1,6 +1,7 @@
 import hotelRepository from '../repositories/hotel.repository';
 import wbeClientService from './wbe.client.service';
 import logger from '../utils/logger';
+import { floorStarRating } from '../utils/starRating';
 
 export class HotelService {
     async searchHotels(query: {
@@ -10,7 +11,11 @@ export class HotelService {
         limit?: number;
         offset?: number;
     }) {
-        return hotelRepository.search(query);
+        const rows = await hotelRepository.search(query);
+        return rows.map((h) => ({
+            ...h,
+            starRating: floorStarRating(h.starRating ? Number(h.starRating) : null),
+        }));
     }
 
     /**
@@ -43,7 +48,7 @@ export class HotelService {
             address: hotel.address,
             addressCity: hotel.addressCity,
             addressCountry: hotel.addressCountry,
-            starRating: hotel.starRating ? Number(hotel.starRating) : null,
+            starRating: floorStarRating(hotel.starRating ? Number(hotel.starRating) : null),
             latitude: hotel.latitude ? Number(hotel.latitude) : null,
             longitude: hotel.longitude ? Number(hotel.longitude) : null,
             totalRooms: hotel.totalRooms,

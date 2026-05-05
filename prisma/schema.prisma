@@ -539,6 +539,9 @@ enum BookingRequestStatus {
   ai_generated
   sent
   declined
+  /// Auto-search exhausted all relaxation levels and destination fallbacks
+  /// without finding hotels. Staff must handle this request manually.
+  needs_manual_handling
 
   @@schema("app")
 }
@@ -604,6 +607,11 @@ model HotelProbeJob {
   resultJson      Json?               @map("result_json")
   optionsSnapshot Json?               @map("options_snapshot")
   errorMsg        String?             @map("error_msg")
+  /// 'main' = exact-criteria search; 'alternative' = relaxed-criteria search.
+  searchKind        String  @default("main") @map("search_kind") @db.VarChar(20)
+  /// Short label for why this is an alternative (e.g. 'Wider star rating').
+  /// Null when searchKind = 'main'.
+  alternativeReason String? @map("alternative_reason") @db.VarChar(80)
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([searchRequestId])
@@ -626,5 +634,31 @@ model SupplierLimit {
 
   @@index([supplierCode])
   @@map("supplier_limits")
+  @@schema("app")
+}
+
+/// Dead-letter queue for outbound emails that exhausted all retry attempts.
+/// One row per failed email; staff are alerted via in-app notification on insertion.
+/// Phase 1 has no admin UI — rows here exist for audit/debug + future manual replay.
+model FailedEmail {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(64)
+  recipient     String    @db.VarChar(255)
+  subject       String    @db.VarChar(500)
+  body          String
+  replyTo       String?   @map("reply_to") @db.VarChar(255)
+  requestId     String?   @map("request_id") @db.Uuid
+  proposalId    String?   @map("proposal_id") @db.Uuid
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  resolvedAt    DateTime? @map("resolved_at")
+
+  @@index([eventType])
+  @@index([requestId])
+  @@index([proposalId])
+  @@index([resolvedAt])
+  @@map("failed_emails")
   @@schema("app")
 }

@@ -12,7 +12,8 @@
     "test": "jest",
     "test:e2e": "jest src/tests/e2e-hotel-search.test.ts --runInBand --forceExit --testTimeout=360000",
     "format": "prettier --write \"src/**/*.ts\"",
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts",
+    "email:acceptance-test": "ts-node scripts/email-acceptance-test.ts"
   },
   "keywords": [],
   "author": "",

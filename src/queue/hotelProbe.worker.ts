@@ -14,6 +14,7 @@ import { broadcast } from '../services/sseManager';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
 import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
+import { floorStarRating } from '../utils/starRating';
 import {
     PROBE_BATCH_SIZE,
     PROBE_MULTIPLIER,
@@ -223,6 +224,8 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         expandedRooms,
         dominantRoomType,
         roomTypeTargets,
+        searchKind,
+        alternativeReason,
     } = payload;
 
     logger.info({ jobId, hotelCode, requestedRooms, probeLimit, hasPerTypeTargets: !!roomTypeTargets }, 'Processing HotelProbeJob');
@@ -1240,8 +1243,13 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     const resultJson = {
         hotelCode,
+        // 'main' = exact-criteria search; 'alternative' = relaxed-criteria search.
+        // FE filters by this to render two sections ("Matching your request" vs
+        // "Similar alternatives"). Defaults to 'main' for legacy probes.
+        searchKind: searchKind ?? 'main',
+        alternativeReason: alternativeReason ?? null,
         hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
-        starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
+        starRating: floorStarRating(dbHotel?.starRating ? Number(dbHotel.starRating) : null),
         imageUrl,
         // Public SETTHub detail page URL — frontend wraps the hotel name in a
         // link to open it (Oliver's "no duplicate detail page, just link out" ask).

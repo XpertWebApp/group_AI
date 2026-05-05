@@ -52,6 +52,16 @@ export interface HotelProbeJobPayload {
     dominantRoomType: string | null;
     /** Per-room-type probe targets. If absent, falls back to aggregate probing. */
     roomTypeTargets?: RoomTypeProbeTarget[];
+    /**
+     * 'main' = exact-criteria search (default). 'alternative' = produced by
+     * the user-triggered "Show alternatives" relaxed search.
+     */
+    searchKind?: 'main' | 'alternative';
+    /**
+     * Short human-readable label shown alongside alternative hotels
+     * (e.g. 'Wider star rating'). Only set when searchKind === 'alternative'.
+     */
+    alternativeReason?: string | null;
 }
 
 /** Status emitted via SSE for each hotel probe job. */
