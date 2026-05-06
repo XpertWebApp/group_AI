@@ -40,6 +40,87 @@ class HotelSearchRepository {
             take: limit,
         });
     }
+    // ─── Destination hierarchy helpers — for "never say no" fallback ────────
+    /**
+     * Returns the chain of ancestor destinationIds (parent → grandparent → … → root).
+     * Used by the search-relaxation pipeline to widen from exact area → parent → country.
+     * Caps depth at 6 to avoid runaway loops on malformed data.
+     */
+    async getDestinationAncestry(destinationId) {
+        const out = [];
+        let cur = destinationId;
+        for (let depth = 0; depth < 6; depth++) {
+            const row = await prisma.destination.findUnique({
+                where: { id: cur },
+                select: { parentId: true },
+            });
+            if (!row?.parentId || out.includes(row.parentId))
+                break;
+            out.push(row.parentId);
+            cur = row.parentId;
+        }
+        return out;
+    }
+    /**
+     * Returns the country-level destinationId (top of the ancestry chain).
+     * If the destination has no parent, returns null (it might already be the country).
+     */
+    async getCountryDestinationId(destinationId) {
+        const ancestry = await this.getDestinationAncestry(destinationId);
+        if (ancestry.length === 0)
+            return null;
+        return ancestry[ancestry.length - 1] ?? null;
+    }
+    /**
+     * Look up a destination's display name. Used to build banner messages
+     * when the search falls back to a wider destination.
+     */
+    async getDestinationName(destinationId) {
+        const row = await prisma.destination.findUnique({
+            where: { id: destinationId },
+            select: { name: true },
+        });
+        return row?.name ?? null;
+    }
+    /**
+     * Sibling destinations within the same country, ranked by hotel-cluster
+     * proximity to the original destination. Destination has no lat/lng, so
+     * we use the centroid of the destination's hotels as the reference point.
+     * Returns up to maxResults destination IDs, nearest first.
+     */
+    async getNearbyDestinations(destinationId, maxResults = 5) {
+        const dest = await prisma.destination.findUnique({
+            where: { id: destinationId },
+            select: { countryCode: true },
+        });
+        if (!dest?.countryCode)
+            return [];
+        const center = await prisma.hotel.aggregate({
+            where: { destinationId, latitude: { not: null }, longitude: { not: null } },
+            _avg: { latitude: true, longitude: true },
+        });
+        const lat = center._avg.latitude ? Number(center._avg.latitude) : null;
+        const lng = center._avg.longitude ? Number(center._avg.longitude) : null;
+        if (lat == null || lng == null)
+            return [];
+        const rows = await prisma.$queryRaw `
+            SELECT d.id
+            FROM master.destinations d
+            WHERE d.country_code = ${dest.countryCode}
+              AND d.id <> ${destinationId}
+              AND EXISTS (
+                  SELECT 1 FROM master.hotels h
+                  WHERE h.destination_id = d.id AND h.latitude IS NOT NULL
+              )
+            ORDER BY (
+              SELECT MIN(POWER(h.latitude - ${lat}, 2) + POWER(h.longitude - ${lng}, 2))
+              FROM master.hotels h
+              WHERE h.destination_id = d.id AND h.latitude IS NOT NULL
+            ) ASC
+            LIMIT ${maxResults};
+        `;
+        return rows.map((r) => Number(r.id));
+    }
     /**
      * Returns a map of hotelCode → hotel info for enriching search results.
      * Includes the primary image key (displayOrder=0) from HotelImage if available.

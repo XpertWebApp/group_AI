@@ -5,7 +5,17 @@ const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 class HotelProbeJobRepository {
     async create(data) {
-        return prisma.hotelProbeJob.create({ data });
+        return prisma.hotelProbeJob.create({
+            data: {
+                id: data.id,
+                searchRequestId: data.searchRequestId,
+                hotelCode: data.hotelCode,
+                requestedRooms: data.requestedRooms,
+                probeLimit: data.probeLimit,
+                searchKind: data.searchKind ?? 'main',
+                alternativeReason: data.alternativeReason ?? null,
+            },
+        });
     }
     async setRunning(id) {
         return prisma.hotelProbeJob.update({

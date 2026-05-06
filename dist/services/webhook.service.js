@@ -20,6 +20,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WebhookService = void 0;
 const client_1 = require("@prisma/client");
 const offerGeneration_service_1 = __importDefault(require("./offerGeneration.service"));
+const notification_service_1 = __importDefault(require("./notification.service"));
 const audit_1 = require("../utils/audit");
 const logger_1 = __importDefault(require("../utils/logger"));
 const phoneParser_1 = require("../utils/phoneParser");
@@ -307,7 +308,39 @@ class WebhookService {
             },
             ipAddress: ip,
         });
-        // 7. Trigger async offer generation (non-blocking)
+        // 7. Fire transactional notifications (staff alert + customer confirmation).
+        // Fire-and-forget — never block the webhook response on email delivery.
+        const refNum = bookingRequest.referenceNumber;
+        const displayName = requestPayload.contactName ?? requestPayload.companyName ?? 'Customer';
+        const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+        // Webhooks can come from Wix (default) or WordPress (delegated via wordpressWebhook.service).
+        // The delegating service sets `source: 'wordpress'` on the payload it forwards.
+        const webhookSource = payload?.source === 'wordpress' ? 'wordpress' : 'wix';
+        if (staffEmail) {
+            void notification_service_1.default
+                .notifyNewRequestStaff({
+                requestId: bookingRequest.id,
+                referenceNumber: refNum,
+                contactName: displayName,
+                destinationName: destination.name,
+                source: webhookSource,
+                staffEmail,
+            })
+                .catch((err) => logger_1.default.warn({ err: err.message, id: bookingRequest.id }, 'Webhook notifyNewRequestStaff failed'));
+        }
+        const contactEmail = requestPayload.contactEmail;
+        if (contactEmail) {
+            void notification_service_1.default
+                .notifyNewRequestContact({
+                requestId: bookingRequest.id,
+                referenceNumber: refNum,
+                contactEmail,
+                contactName: displayName,
+                destinationName: destination.name,
+            })
+                .catch((err) => logger_1.default.warn({ err: err.message, id: bookingRequest.id }, 'Wix notifyNewRequestContact failed'));
+        }
+        // 8. Trigger async offer generation (non-blocking)
         offerGeneration_service_1.default.triggerAsync(bookingRequest.id);
         return {
             id: bookingRequest.id,

@@ -146,7 +146,16 @@ class OfferGenerationService {
                 markupPercent: DEFAULT_MARKUP_PCT,
             });
             if (queueResult.jobsQueued === 0) {
-                const reason = 'No candidate hotels found for this destination and star rating.';
+                // "Never say no" — even after the relaxation ladder + destination
+                // fallback, there are no hotels available. Flag the request so
+                // staff can pick it up manually instead of the customer hitting
+                // a dead end.
+                if (queueResult.manualRequestOnly) {
+                    await request_repository_1.default.updateStatus(requestId, client_1.BookingRequestStatus.needs_manual_handling);
+                }
+                const reason = queueResult.manualRequestOnly
+                    ? 'No hotels found at any relaxation level — flagged for manual handling.'
+                    : 'No candidate hotels found for this destination and star rating.';
                 await notification_service_1.default.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;
             }
@@ -155,7 +164,11 @@ class OfferGenerationService {
             const jobs = await waitForJobs(requestId);
             const completedJobs = jobs.filter((j) => j.status === 'COMPLETED');
             if (completedJobs.length === 0) {
-                const reason = 'No hotels with sufficient capacity found after probing.';
+                // All probes finished but none yielded a usable result. From the
+                // customer's perspective this is the same dead end as zero
+                // candidates — flag it for manual handling.
+                await request_repository_1.default.updateStatus(requestId, client_1.BookingRequestStatus.needs_manual_handling);
+                const reason = 'No hotels with sufficient capacity found after probing — flagged for manual handling.';
                 logger_1.default.warn({ requestId }, reason);
                 await notification_service_1.default.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;

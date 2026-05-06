@@ -407,7 +407,8 @@ class ProposalService {
         catch (err) {
             logger_1.default.error({ err, proposalId: id }, 'sendProposal: PDF upload to S3 failed — will still attempt to send email');
         }
-        // Attempt to send the email (Gmail API → SMTP fallback handled by notification service)
+        // Attempt to send the email — Phase 1: Brevo SMTP only (Gmail-OAuth path removed).
+        // Customer-facing email; Reply-To is the group inbox per Read B rule.
         const refNum = request?.referenceNumber ?? 0;
         const contactName = request?.contactName ?? request?.firstName ?? 'Guest';
         const destinationName = request?.destinationName ?? 'Unknown';
@@ -420,6 +421,8 @@ class ProposalService {
             destinationName,
             pdfBuffer,
             userId,
+            requestId: existing.requestId ?? undefined,
+            proposalId: id,
         });
         // CRITICAL: only mark proposal as 'sent' if the email actually went through.
         // Otherwise the status stays unchanged so the user can retry.
@@ -641,7 +644,7 @@ class ProposalService {
         const contactName = request?.contactName ?? request?.firstName ?? 'Guest';
         const destinationName = request?.destinationName ?? 'Unknown';
         const agentEmail = data.agentEmail ?? request?.contactEmail;
-        // In-app notification for staff (no email — that comes from /send)
+        // In-app + email notification for staff (Phase 1: approval now triggers an email too)
         try {
             await notification_service_1.default.notifyOfferApproved({
                 requestId: existing.requestId ?? '',
@@ -651,6 +654,7 @@ class ProposalService {
                 destinationName,
                 approvedBy: userId,
                 agentEmail,
+                staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
             });
         }
         catch (err) {
@@ -740,6 +744,24 @@ class ProposalService {
         }
         catch (err) {
             logger_1.default.error({ err, proposalId: id }, 'Step 4.2: Failed to send decline notification — proposal is still declined');
+        }
+        // Phase 1: also notify the external contact that their offer was declined.
+        const contactEmail = request?.contactEmail;
+        if (contactEmail) {
+            try {
+                await notification_service_1.default.notifyOfferDeclinedContact({
+                    requestId: existing.requestId ?? '',
+                    proposalId: id,
+                    referenceNumber: refNum,
+                    contactEmail,
+                    contactName,
+                    destinationName,
+                    rejectionReason: data.rejectionReason.trim(),
+                });
+            }
+            catch (err) {
+                logger_1.default.error({ err, proposalId: id }, 'Step 4.2: Failed to send decline notice to contact');
+            }
         }
         try {
             await (0, audit_1.logAuditEvent)({

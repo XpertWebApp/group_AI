@@ -116,7 +116,7 @@ exports.UpdateBookingRequestSchema = zod_1.z.object({
     cancellationConditions: zod_1.z.string().optional(),
     // System
     source: zod_1.z.string().optional(),
-    status: zod_1.z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined']).optional(),
+    status: zod_1.z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling']).optional(),
 }).superRefine((d, ctx) => {
     if (d.groupType === undefined)
         return;
@@ -136,7 +136,7 @@ exports.ListRequestsQuerySchema = zod_1.z.object({
     limit: zod_1.z.string().optional().transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 20)),
     search: zod_1.z.string().optional(),
     status: zod_1.z
-        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', ''])
+        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling', ''])
         .optional()
         .transform((v) => v || undefined),
     dateFrom: zod_1.z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid dateFrom' }),

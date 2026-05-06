@@ -34,6 +34,31 @@ class HotelSearchController {
         }
     }
     /**
+     * POST /api/v1/requests/:id/hotel-search/alternatives
+     *
+     * User-triggered relaxed-criteria search ("Show alternatives" button).
+     * Returns hotels matching widened criteria, excluding hotelCodes already
+     * shown by the main search. The body may carry the relaxation level used
+     * by the main search so we know where to start on the ladder.
+     */
+    async searchAlternatives(req, res, next) {
+        try {
+            const requestId = req.params['id'];
+            const body = req.validated?.body ?? req.body ?? {};
+            const result = await hotelSearch_service_1.default.searchAlternativesForRequest(requestId, {
+                mealType: body.mealType,
+                waitSeconds: body.waitSeconds,
+                currencyCode: body.currencyCode,
+                nationalityCode: body.nationalityCode,
+                facilityIds: body.facilityIds,
+            }, body.appliedLevel);
+            return (0, response_1.sendResponse)(res, 200, result, 'Alternative hotel search triggered');
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
      * POST /api/v1/requests/:id/hotel-search/option-details
      *
      * Fetches and caches OptionDetailsV2 for selected TIDs.

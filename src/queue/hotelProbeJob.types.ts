@@ -62,6 +62,12 @@ export interface HotelProbeJobPayload {
      * (e.g. 'Wider star rating'). Only set when searchKind === 'alternative'.
      */
     alternativeReason?: string | null;
+    /**
+     * Frontend portal language. Used by the worker to pick the GIATA text
+     * (en/de) returned in the hotelProbeCompleted event description field.
+     * Defaults to 'en' on the worker side when missing.
+     */
+    lang?: 'en' | 'de';
 }
 
 /** Status emitted via SSE for each hotel probe job. */

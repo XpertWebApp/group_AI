@@ -23,6 +23,7 @@ export class HotelSearchController {
                 currencyCode: body.currencyCode,
                 nationalityCode: body.nationalityCode,
                 facilityIds: body.facilityIds,
+                lang: body.lang,
             });
 
             return sendResponse(res, 200, result, 'Hotel search completed');
@@ -52,6 +53,7 @@ export class HotelSearchController {
                     currencyCode: body.currencyCode,
                     nationalityCode: body.nationalityCode,
                     facilityIds: body.facilityIds,
+                    lang: body.lang,
                 },
                 body.appliedLevel,
             );

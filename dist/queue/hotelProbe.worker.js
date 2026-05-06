@@ -12,6 +12,7 @@ const sseManager_1 = require("../services/sseManager");
 const supplierLimits_1 = require("../config/supplierLimits");
 const logger_1 = __importDefault(require("../utils/logger"));
 const pricing_1 = require("../utils/pricing");
+const starRating_1 = require("../utils/starRating");
 const probeConfig_1 = require("../config/probeConfig");
 // ─── Re-use filter helpers inline (avoid circular imports) ────────────────────
 function field(obj, ...keys) {
@@ -186,7 +187,7 @@ function parseProbeOptions(wbeHotelOptions, nights, batchSize) {
 }
 // ─── Worker ───────────────────────────────────────────────────────────────────
 async function processJob(payload) {
-    const { jobId, searchRequestId, hotelCode, checkinDate, nights, requestedRooms, probeLimit, currencyCode, nationalityCode, waitSeconds, mealType, markupPercent, expandedRooms, dominantRoomType, roomTypeTargets, } = payload;
+    const { jobId, searchRequestId, hotelCode, checkinDate, nights, requestedRooms, probeLimit, currencyCode, nationalityCode, waitSeconds, mealType, markupPercent, expandedRooms, dominantRoomType, roomTypeTargets, searchKind, alternativeReason, } = payload;
     logger_1.default.info({ jobId, hotelCode, requestedRooms, probeLimit, hasPerTypeTargets: !!roomTypeTargets }, 'Processing HotelProbeJob');
     await hotelProbeJob_repository_1.default.setRunning(jobId);
     // ── Probe loop ────────────────────────────────────────────────────────────
@@ -1045,8 +1046,13 @@ async function processJob(payload) {
     }
     const resultJson = {
         hotelCode,
+        // 'main' = exact-criteria search; 'alternative' = relaxed-criteria search.
+        // FE filters by this to render two sections ("Matching your request" vs
+        // "Similar alternatives"). Defaults to 'main' for legacy probes.
+        searchKind: searchKind ?? 'main',
+        alternativeReason: alternativeReason ?? null,
         hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
-        starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
+        starRating: (0, starRating_1.floorStarRating)(dbHotel?.starRating ? Number(dbHotel.starRating) : null),
         imageUrl,
         // Public SETTHub detail page URL — frontend wraps the hotel name in a
         // link to open it (Oliver's "no duplicate detail page, just link out" ask).

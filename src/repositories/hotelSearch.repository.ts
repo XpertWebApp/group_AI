@@ -2,6 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { pickBestGiataImage } from '../config/imagePriority';
 import { buildSethubDetailsUrl } from '../config/sethubUrl';
+import {
+    resolveHotelDescription,
+    GIATA_LOCATION_SECTION,
+    type SupportedLang,
+} from '../utils/hotelDescription';
 
 const prisma = new PrismaClient();
 
@@ -32,8 +37,12 @@ export interface HotelCodeRow {
      * name as plain text in that case.
      */
     sethubDetailsUrl?: string | null;
-    /** Short description extracted from metadata.Location (or metadata.Description fallback). */
+    /** Short description, in the requested language when GIATA has it, else WBE English fallback. */
     description?: string | null;
+    /** Actual language of the returned description — may differ from requested on WBE fallback. */
+    descriptionLanguage?: SupportedLang | null;
+    /** 'giata' when the text came from GIATA MHG, 'wbe' on metadata fallback, null when nothing was found. */
+    descriptionSource?: 'giata' | 'wbe' | null;
 }
 
 export class HotelSearchRepository {
@@ -162,10 +171,13 @@ export class HotelSearchRepository {
      * Returns a map of hotelCode → hotel info for enriching search results.
      * Includes the primary image key (displayOrder=0) from HotelImage if available.
      */
-    async getHotelsByCode(hotelCodes: string[]): Promise<Map<string, HotelCodeRow>> {
+    async getHotelsByCode(
+        hotelCodes: string[],
+        lang: SupportedLang = 'en',
+    ): Promise<Map<string, HotelCodeRow>> {
         if (hotelCodes.length === 0) return new Map();
 
-        const [hotels, images, giataImages] = await Promise.all([
+        const [hotels, images, giataImages, giataTexts] = await Promise.all([
             prisma.hotel.findMany({
                 where: { hotelCode: { in: hotelCodes } },
                 select: {
@@ -204,6 +216,16 @@ export class HotelSearchRepository {
                     urlOriginal: true,
                 },
             }),
+            // GIATA short location description for the requested language.
+            // Section type '100' = Lage / Location — short summary suitable for cards.
+            prisma.hotelGiataText.findMany({
+                where: {
+                    hotelCode: { in: hotelCodes },
+                    lang,
+                    sectionType: GIATA_LOCATION_SECTION,
+                },
+                select: { hotelCode: true, content: true },
+            }),
         ]);
 
         const imageMap = new Map<string, string>();
@@ -217,11 +239,18 @@ export class HotelSearchRepository {
             giataByHotel.set(img.hotelCode, arr);
         }
 
+        // Map hotelCode → GIATA description content (already filtered by lang).
+        const giataTextByHotel = new Map<string, string>();
+        for (const t of giataTexts) giataTextByHotel.set(t.hotelCode, t.content);
+
         const map = new Map<string, HotelCodeRow>();
         for (const h of hotels) {
-            // Extract short description from metadata JSON (Location is a brief summary, Description is often empty/long)
             const meta = h.metadata as Record<string, any> | null;
-            const description = meta?.Location || meta?.Description || null;
+            const resolved = resolveHotelDescription(
+                giataTextByHotel.get(h.hotelCode) ?? null,
+                meta,
+                lang,
+            );
 
             // Pick the best GIATA image per Oliver's priority (exterior → room → lobby → ...).
             // GIATA URLs need HTTP Basic Auth, so we wrap them in our proxy endpoint
@@ -242,7 +271,9 @@ export class HotelSearchRepository {
                 primaryImageKey: imageMap.get(h.hotelCode) ?? null,
                 giataImageUrl,
                 sethubDetailsUrl: buildSethubDetailsUrl(h.masterHotelId),
-                description,
+                description: resolved.description,
+                descriptionLanguage: resolved.descriptionLanguage,
+                descriptionSource: resolved.descriptionSource,
             });
         }
         return map;

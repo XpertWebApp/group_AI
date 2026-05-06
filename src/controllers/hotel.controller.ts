@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import hotelService from '../services/hotel.service';
 import { sendResponse } from '../utils/response';
+import { normaliseLang } from '../utils/hotelDescription';
 
 export class HotelController {
     async search(req: Request, res: Response, next: NextFunction) {
@@ -25,7 +26,8 @@ export class HotelController {
             if (!hotelCode) {
                 return sendResponse(res, 400, null, 'code query parameter is required', 'BAD_REQUEST');
             }
-            const result = await hotelService.getHotelDetails(hotelCode);
+            const lang = normaliseLang(req.query.lang);
+            const result = await hotelService.getHotelDetails(hotelCode, lang);
             return sendResponse(res, 200, result, 'Hotel details retrieved');
         } catch (error) {
             next(error);

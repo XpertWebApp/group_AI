@@ -7,9 +7,14 @@ exports.HotelService = void 0;
 const hotel_repository_1 = __importDefault(require("../repositories/hotel.repository"));
 const wbe_client_service_1 = __importDefault(require("./wbe.client.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
+const starRating_1 = require("../utils/starRating");
 class HotelService {
     async searchHotels(query) {
-        return hotel_repository_1.default.search(query);
+        const rows = await hotel_repository_1.default.search(query);
+        return rows.map((h) => ({
+            ...h,
+            starRating: (0, starRating_1.floorStarRating)(h.starRating ? Number(h.starRating) : null),
+        }));
     }
     /**
      * Get full hotel details by hotel code.
@@ -39,7 +44,7 @@ class HotelService {
             address: hotel.address,
             addressCity: hotel.addressCity,
             addressCountry: hotel.addressCountry,
-            starRating: hotel.starRating ? Number(hotel.starRating) : null,
+            starRating: (0, starRating_1.floorStarRating)(hotel.starRating ? Number(hotel.starRating) : null),
             latitude: hotel.latitude ? Number(hotel.latitude) : null,
             longitude: hotel.longitude ? Number(hotel.longitude) : null,
             totalRooms: hotel.totalRooms,

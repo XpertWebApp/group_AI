@@ -2,6 +2,12 @@ import hotelRepository from '../repositories/hotel.repository';
 import wbeClientService from './wbe.client.service';
 import logger from '../utils/logger';
 import { floorStarRating } from '../utils/starRating';
+import giataRepository from '../repositories/giata.repository';
+import {
+    resolveHotelDescription,
+    GIATA_LOCATION_SECTION,
+    type SupportedLang,
+} from '../utils/hotelDescription';
 
 export class HotelService {
     async searchHotels(query: {
@@ -23,7 +29,7 @@ export class HotelService {
      * Returns structured data from the metadata JSON (synced from WBE CDN).
      * If metadata is not yet synced and hotelDetailsUrl is available, fetches on-demand.
      */
-    async getHotelDetails(hotelCode: string) {
+    async getHotelDetails(hotelCode: string, lang: SupportedLang = 'en') {
         const hotel = await hotelRepository.findByCode(hotelCode);
         if (!hotel) {
             throw { status: 404, message: 'Hotel not found', code: 'NOT_FOUND' };
@@ -40,10 +46,17 @@ export class HotelService {
             }
         }
 
+        // GIATA Lage / Location section in the requested language, falling back to WBE.
+        const giataRows = await giataRepository.getTexts(hotelCode, lang);
+        const giataLocation = giataRows.find((r) => r.sectionType === GIATA_LOCATION_SECTION)?.content ?? null;
+        const resolved = resolveHotelDescription(giataLocation, meta, lang);
+
         return {
             hotelCode: hotel.hotelCode,
             name: hotel.name,
-            description: meta?.Description || null,
+            description: resolved.description,
+            descriptionLanguage: resolved.descriptionLanguage,
+            descriptionSource: resolved.descriptionSource,
             location: meta?.Location || null,
             address: hotel.address,
             addressCity: hotel.addressCity,

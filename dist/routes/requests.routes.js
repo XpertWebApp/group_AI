@@ -74,6 +74,13 @@ router.post('/:id/actions/claim', auth_middleware_1.authMiddleware, requests_con
  */
 router.post('/:id/hotel-search', auth_middleware_1.authMiddleware, searchLimiter, (0, validate_middleware_1.validate)(requestSchemas_1.WbeHotelSearchSchema, 'body'), hotelSearch_controller_1.default.search);
 /**
+ * POST /requests/:id/hotel-search/alternatives
+ * User-triggered relaxed-criteria search ("Show alternatives" button).
+ * Returns hotels at wider star/meal/location/facility criteria, excluding
+ * those already in the main results.
+ */
+router.post('/:id/hotel-search/alternatives', auth_middleware_1.authMiddleware, searchLimiter, hotelSearch_controller_1.default.searchAlternatives);
+/**
  * GET /requests/:id/hotel-search/events
  * SSE stream — real-time hotel probe progress + completed events.
  */

@@ -60,6 +60,8 @@ export interface HotelSearchParams {
     nationalityCode?: string;
     /** Filter hotels by facility/amenity IDs. Only hotels with ALL listed facilities are included. */
     facilityIds?: number[];
+    /** Frontend portal language. Determines GIATA description language returned per hotel. */
+    lang?: 'en' | 'de';
 }
 
 export interface ProcessedOption {
@@ -1289,6 +1291,7 @@ export class HotelSearchService {
                 expandedRooms,
                 dominantRoomType,
                 roomTypeTargets,
+                lang: params.lang,
             });
             jobsQueued++;
         }
@@ -1518,6 +1521,7 @@ export class HotelSearchService {
                 roomTypeTargets,
                 searchKind: 'alternative',
                 alternativeReason: reason,
+                lang: params.lang,
             });
             jobsQueued++;
         }

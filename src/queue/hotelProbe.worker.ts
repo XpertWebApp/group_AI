@@ -226,6 +226,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         roomTypeTargets,
         searchKind,
         alternativeReason,
+        lang,
     } = payload;
 
     logger.info({ jobId, hotelCode, requestedRooms, probeLimit, hasPerTypeTargets: !!roomTypeTargets }, 'Processing HotelProbeJob');
@@ -739,7 +740,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
     const [dbHotelMap, facilityMap] = await Promise.all([
-        hotelSearchRepository.getHotelsByCode([hotelCode]),
+        hotelSearchRepository.getHotelsByCode([hotelCode], lang === 'de' ? 'de' : 'en'),
         hotelSearchRepository.getFacilitiesByHotelCodes([hotelCode]),
     ]);
     const dbHotel = dbHotelMap.get(hotelCode);
@@ -1256,6 +1257,8 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         // Null when masterHotelId isn't synced yet — frontend renders plain text.
         sethubDetailsUrl: dbHotel?.sethubDetailsUrl ?? null,
         description: dbHotel?.description ?? null,
+        descriptionLanguage: dbHotel?.descriptionLanguage ?? null,
+        descriptionSource: dbHotel?.descriptionSource ?? null,
         address: (dbHotel as any)?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,

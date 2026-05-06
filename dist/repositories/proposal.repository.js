@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProposalRepository = void 0;
 const client_1 = require("@prisma/client");
 const decimal_js_1 = __importDefault(require("decimal.js"));
+const starRating_1 = require("../utils/starRating");
 const prisma = new client_1.PrismaClient();
 // Lock timeout in minutes
 const LOCK_TIMEOUT_MINUTES = 15;
@@ -139,7 +140,7 @@ class ProposalRepository {
                     optionDetailsFetched,
                     latitude: hotelData.latitude != null ? new decimal_js_1.default(hotelData.latitude).toFixed(7) : null,
                     longitude: hotelData.longitude != null ? new decimal_js_1.default(hotelData.longitude).toFixed(7) : null,
-                    starRating: hotelData.starRating ?? null,
+                    starRating: (0, starRating_1.floorStarRating)(hotelData.starRating ?? null),
                     hotelRef,
                 },
             });
