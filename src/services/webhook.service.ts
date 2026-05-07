@@ -16,6 +16,7 @@
 import { PrismaClient, BookingRequestStatus } from '@prisma/client';
 import offerGenerationService from './offerGeneration.service';
 import notificationService from './notification.service';
+import destinationRepository from '../repositories/destination.repository';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
 import { parsePhoneWithCountryCode } from '../utils/phoneParser';
@@ -82,54 +83,40 @@ function parseHotelLocation(raw: string | undefined | null): 'central' | 'outsid
 }
 
 /**
- * Try to resolve destination ID from city name.
- * Strategy (in order of preference):
- *   1. EXACT case-insensitive match ("Dubai" → "Dubai", not "Dubai Airports")
- *   2. "Starts with" match ("Dubai" → "Dubai Marina")
- *   3. "Contains" match as last resort
- * Returns 0 if not found (stored as unresolved — staff can correct manually).
+ * Try to resolve a destination ID from a customer-supplied city name.
+ *
+ * Walks four match strategies (exact → startsWith → contains → firstWord)
+ * via destinationRepository.resolveByName, picking the candidate with the
+ * MOST hotel inventory at each tier. This prevents the "New York → New
+ * York-NJ (0 hotels)" class of bug where the lowest-id duplicate wins over
+ * the most-bookable destination.
+ *
+ * Returns id=0 when no match — staff can correct it from the dashboard.
  */
 async function resolveDestinationId(cityName: string): Promise<{ id: number; name: string }> {
-    const name = cityName?.trim();
-    if (!name) return { id: 0, name: cityName };
+    const trimmed = cityName?.trim();
+    if (!trimmed) return { id: 0, name: cityName };
 
-    // 1. Exact (case-insensitive) match — prefer this
-    const exact = await prisma.destination.findFirst({
-        where: { name: { equals: name, mode: 'insensitive' } },
-        select: { id: true, name: true },
-        orderBy: { id: 'asc' },
-    });
-    if (exact) return { id: exact.id, name: exact.name };
+    const result = await destinationRepository.resolveByName(trimmed);
 
-    // 2. Starts-with match — e.g. "Dubai" → "Dubai Marina"
-    const startsWith = await prisma.destination.findFirst({
-        where: { name: { startsWith: name, mode: 'insensitive' } },
-        select: { id: true, name: true },
-        orderBy: { id: 'asc' },
-    });
-    if (startsWith) return { id: startsWith.id, name: startsWith.name };
-
-    // 3. Contains match — last resort
-    const contains = await prisma.destination.findFirst({
-        where: { name: { contains: name, mode: 'insensitive' } },
-        select: { id: true, name: true },
-        orderBy: { id: 'asc' },
-    });
-    if (contains) return { id: contains.id, name: contains.name };
-
-    // 4. Fallback: try first-word search
-    const firstWord = name.split(/\s+/)[0];
-    if (firstWord && firstWord !== name) {
-        const partial = await prisma.destination.findFirst({
-            where: { name: { contains: firstWord, mode: 'insensitive' } },
-            select: { id: true, name: true },
-            orderBy: { id: 'asc' },
-        });
-        if (partial) return { id: partial.id, name: partial.name };
+    if (result.matchStrategy === 'none') {
+        logger.warn({ cityName }, 'Webhook: destination not found in DB — stored with id=0');
+        return { id: 0, name: trimmed };
     }
 
-    logger.warn({ cityName }, 'Webhook: destination not found in DB — stored with id=0');
-    return { id: 0, name };
+    if (result.hotelCount === 0) {
+        logger.warn(
+            {
+                cityName,
+                resolvedId: result.id,
+                resolvedName: result.name,
+                matchStrategy: result.matchStrategy,
+            },
+            'Webhook: resolved destination has zero hotel inventory — search will likely return no results',
+        );
+    }
+
+    return { id: result.id, name: result.name };
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────

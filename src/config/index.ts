@@ -22,11 +22,6 @@ const config = {
         password: process.env.WBE_PASSWORD,
         acceptLanguage: process.env.WBE_ACCEPT_LANGUAGE || 'en',
     },
-    google: {
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/v1/auth/google/callback',
-    },
     giata: {
         mhgBaseUrl: process.env.GIATA_MHG_BASE_URL || 'http://ghgml.giatamedia.com/webservice/rest/1.0',
         multicodesBaseUrl: process.env.GIATA_MULTICODES_BASE_URL || 'https://multicodes.giatamedia.com/webservice/rest/1.latest',
