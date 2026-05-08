@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HotelController = void 0;
 const hotel_service_1 = __importDefault(require("../services/hotel.service"));
 const response_1 = require("../utils/response");
+const hotelDescription_1 = require("../utils/hotelDescription");
 class HotelController {
     async search(req, res, next) {
         try {
@@ -29,7 +30,8 @@ class HotelController {
             if (!hotelCode) {
                 return (0, response_1.sendResponse)(res, 400, null, 'code query parameter is required', 'BAD_REQUEST');
             }
-            const result = await hotel_service_1.default.getHotelDetails(hotelCode);
+            const lang = (0, hotelDescription_1.normaliseLang)(req.query.lang);
+            const result = await hotel_service_1.default.getHotelDetails(hotelCode, lang);
             return (0, response_1.sendResponse)(res, 200, result, 'Hotel details retrieved');
         }
         catch (error) {

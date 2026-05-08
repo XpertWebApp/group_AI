@@ -333,6 +333,8 @@ exports.WbeHotelSearchSchema = zod_1.z.object({
     nationalityCode: zod_1.z.string().min(1).max(10).optional(),
     /** Filter hotels by facility/amenity IDs. Only hotels with ALL listed facilities are included. */
     facilityIds: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
+    /** Frontend portal language. Determines which language the hotel description is returned in. */
+    lang: zod_1.z.enum(['en', 'de']).optional(),
 });
 // ── Option Details (Step 6) ───────────────────────────────────────────────
 const OptionDetailSelectionSchema = zod_1.z.object({

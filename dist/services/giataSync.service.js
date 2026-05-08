@@ -63,7 +63,7 @@ class GiataSyncService {
                     console.log(`[GIATA]   Texts (${lang}): ${textResult.sections.length} sections stored`);
                 }
                 else {
-                    console.log(`[GIATA]   Texts (${lang}): not available`);
+                    console.log(`[GIATA]   Texts (${lang}): not available (404 not in catalog OR 403 account entitlement — see warn logs)`);
                 }
             }
             // 2. Images

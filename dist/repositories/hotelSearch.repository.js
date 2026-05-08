@@ -8,6 +8,7 @@ const client_1 = require("@prisma/client");
 const decimal_js_1 = __importDefault(require("decimal.js"));
 const imagePriority_1 = require("../config/imagePriority");
 const sethubUrl_1 = require("../config/sethubUrl");
+const hotelDescription_1 = require("../utils/hotelDescription");
 const prisma = new client_1.PrismaClient();
 class HotelSearchRepository {
     /**
@@ -125,10 +126,10 @@ class HotelSearchRepository {
      * Returns a map of hotelCode → hotel info for enriching search results.
      * Includes the primary image key (displayOrder=0) from HotelImage if available.
      */
-    async getHotelsByCode(hotelCodes) {
+    async getHotelsByCode(hotelCodes, lang = 'en') {
         if (hotelCodes.length === 0)
             return new Map();
-        const [hotels, images, giataImages] = await Promise.all([
+        const [hotels, images, giataImages, giataTexts] = await Promise.all([
             prisma.hotel.findMany({
                 where: { hotelCode: { in: hotelCodes } },
                 select: {
@@ -167,6 +168,16 @@ class HotelSearchRepository {
                     urlOriginal: true,
                 },
             }),
+            // GIATA short location description for the requested language.
+            // Section type '100' = Lage / Location — short summary suitable for cards.
+            prisma.hotelGiataText.findMany({
+                where: {
+                    hotelCode: { in: hotelCodes },
+                    lang,
+                    sectionType: hotelDescription_1.GIATA_LOCATION_SECTION,
+                },
+                select: { hotelCode: true, content: true },
+            }),
         ]);
         const imageMap = new Map();
         for (const img of images)
@@ -178,11 +189,14 @@ class HotelSearchRepository {
             arr.push(img);
             giataByHotel.set(img.hotelCode, arr);
         }
+        // Map hotelCode → GIATA description content (already filtered by lang).
+        const giataTextByHotel = new Map();
+        for (const t of giataTexts)
+            giataTextByHotel.set(t.hotelCode, t.content);
         const map = new Map();
         for (const h of hotels) {
-            // Extract short description from metadata JSON (Location is a brief summary, Description is often empty/long)
             const meta = h.metadata;
-            const description = meta?.Location || meta?.Description || null;
+            const resolved = (0, hotelDescription_1.resolveHotelDescription)(giataTextByHotel.get(h.hotelCode) ?? null, meta, lang);
             // Pick the best GIATA image per Oliver's priority (exterior → room → lobby → ...).
             // GIATA URLs need HTTP Basic Auth, so we wrap them in our proxy endpoint
             // (GET /api/v1/hotels/giata-image?url=<encoded>) which authenticates and streams.
@@ -201,7 +215,9 @@ class HotelSearchRepository {
                 primaryImageKey: imageMap.get(h.hotelCode) ?? null,
                 giataImageUrl,
                 sethubDetailsUrl: (0, sethubUrl_1.buildSethubDetailsUrl)(h.masterHotelId),
-                description,
+                description: resolved.description,
+                descriptionLanguage: resolved.descriptionLanguage,
+                descriptionSource: resolved.descriptionSource,
             });
         }
         return map;

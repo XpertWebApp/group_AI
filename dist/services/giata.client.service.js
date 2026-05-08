@@ -87,8 +87,16 @@ class GiataClientService {
             };
         }
         catch (err) {
-            if (err.response?.status === 404 || err.response?.status === 403)
+            if (err.response?.status === 404)
                 return null;
+            if (err.response?.status === 403) {
+                // 403 = account is not entitled to this language. Log loudly
+                // (once per lang would be nicer, but this runs in a tight sync
+                // loop and we want every operator to notice if a sync silently
+                // skips a whole language).
+                logger_1.default.warn({ giataId, lang }, 'GIATA: 403 Forbidden on /texts — account likely lacks entitlement for this language');
+                return null;
+            }
             logger_1.default.error({ err: err.message, giataId, lang }, 'GIATA: failed to fetch texts');
             throw err;
         }

@@ -187,7 +187,7 @@ function parseProbeOptions(wbeHotelOptions, nights, batchSize) {
 }
 // ─── Worker ───────────────────────────────────────────────────────────────────
 async function processJob(payload) {
-    const { jobId, searchRequestId, hotelCode, checkinDate, nights, requestedRooms, probeLimit, currencyCode, nationalityCode, waitSeconds, mealType, markupPercent, expandedRooms, dominantRoomType, roomTypeTargets, searchKind, alternativeReason, } = payload;
+    const { jobId, searchRequestId, hotelCode, checkinDate, nights, requestedRooms, probeLimit, currencyCode, nationalityCode, waitSeconds, mealType, markupPercent, expandedRooms, dominantRoomType, roomTypeTargets, searchKind, alternativeReason, lang, } = payload;
     logger_1.default.info({ jobId, hotelCode, requestedRooms, probeLimit, hasPerTypeTargets: !!roomTypeTargets }, 'Processing HotelProbeJob');
     await hotelProbeJob_repository_1.default.setRunning(jobId);
     // ── Probe loop ────────────────────────────────────────────────────────────
@@ -611,7 +611,7 @@ async function processJob(payload) {
     }
     // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
     const [dbHotelMap, facilityMap] = await Promise.all([
-        hotelSearch_repository_1.default.getHotelsByCode([hotelCode]),
+        hotelSearch_repository_1.default.getHotelsByCode([hotelCode], lang === 'de' ? 'de' : 'en'),
         hotelSearch_repository_1.default.getFacilitiesByHotelCodes([hotelCode]),
     ]);
     const dbHotel = dbHotelMap.get(hotelCode);
@@ -1059,6 +1059,8 @@ async function processJob(payload) {
         // Null when masterHotelId isn't synced yet — frontend renders plain text.
         sethubDetailsUrl: dbHotel?.sethubDetailsUrl ?? null,
         description: dbHotel?.description ?? null,
+        descriptionLanguage: dbHotel?.descriptionLanguage ?? null,
+        descriptionSource: dbHotel?.descriptionSource ?? null,
         address: dbHotel?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,

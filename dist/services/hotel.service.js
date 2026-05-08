@@ -8,6 +8,8 @@ const hotel_repository_1 = __importDefault(require("../repositories/hotel.reposi
 const wbe_client_service_1 = __importDefault(require("./wbe.client.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
 const starRating_1 = require("../utils/starRating");
+const giata_repository_1 = __importDefault(require("../repositories/giata.repository"));
+const hotelDescription_1 = require("../utils/hotelDescription");
 class HotelService {
     async searchHotels(query) {
         const rows = await hotel_repository_1.default.search(query);
@@ -21,7 +23,7 @@ class HotelService {
      * Returns structured data from the metadata JSON (synced from WBE CDN).
      * If metadata is not yet synced and hotelDetailsUrl is available, fetches on-demand.
      */
-    async getHotelDetails(hotelCode) {
+    async getHotelDetails(hotelCode, lang = 'en') {
         const hotel = await hotel_repository_1.default.findByCode(hotelCode);
         if (!hotel) {
             throw { status: 404, message: 'Hotel not found', code: 'NOT_FOUND' };
@@ -36,10 +38,16 @@ class HotelService {
                 logger_1.default.warn({ err, hotelCode }, 'On-demand hotel detail fetch failed');
             }
         }
+        // GIATA Lage / Location section in the requested language, falling back to WBE.
+        const giataRows = await giata_repository_1.default.getTexts(hotelCode, lang);
+        const giataLocation = giataRows.find((r) => r.sectionType === hotelDescription_1.GIATA_LOCATION_SECTION)?.content ?? null;
+        const resolved = (0, hotelDescription_1.resolveHotelDescription)(giataLocation, meta, lang);
         return {
             hotelCode: hotel.hotelCode,
             name: hotel.name,
-            description: meta?.Description || null,
+            description: resolved.description,
+            descriptionLanguage: resolved.descriptionLanguage,
+            descriptionSource: resolved.descriptionSource,
             location: meta?.Location || null,
             address: hotel.address,
             addressCity: hotel.addressCity,

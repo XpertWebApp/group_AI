@@ -813,6 +813,7 @@ class HotelSearchService {
                 expandedRooms,
                 dominantRoomType,
                 roomTypeTargets,
+                lang: params.lang,
             });
             jobsQueued++;
         }
@@ -993,6 +994,7 @@ class HotelSearchService {
                 roomTypeTargets,
                 searchKind: 'alternative',
                 alternativeReason: reason,
+                lang: params.lang,
             });
             jobsQueued++;
         }

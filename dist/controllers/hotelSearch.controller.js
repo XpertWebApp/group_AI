@@ -26,6 +26,7 @@ class HotelSearchController {
                 currencyCode: body.currencyCode,
                 nationalityCode: body.nationalityCode,
                 facilityIds: body.facilityIds,
+                lang: body.lang,
             });
             return (0, response_1.sendResponse)(res, 200, result, 'Hotel search completed');
         }
@@ -51,6 +52,7 @@ class HotelSearchController {
                 currencyCode: body.currencyCode,
                 nationalityCode: body.nationalityCode,
                 facilityIds: body.facilityIds,
+                lang: body.lang,
             }, body.appliedLevel);
             return (0, response_1.sendResponse)(res, 200, result, 'Alternative hotel search triggered');
         }

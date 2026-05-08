@@ -35,34 +35,6 @@ class UserRepository {
             data: { refreshToken: hashedToken },
         });
     }
-    async updateGoogleTokens(userId, data) {
-        return prisma.user.update({
-            where: { id: userId },
-            data,
-        });
-    }
-    async getGoogleTokens(userId) {
-        return prisma.user.findUnique({
-            where: { id: userId },
-            select: {
-                googleEmail: true,
-                googleAccessToken: true,
-                googleRefreshToken: true,
-                googleTokenExpiry: true,
-            },
-        });
-    }
-    async clearGoogleTokens(userId) {
-        return prisma.user.update({
-            where: { id: userId },
-            data: {
-                googleAccessToken: null,
-                googleRefreshToken: null,
-                googleTokenExpiry: null,
-                googleEmail: null,
-            },
-        });
-    }
 }
 exports.UserRepository = UserRepository;
 exports.default = new UserRepository();
