@@ -126,6 +126,9 @@ export class ProposalRepository {
             latitude?: number | null;
             longitude?: number | null;
             starRating?: number | null;
+            address?: string | null;
+            addressCity?: string | null;
+            addressCountry?: string | null;
         },
         markupSettings?: any,
     ) {
@@ -174,6 +177,9 @@ export class ProposalRepository {
                     latitude: hotelData.latitude != null ? new Decimal(hotelData.latitude).toFixed(7) : null,
                     longitude: hotelData.longitude != null ? new Decimal(hotelData.longitude).toFixed(7) : null,
                     starRating: floorStarRating(hotelData.starRating ?? null),
+                    address: hotelData.address ?? null,
+                    addressCity: hotelData.addressCity ?? null,
+                    addressCountry: hotelData.addressCountry ?? null,
                     hotelRef,
                 },
             });

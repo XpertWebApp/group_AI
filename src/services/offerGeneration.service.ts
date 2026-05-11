@@ -379,6 +379,10 @@ export class OfferGenerationService {
                         supplierCode: cheapestAcrossTypes.supplierCode,
                         latitude: result.latitude ?? null,
                         longitude: result.longitude ?? null,
+                        starRating: result.starRating ?? null,
+                        address: result.address ?? null,
+                        addressCity: result.addressCity ?? null,
+                        addressCountry: result.addressCountry ?? null,
                         rooms,
                     });
                 } else {
@@ -410,6 +414,10 @@ export class OfferGenerationService {
                         supplierCode: cheapestSplit.supplierCode,
                         latitude: result.latitude ?? null,
                         longitude: result.longitude ?? null,
+                        starRating: result.starRating ?? null,
+                        address: result.address ?? null,
+                        addressCity: result.addressCity ?? null,
+                        addressCountry: result.addressCountry ?? null,
                         rooms: {
                             standard: {
                                 net: cheapestSplit.pricePerRoomPerNight,

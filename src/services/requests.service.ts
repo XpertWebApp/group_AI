@@ -1,5 +1,6 @@
 import requestRepository from '../repositories/request.repository';
 import notificationService from './notification.service';
+import { parseGroupType } from './webhook.service';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
 import { BookingRequestStatus } from '@prisma/client';
@@ -84,7 +85,7 @@ export class RequestService {
             starRating: data.starRating ?? null,
             budgetRange: data.budgetRange ?? null,
             budget: data.budget ?? null,
-            groupType: data.groupType ?? null,
+            groupType: parseGroupType(data.groupType),
             groupSize: data.groupSize ?? null,
             averageAge: data.averageAge ?? null,
             currencyCode: data.currencyCode ?? 'EUR',
@@ -184,6 +185,11 @@ export class RequestService {
             'budget', 'groupType', 'groupSize', 'averageAge', 'currencyCode', 'nationalityCode',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];
+        }
+
+        // Normalise groupType to canonical code (German labels, casing variants, etc. → internal code)
+        if (updateData.groupType !== undefined) {
+            updateData.groupType = parseGroupType(updateData.groupType);
         }
 
         // Dates — recalculate nights if either date changes

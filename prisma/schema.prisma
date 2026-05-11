@@ -433,6 +433,9 @@ model ProposalHotel {
   latitude             Decimal?  @db.Decimal(10, 7)
   longitude            Decimal?  @db.Decimal(10, 7)
   starRating           Int?      @map("star_rating")
+  address              String?
+  addressCity          String?   @map("address_city") @db.VarChar(255)
+  addressCountry       String?   @map("address_country") @db.VarChar(10)
   hotelRef             String?   @map("hotel_ref") @db.VarChar(32)
   optionDetailsId      String?   @map("option_details_id") @db.Uuid
   createdAt            DateTime  @default(now()) @map("created_at")

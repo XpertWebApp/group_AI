@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseGroupType } from '../services/webhook.service';
 
 // ── Rooms (Step 2 - Room & Accommodations) ─────────────────────────────────
 export const RoomsSchema = z.object({
@@ -81,8 +82,8 @@ export const CreateBookingRequestSchema = z
     .refine(
         (d) => {
             if (!d.groupType) return true;
-            const normalized = d.groupType.toLowerCase().replace(/[\s-]+/g, '_');
-            const ageRequired = normalized === 'youth_group' || normalized === 'school_group';
+            const code = parseGroupType(d.groupType);
+            const ageRequired = code === 'youth' || code === 'school';
             return !ageRequired || typeof d.averageAge === 'number';
         },
         { message: 'averageAge is required when groupType is Youth Group or School Group', path: ['averageAge'] },
@@ -130,8 +131,8 @@ export const UpdateBookingRequestSchema = z.object({
     status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling']).optional(),
 }).superRefine((d, ctx) => {
     if (d.groupType === undefined) return;
-    const normalized = (d.groupType ?? '').toLowerCase().replace(/[\s-]+/g, '_');
-    const ageRequired = normalized === 'youth_group' || normalized === 'school_group';
+    const code = parseGroupType(d.groupType ?? '');
+    const ageRequired = code === 'youth' || code === 'school';
     if (ageRequired && (d.averageAge === undefined || d.averageAge === null)) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -191,6 +192,9 @@ export const AddProposalHotelSchema = z.object({
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
     starRating: z.number().int().min(1).max(5).optional().nullable(),
+    address: z.string().max(2000).optional().nullable(),
+    addressCity: z.string().max(255).optional().nullable(),
+    addressCountry: z.string().max(10).optional().nullable(),
 });
 
 export const AdjustHotelPricingSchema = z.object({

@@ -11,7 +11,15 @@ import logger from '../utils/logger';
 import storageService from './storage.service';
 import config from '../config';
 
-const MODIFIABLE_STATUSES: ProposalStatus[] = [ProposalStatus.draft];
+// Proposals are editable in `draft` (staff is still building it) AND in
+// `pending_admin_approval` (waiting for admin sign-off — staff can still adjust
+// the AI-generated set or add/remove hotels). Once the proposal is `approved`,
+// `sent`, or `declined`, edits are blocked. This matches `APPROVABLE_STATUSES`
+// and `DECLINABLE_STATUSES` which already treat both states as non-terminal.
+const MODIFIABLE_STATUSES: ProposalStatus[] = [
+    ProposalStatus.draft,
+    ProposalStatus.pending_admin_approval,
+];
 // Selection toggles (includedInTotal) are also allowed on sent proposals,
 // because after the initial offer is sent the staff needs to pick the client's
 // chosen hotel/services and re-send a final offer.

@@ -26,6 +26,32 @@ const prisma = new PrismaClient();
 /** Expected Wix form ID — reject other forms. */
 const EXPECTED_FORM_ID = 'cdd7652b-be36-4756-a985-9e390fa1477e';
 
+/**
+ * Default Terms & Conditions applied to every webhook-created booking request.
+ *
+ * Stored as HTML (`<ol><li>…</li></ol>`) to match the exact format the dashboard's
+ * rich-text editor produces for portal-submitted requests. The dashboard renders
+ * this with `dangerouslySetInnerHTML`, which is why plain-text with newlines would
+ * collapse into a single paragraph. The "TERMS & CONDITIONS" heading is added by
+ * the dashboard's section frame and is NOT part of the stored content.
+ */
+const DEFAULT_TERMS_AND_CONDITIONS =
+    '<ol style="list-style-type: decimal; padding-left: 1.5rem;">' +
+    '<li>All prices are per room per night unless otherwise stated</li>' +
+    '<li>Prices are subject to availability at time of booking</li>' +
+    '<li>Full payment required 30 days before arrival</li>' +
+    '<li>Cancellation policy applies as per individual hotel terms</li>' +
+    '<li>Group rates are valid for minimum 10 participants</li>' +
+    '<li>Final room list required 14 days before arrival</li>' +
+    '</ol>';
+
+/** Default Cancellation Conditions paired with the terms above (same HTML format). */
+const DEFAULT_CANCELLATION_CONDITIONS =
+    '<ol style="list-style-type: decimal; padding-left: 1.5rem;">' +
+    '<li>Cancellations made 14 days or more in advance of the event date will receive a 100% refund.</li>' +
+    '<li>Cancellations made within 7 days will incur a 50% fee.</li>' +
+    '</ol>';
+
 // ─── Field parsers ─────────────────────────────────────────────────────────────
 
 /**
@@ -80,6 +106,47 @@ function parseHotelLocation(raw: string | undefined | null): 'central' | 'outsid
     return /outside|save money|außerhalb|ausserhalb|außerstadt/i.test(raw)
         ? 'outside_city_center'
         : 'central';
+}
+
+/**
+ * Canonical group_type codes recognised by the system. Frontend renders localised
+ * labels for each via its i18n layer; the backend only ever stores/serves these codes.
+ */
+export type CanonicalGroupType =
+    | 'business'
+    | 'leisure'
+    | 'sports'
+    | 'youth'
+    | 'school'
+    | 'family'
+    | 'wedding'
+    | 'conference'
+    | 'other';
+
+/**
+ * Parse group_type → canonical code.
+ * Accepts English variants, German labels, and historical inconsistencies.
+ * Returns null for empty/null input; returns 'other' for unrecognised non-empty input.
+ *
+ * EN/legacy: "Business group", "business_group", "Corporate" → business
+ * DE: "Geschäftsgruppe" → business, "Schulgruppe" → school, "Hochzeit" → wedding, etc.
+ */
+export function parseGroupType(raw: string | undefined | null): CanonicalGroupType | null {
+    if (!raw) return null;
+    const s = raw.toLowerCase().trim().replace(/[\s-]+/g, '_');
+    if (s === '') return null;
+
+    // Order matters: more specific patterns first.
+    if (/(school|schule|schulgruppe|klassenfahrt)/.test(s)) return 'school';
+    if (/(youth|jugend|jugendgruppe)/.test(s)) return 'youth';
+    if (/(business|corporate|gesch.?ftsgruppe|firmen|firmengruppe)/.test(s)) return 'business';
+    if (/(leisure|reisegruppe|holiday|urlaub)/.test(s)) return 'leisure';
+    if (/(sport|sportgruppe|mannschaft)/.test(s)) return 'sports';
+    if (/(family|familie|familiengruppe)/.test(s)) return 'family';
+    if (/(wedding|hochzeit|brautpaar)/.test(s)) return 'wedding';
+    if (/(conference|konferenz|tagung|kongress|meeting)/.test(s)) return 'conference';
+
+    return 'other';
 }
 
 /**
@@ -250,7 +317,7 @@ export class WebhookService {
             nights,
             starRating: starRating ?? undefined,
             budgetRange: data.budget ? String(data.budget) : null,
-            groupType: data.group_type ?? null,
+            groupType: parseGroupType(data.group_type),
             groupSize,
             averageAge: data.average_age != null ? Number(data.average_age) : null,
             currencyCode: 'EUR',
@@ -276,6 +343,12 @@ export class WebhookService {
             })(),
             guestListFileKey:
                 data.name_list && typeof data.name_list === 'string' ? data.name_list : null,
+
+            // Step 4 – Policies — webhook submissions don't carry these, so apply
+            // the same static defaults the dashboard portal uses. Staff can edit
+            // them per-request afterwards if needed.
+            termsAndConditions: DEFAULT_TERMS_AND_CONDITIONS,
+            cancellationConditions: DEFAULT_CANCELLATION_CONDITIONS,
 
             status: BookingRequestStatus.pending,
         };
