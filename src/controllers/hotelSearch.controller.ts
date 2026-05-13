@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import hotelSearchService from '../services/hotelSearch.service';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
+import requestRepository from '../repositories/request.repository';
 import { subscribe } from '../services/sseManager';
 import { sendResponse } from '../utils/response';
 
@@ -120,9 +121,20 @@ export class HotelSearchController {
     async probeStatus(req: Request, res: Response, next: NextFunction) {
         try {
             const requestId = req.params['id'] as string;
-            const jobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+            const [jobs, storedPhase] = await Promise.all([
+                hotelProbeJobRepository.findBySearchRequest(requestId),
+                requestRepository.getSearchPhase(requestId),
+            ]);
 
             type JobRow = { status: string };
+            // Terminal-detection signal for the polling FE. The watcher writes
+            // 'in_progress' at search start and flips to 'settled' / 'exhausted'
+            // before broadcasting the corresponding SSE event. NULL means no
+            // search has been started yet — FE treats null as 'in_progress'
+            // for safety. Don't infer from queued/running counts alone: with
+            // pagination they can transiently be 0 between batches.
+            const phase: 'in_progress' | 'settled' | 'exhausted' = storedPhase ?? 'in_progress';
+
             const summary = {
                 total:     jobs.length,
                 queued:    jobs.filter((j: JobRow) => j.status === 'QUEUED').length,
@@ -130,6 +142,7 @@ export class HotelSearchController {
                 completed: jobs.filter((j: JobRow) => j.status === 'COMPLETED').length,
                 skipped:   jobs.filter((j: JobRow) => j.status === 'SKIPPED_INSUFFICIENT').length,
                 failed:    jobs.filter((j: JobRow) => j.status === 'FAILED').length,
+                phase,
             };
 
             return sendResponse(res, 200, { requestId, summary, jobs }, 'Probe status');

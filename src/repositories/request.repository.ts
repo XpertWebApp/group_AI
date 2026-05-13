@@ -52,6 +52,7 @@ const FULL_SELECT = {
     // System
     source: true,
     status: true,
+    searchPhase: true,
     processed: true,
     processedAt: true,
     createdAt: true,
@@ -213,6 +214,59 @@ export class RequestRepository {
             where: { id },
             data: { status },
             select: { id: true, referenceNumber: true, status: true },
+        });
+    }
+
+    /**
+     * Update the search-phase signal read by the polling frontend.
+     * Values: 'in_progress' (search active), 'settled' (search done with
+     * results), 'exhausted' (search done with zero viable hotels — request
+     * flagged for manual handling). Best-effort: never throws, errors logged
+     * elsewhere — a missed phase update should not abort the search itself.
+     */
+    async updateSearchPhase(id: string, phase: 'in_progress' | 'settled' | 'exhausted') {
+        return prisma.bookingRequest.update({
+            where: { id },
+            data: { searchPhase: phase },
+            select: { id: true, searchPhase: true },
+        });
+    }
+
+    /**
+     * Lightweight read for the polling /hotel-search/status endpoint.
+     * Avoids the FULL_SELECT findById join cost (proposals + hotels + services + attachments)
+     * on a hot path that's hit every 5 seconds while a search is in flight.
+     */
+    async getSearchPhase(id: string): Promise<'in_progress' | 'settled' | 'exhausted' | null> {
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id },
+            select: { searchPhase: true },
+        });
+        return (row?.searchPhase as 'in_progress' | 'settled' | 'exhausted' | null | undefined) ?? null;
+    }
+
+    /**
+     * Find booking requests whose search has been "in_progress" longer than `staleAfterMinutes`.
+     * Used by the startup sweeper to recover stalled searches whose watcher died
+     * (server restart, silent crash, etc.) and left the phase column stuck.
+     * Returns only the columns the sweeper needs — avoids the heavy FULL_SELECT.
+     */
+    async findStalledInProgressSearches(staleAfterMinutes = 5) {
+        const cutoff = new Date(Date.now() - staleAfterMinutes * 60 * 1000);
+        return prisma.bookingRequest.findMany({
+            where: {
+                searchPhase: 'in_progress',
+                updatedAt: { lt: cutoff },
+            },
+            select: {
+                id: true,
+                referenceNumber: true,
+                destinationId: true,
+                destinationName: true,
+                starRating: true,
+                status: true,
+                updatedAt: true,
+            },
         });
     }
 

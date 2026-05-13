@@ -54,6 +54,7 @@ export class HotelSearchRepository {
         destinationId: number,
         starRatings: number[],
         limit = 200,
+        offset = 0,
     ): Promise<HotelCodeRow[]> {
         const select = {
             hotelCode: true,
@@ -67,19 +68,60 @@ export class HotelSearchRepository {
             totalRooms: true,
         };
 
+        // Stable ORDER BY: larger hotels first (more supply per WBE call) with
+        // hotelCode as the tiebreaker so paginated batches never overlap or skip.
+        // Pre-existing limit-only callers stay backwards-compatible because
+        // ordering doesn't change semantics for them — just makes results
+        // deterministic across runs.
+        const orderBy = [
+            { totalRooms: { sort: 'desc', nulls: 'last' } } as const,
+            { hotelCode: 'asc' } as const,
+        ];
+
         if (starRatings.length === 0) {
-            return prisma.hotel.findMany({ where: { destinationId }, select, take: limit });
+            return prisma.hotel.findMany({
+                where: { destinationId },
+                select,
+                orderBy,
+                take: limit,
+                skip: offset,
+            });
         }
 
         return prisma.hotel.findMany({
             where: {
                 destinationId,
                 OR: starRatings.flatMap((star) => [
-                    { starRating: { gte: new Decimal(star - 0.49), lte: new Decimal(star + 0.49) } },
+                    { starRating: { gte: new Decimal(star - 0.5), lte: new Decimal(star + 0.5) } },
                 ]),
             },
             select,
+            orderBy,
             take: limit,
+            skip: offset,
+        });
+    }
+
+    /**
+     * Count the total hotels matching a destination + star-rating filter.
+     * Used by the pagination orchestrator to detect "destination exhausted"
+     * without fetching an empty batch. Mirrors the WHERE clause of
+     * getHotelCodesByDestination() exactly.
+     */
+    async countHotelsByDestination(
+        destinationId: number,
+        starRatings: number[],
+    ): Promise<number> {
+        if (starRatings.length === 0) {
+            return prisma.hotel.count({ where: { destinationId } });
+        }
+        return prisma.hotel.count({
+            where: {
+                destinationId,
+                OR: starRatings.flatMap((star) => [
+                    { starRating: { gte: new Decimal(star - 0.5), lte: new Decimal(star + 0.5) } },
+                ]),
+            },
         });
     }
 

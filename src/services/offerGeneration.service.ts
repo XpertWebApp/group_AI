@@ -14,6 +14,7 @@ import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import logger from '../utils/logger';
 import { countTotalRooms } from '../utils/roomUtils';
 import { BookingRequestStatus } from '@prisma/client';
+import { TARGET_VIABLE_HOTELS, SEARCH_BATCH_SIZE, MAX_SEARCH_BATCHES } from '../config/probeConfig';
 
 const DEFAULT_MARKUP_PCT = 18;
 
@@ -196,6 +197,11 @@ export class OfferGenerationService {
                         BookingRequestStatus.needs_manual_handling,
                     );
                 }
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
                 const reason = queueResult.manualRequestOnly
                     ? 'No hotels found at any relaxation level — flagged for manual handling.'
                     : 'No candidate hotels found for this destination and star rating.';
@@ -205,8 +211,50 @@ export class OfferGenerationService {
 
             logger.info({ requestId, jobsQueued: queueResult.jobsQueued }, 'Waiting for probe jobs to complete');
 
-            // Step 2: Wait for all jobs to reach a terminal state
-            const jobs = await waitForJobs(requestId);
+            // Step 2: Wait for all jobs to reach a terminal state, then iterate
+            // additional batches until TARGET_VIABLE_HOTELS is reached, the
+            // destination is exhausted, or MAX_SEARCH_BATCHES is hit. The first
+            // batch was already queued by generateAutoOffer above; this loop
+            // chains follow-up batches via enqueueAdditionalCandidates.
+            let jobs = await waitForJobs(requestId);
+            let viableCount = await hotelProbeJobRepository.countViable(requestId);
+            let paginationContext = queueResult.paginationContext;
+
+            while (
+                paginationContext &&
+                viableCount < TARGET_VIABLE_HOTELS &&
+                paginationContext.nextOffset < paginationContext.totalCandidates &&
+                paginationContext.nextOffset < SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES
+            ) {
+                logger.info(
+                    {
+                        requestId,
+                        viableSoFar: viableCount,
+                        target: TARGET_VIABLE_HOTELS,
+                        nextOffset: paginationContext.nextOffset,
+                        totalCandidates: paginationContext.totalCandidates,
+                    },
+                    'Auto-offer: viable count below target — queueing next batch',
+                );
+
+                const batch = await hotelSearchService.enqueueAdditionalCandidates(
+                    requestId,
+                    paginationContext,
+                    { mealType, markupPercent: DEFAULT_MARKUP_PCT },
+                );
+                if (batch.decision !== 'queued' || batch.queuedCount === 0) {
+                    logger.info(
+                        { requestId, decision: batch.decision, viableCount },
+                        'Auto-offer: pagination stopped',
+                    );
+                    break;
+                }
+
+                paginationContext = { ...paginationContext, nextOffset: batch.nextOffset };
+                jobs = await waitForJobs(requestId);
+                viableCount = await hotelProbeJobRepository.countViable(requestId);
+            }
+
             const completedJobs = jobs.filter((j) => (j.status as string) === 'COMPLETED');
 
             if (completedJobs.length === 0) {
@@ -217,6 +265,11 @@ export class OfferGenerationService {
                     requestId,
                     BookingRequestStatus.needs_manual_handling,
                 );
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
                 const reason = 'No hotels with sufficient capacity found after probing — flagged for manual handling.';
                 logger.warn({ requestId }, reason);
                 await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
@@ -228,6 +281,11 @@ export class OfferGenerationService {
                 applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRating);
 
             if (acceptedHotels.length === 0) {
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
                 const reason = 'No hotels passed the accumulation gate (all had < 6 rooms or no valid supplier split).';
                 logger.warn({ requestId, completedJobs: completedJobs.length }, reason);
                 await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
@@ -447,6 +505,11 @@ export class OfferGenerationService {
                 );
 
                 await requestRepository.updateStatus(requestId, BookingRequestStatus.ai_generated);
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'settled');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) failed');
+                }
 
                 await notificationService.notifyNewOfferReady({
                     requestId,
@@ -469,6 +532,11 @@ export class OfferGenerationService {
                 );
 
                 await requestRepository.updateStatus(requestId, BookingRequestStatus.ai_generated);
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'settled');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) failed');
+                }
 
                 await notificationService.notifyInsufficientInventory({
                     requestId,
@@ -485,6 +553,11 @@ export class OfferGenerationService {
             }
         } catch (err: any) {
             logger.error({ err, requestId }, 'AI offer generation failed');
+            try {
+                await requestRepository.updateSearchPhase(requestId, 'exhausted');
+            } catch (phaseErr: any) {
+                logger.warn({ err: phaseErr?.message, requestId }, 'updateSearchPhase(exhausted) after error failed');
+            }
             await notificationService.notifyOfferGenerationFailed({
                 requestId,
                 referenceNumber: refNum,
