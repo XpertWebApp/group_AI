@@ -1118,20 +1118,26 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     console.log(`[Step 3.4] PASS ${hotelCode}: validatedRooms=${validatedRoomsAllocated}, suppliers=${validatedSplit.length}, earliestCxlDeadline=${earliestCxlDeadline}`);
 
     // ── Enrich with DB hotel info ────────────────────────────────────────────
-    // Prefer GIATA's categorised image (exterior → room → lobby → …) over WBE's
-    // arbitrary first image, which is often a random facility shot.
-    let imageUrl: string | null = null;
-    let imageSource: 'giata' | 'wbe' | 'none' = 'none';
-    if (dbHotel?.giataImageUrl) {
-        imageUrl = dbHotel.giataImageUrl;
-        imageSource = 'giata';
-    } else if (dbHotel?.primaryImageKey) {
-        let decodedKey = dbHotel.primaryImageKey;
-        try { decodedKey = decodeURIComponent(dbHotel.primaryImageKey); } catch { /* use as-is */ }
-        imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
-        imageSource = 'wbe';
-    }
-    logger.debug({ hotelCode, imageSource }, 'Primary image source');
+    // Build a fallback chain of image URLs so the FE can walk to the next one
+    // when the proxy returns 404 / blank bytes. Priority:
+    //   1. All GIATA categorised images (exterior → room → lobby → …).
+    //   2. All WBE imageKeys ordered by displayOrder, wrapped in our proxy.
+    // The first entry is the "primary" — exposed as the legacy `imageUrl`
+    // field for backwards compatibility; `imageUrls` is the new full list.
+    const wbeImageUrls = (dbHotel?.allImageKeys ?? []).map((key) => {
+        let decoded = key;
+        try { decoded = decodeURIComponent(key); } catch { /* use as-is */ }
+        return `/api/v1/hotels/image?key=${encodeURIComponent(decoded)}`;
+    });
+    const imageUrls: string[] = [...(dbHotel?.giataImageUrls ?? []), ...wbeImageUrls];
+    const imageUrl: string | null = imageUrls[0] ?? null;
+    const imageSource: 'giata' | 'wbe' | 'none' =
+        (dbHotel?.giataImageUrls?.length ?? 0) > 0
+            ? 'giata'
+            : wbeImageUrls.length > 0
+                ? 'wbe'
+                : 'none';
+    logger.debug({ hotelCode, imageSource, total: imageUrls.length }, 'Primary image source');
 
     // Calculate sell price — uses HIGHEST mid-range price across ALL room types (Step 4.1)
     // Prefer OptionDetailsV2-derived prices (authoritative) over search prices (WBE
@@ -1252,6 +1258,10 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
         starRating: floorStarRating(dbHotel?.starRating ? Number(dbHotel.starRating) : null),
         imageUrl,
+        // Ordered fallback chain — FE renders the first URL and `onerror`s
+        // down the list until one loads. Always non-empty when imageUrl is
+        // set; empty array when the hotel has no images at all.
+        imageUrls,
         // Public SETTHub detail page URL — frontend wraps the hotel name in a
         // link to open it (Oliver's "no duplicate detail page, just link out" ask).
         // Null when masterHotelId isn't synced yet — frontend renders plain text.

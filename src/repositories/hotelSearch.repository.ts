@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import Decimal from 'decimal.js';
-import { pickBestGiataImage } from '../config/imagePriority';
+import { pickBestGiataImage, sortGiataImagesByPriority } from '../config/imagePriority';
 import { buildSethubDetailsUrl } from '../config/sethubUrl';
 import {
     resolveMultiLangDescriptions,
@@ -23,14 +23,28 @@ export interface HotelCodeRow {
     longitude: Decimal | null;
     /** Physical room count from WBE static data. Used for Step 3.2 inventory overlap check. */
     totalRooms?: number | null;
-    /** Primary image key (displayOrder=0) from HotelImage table, if available. */
+    /** Primary image key (lowest displayOrder with a non-empty imageKey). */
     primaryImageKey?: string | null;
+    /**
+     * Every non-empty WBE imageKey for the hotel, ordered by displayOrder ASC.
+     * Used by the FE as a fallback chain: when the proxy returns 404/blank
+     * for the primary key (some WBE rows have a key but the CDN has no
+     * actual image bytes), the FE walks the rest of the list until one
+     * resolves. Empty array when the hotel has no WBE images.
+     */
+    allImageKeys?: string[];
     /**
      * Direct GIATA CDN URL for the best-matched categorised image (priority:
      * exterior → room → lobby → others). Preferred over primaryImageKey.
      * Null when the hotel has no GIATA images synced yet.
      */
     giataImageUrl?: string | null;
+    /**
+     * Every GIATA categorised image URL for the hotel in picker-priority
+     * order. Same fallback purpose as `allImageKeys` — lets the FE try
+     * the next-best GIATA image when the top pick fails to load.
+     */
+    giataImageUrls?: string[];
     /** SETTHub numeric hotel ID used to build the public detail page URL. */
     masterHotelId?: number | null;
     /**
@@ -245,12 +259,18 @@ export class HotelSearchRepository {
                     metadata: true,
                 },
             }),
+            // Fetch all WBE image rows for the requested hotels ordered by
+            // displayOrder ASC. We then pick the first row with a non-empty
+            // imageKey per hotel in the JS layer below. Previously we
+            // hard-pinned displayOrder=0, which silently failed for hotels
+            // whose row at index 0 had a blank/missing imageKey but had
+            // perfectly good images at indexes 1, 2, 3… (Oliver flagged
+            // multiple Samui / Chaweng hotels showing as blank cards even
+            // though their detail dialog had 30+ images).
             prisma.hotelImage.findMany({
-                where: {
-                    hotelCode: { in: hotelCodes },
-                    displayOrder: 0,
-                },
-                select: { hotelCode: true, imageKey: true },
+                where: { hotelCode: { in: hotelCodes } },
+                select: { hotelCode: true, imageKey: true, displayOrder: true },
+                orderBy: { displayOrder: 'asc' },
             }),
             // GIATA categorised images — preferred over WBE's first image.
             // Pick widest size available per image; picker below prefers 4K > FullHD > large > medium > small.
@@ -281,8 +301,20 @@ export class HotelSearchRepository {
             }),
         ]);
 
+        // Collect EVERY non-empty WBE imageKey per hotel, preserving the
+        // displayOrder ASC ordering (rows already arrived sorted from the
+        // SQL query). The first entry in each list is the "primary" key;
+        // the rest are fallbacks the FE walks through on load failure.
+        const imageKeysByHotel = new Map<string, string[]>();
+        for (const img of images) {
+            const key = img.imageKey?.trim();
+            if (!key) continue;
+            const list = imageKeysByHotel.get(img.hotelCode) ?? [];
+            list.push(key);
+            imageKeysByHotel.set(img.hotelCode, list);
+        }
         const imageMap = new Map<string, string>();
-        for (const img of images) imageMap.set(img.hotelCode, img.imageKey);
+        for (const [code, list] of imageKeysByHotel) imageMap.set(code, list[0]!);
 
         // Group GIATA images by hotelCode so we can pick the best one per hotel.
         const giataByHotel = new Map<string, typeof giataImages>();
@@ -312,24 +344,29 @@ export class HotelSearchRepository {
             // keep working unchanged.
             const resolved = pickLegacyDescription(bundles, lang);
 
-            // Pick the best GIATA image per Oliver's priority (exterior → room → lobby → ...).
-            // GIATA URLs need HTTP Basic Auth, so we wrap them in our proxy endpoint
-            // (GET /api/v1/hotels/giata-image?url=<encoded>) which authenticates and streams.
-            const bestGiata = pickBestGiataImage(giataByHotel.get(h.hotelCode) ?? []);
-            // Prefer the largest available size: 4K (urlOriginal) → Full HD → large → medium → small.
-            // Older rows not yet re-synced will fall back to urlLarge (800px) seamlessly.
-            const rawGiataUrl = bestGiata
-                ? (bestGiata.urlOriginal ?? bestGiata.urlFullHd ?? bestGiata.urlLarge ?? bestGiata.urlMedium ?? bestGiata.urlSmall ?? null)
-                : null;
-            const giataImageUrl = rawGiataUrl
-                ? `/api/v1/hotels/giata-image?url=${encodeURIComponent(rawGiataUrl)}`
-                : null;
+            // Sort every GIATA image for this hotel by Oliver's priority
+            // (exterior → room → lobby → ...) and convert each to its widest
+            // available size URL wrapped in our auth proxy. The first entry
+            // is the "primary" GIATA image; the rest are fallbacks.
+            const sortedGiata = sortGiataImagesByPriority(giataByHotel.get(h.hotelCode) ?? []);
+            const pickWidestSize = (img: typeof sortedGiata[number]): string | null =>
+                img.urlOriginal ?? img.urlFullHd ?? img.urlLarge ?? img.urlMedium ?? img.urlSmall ?? null;
+            const giataImageUrls = sortedGiata
+                .map(pickWidestSize)
+                .filter((u): u is string => !!u)
+                .map((u) => `/api/v1/hotels/giata-image?url=${encodeURIComponent(u)}`);
+            const giataImageUrl = giataImageUrls[0] ?? null;
+            // Kept for any callers that still read pickBestGiataImage's result
+            // shape; new callers should consume `giataImageUrls`.
+            void pickBestGiataImage;
 
             const { metadata: _meta, ...hotelFields } = h;
             map.set(h.hotelCode, {
                 ...hotelFields,
                 primaryImageKey: imageMap.get(h.hotelCode) ?? null,
+                allImageKeys: imageKeysByHotel.get(h.hotelCode) ?? [],
                 giataImageUrl,
+                giataImageUrls,
                 sethubDetailsUrl: buildSethubDetailsUrl(h.masterHotelId),
                 description: resolved.description,
                 descriptionLanguage: resolved.descriptionLanguage,

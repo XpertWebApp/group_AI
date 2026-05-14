@@ -146,12 +146,15 @@ export class HotelSearchController {
                 phase,
             };
 
-            // Retroactive multi-lang description merge — re-resolve EN/DE
-            // descriptions from GIATA at response time so jobs persisted
-            // before the multi-lang deploy (which only have the legacy
-            // `description` field) still drive a working EN↔DE toggle on the
-            // FE. Cost is one batched hotel lookup per status poll; trivial
-            // compared to the per-hotel probe roundtrips already in flight.
+            // Retroactive refresh of multi-lang descriptions AND primary
+            // image — both fields can change after a job is persisted
+            // (GIATA backfills, image picker fixed for non-zero displayOrder
+            // rows), so we re-resolve them from the live picker at response
+            // time. This lets jobs persisted before today's fixes still
+            // show correct images + EN/DE descriptions without re-running
+            // the search. Cost: one batched hotel lookup per status poll;
+            // trivial compared to the per-hotel probe roundtrips already
+            // in flight.
             const completedJobs = jobs.filter(
                 (j: any) => j.status === 'COMPLETED' && j.resultJson?.hotelCode,
             );
@@ -163,10 +166,31 @@ export class HotelSearchController {
                 const code = j.resultJson?.hotelCode;
                 if (!code) return j;
                 const row = hotelMap.get(code);
-                if (!row?.descriptions) return j;
+                if (!row) return j;
+
+                // Mirror the worker's imageUrl chain so jobs persisted before
+                // today's fix retroactively get the full fallback list:
+                // GIATA URLs (priority sorted) → WBE keys (displayOrder ASC).
+                const refreshedWbeUrls = (row.allImageKeys ?? []).map((key) => {
+                    let decoded = key;
+                    try { decoded = decodeURIComponent(key); } catch { /* use as-is */ }
+                    return `/api/v1/hotels/image?key=${encodeURIComponent(decoded)}`;
+                });
+                const refreshedImageUrls: string[] = [
+                    ...(row.giataImageUrls ?? []),
+                    ...refreshedWbeUrls,
+                ];
+                const refreshedImageUrl: string | null =
+                    refreshedImageUrls[0] ?? (j.resultJson?.imageUrl ?? null);
+
                 return {
                     ...j,
-                    resultJson: { ...j.resultJson, descriptions: row.descriptions },
+                    resultJson: {
+                        ...j.resultJson,
+                        ...(row.descriptions ? { descriptions: row.descriptions } : {}),
+                        imageUrl: refreshedImageUrl,
+                        imageUrls: refreshedImageUrls,
+                    },
                 };
             });
 

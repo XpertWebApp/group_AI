@@ -40,10 +40,22 @@ export function pickBestGiataImage<T extends { imageType: string | null; display
     images: T[],
 ): T | null {
     if (!images || images.length === 0) return null;
+    return sortGiataImagesByPriority(images)[0] ?? null;
+}
+
+/**
+ * Sort every GIATA image for a hotel in the same priority order used by
+ * `pickBestGiataImage`. The FE uses this as a fallback chain — when the
+ * top-priority URL fails to load (CDN miss, broken row), it tries the
+ * next one, and so on. Returns a new array; does not mutate the input.
+ */
+export function sortGiataImagesByPriority<T extends { imageType: string | null; displayOrder: number }>(
+    images: T[],
+): T[] {
     return [...images].sort((a, b) => {
         const pa = GIATA_IMAGE_TYPE_PRIORITY[(a.imageType ?? '').toLowerCase()] ?? 0;
         const pb = GIATA_IMAGE_TYPE_PRIORITY[(b.imageType ?? '').toLowerCase()] ?? 0;
         if (pa !== pb) return pb - pa;          // higher priority first
         return a.displayOrder - b.displayOrder; // lower displayOrder first
-    })[0] ?? null;
+    });
 }
