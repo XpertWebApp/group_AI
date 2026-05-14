@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import hotelSearchService from '../services/hotelSearch.service';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
+import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import requestRepository from '../repositories/request.repository';
 import { subscribe } from '../services/sseManager';
 import { sendResponse } from '../utils/response';
@@ -145,7 +146,31 @@ export class HotelSearchController {
                 phase,
             };
 
-            return sendResponse(res, 200, { requestId, summary, jobs }, 'Probe status');
+            // Retroactive multi-lang description merge — re-resolve EN/DE
+            // descriptions from GIATA at response time so jobs persisted
+            // before the multi-lang deploy (which only have the legacy
+            // `description` field) still drive a working EN↔DE toggle on the
+            // FE. Cost is one batched hotel lookup per status poll; trivial
+            // compared to the per-hotel probe roundtrips already in flight.
+            const completedJobs = jobs.filter(
+                (j: any) => j.status === 'COMPLETED' && j.resultJson?.hotelCode,
+            );
+            const hotelCodes = [
+                ...new Set(completedJobs.map((j: any) => j.resultJson.hotelCode as string)),
+            ];
+            const hotelMap = await hotelSearchRepository.getHotelsByCode(hotelCodes);
+            const enrichedJobs = jobs.map((j: any) => {
+                const code = j.resultJson?.hotelCode;
+                if (!code) return j;
+                const row = hotelMap.get(code);
+                if (!row?.descriptions) return j;
+                return {
+                    ...j,
+                    resultJson: { ...j.resultJson, descriptions: row.descriptions },
+                };
+            });
+
+            return sendResponse(res, 200, { requestId, summary, jobs: enrichedJobs }, 'Probe status');
         } catch (error) {
             next(error);
         }

@@ -1259,6 +1259,9 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         description: dbHotel?.description ?? null,
         descriptionLanguage: dbHotel?.descriptionLanguage ?? null,
         descriptionSource: dbHotel?.descriptionSource ?? null,
+        // Both EN/DE translations in one payload — lets the FE swap card text
+        // instantly on language toggle without re-running the search.
+        descriptions: (dbHotel as any)?.descriptions ?? null,
         address: (dbHotel as any)?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,
