@@ -4,7 +4,8 @@ import logger from '../utils/logger';
 import { floorStarRating } from '../utils/starRating';
 import giataRepository from '../repositories/giata.repository';
 import {
-    resolveHotelDescription,
+    resolveMultiLangDescriptions,
+    pickLegacyDescription,
     GIATA_LOCATION_SECTION,
     type SupportedLang,
 } from '../utils/hotelDescription';
@@ -46,10 +47,18 @@ export class HotelService {
             }
         }
 
-        // GIATA Lage / Location section in the requested language, falling back to WBE.
-        const giataRows = await giataRepository.getTexts(hotelCode, lang);
-        const giataLocation = giataRows.find((r) => r.sectionType === GIATA_LOCATION_SECTION)?.content ?? null;
-        const resolved = resolveHotelDescription(giataLocation, meta, lang);
+        // GIATA Lage / Location section in BOTH supported languages — return
+        // both so the FE can toggle between EN/DE on the detail page without
+        // a fresh request. Fetching without a `lang` filter pulls all langs;
+        // we then pick out section 100 for each.
+        const giataRows = await giataRepository.getTexts(hotelCode);
+        const giataByLang = { en: null as string | null, de: null as string | null };
+        for (const r of giataRows) {
+            if (r.sectionType !== GIATA_LOCATION_SECTION) continue;
+            if (r.lang === 'en' || r.lang === 'de') giataByLang[r.lang] = r.content;
+        }
+        const bundles = resolveMultiLangDescriptions(giataByLang, meta);
+        const resolved = pickLegacyDescription(bundles, lang);
 
         return {
             hotelCode: hotel.hotelCode,
@@ -57,6 +66,7 @@ export class HotelService {
             description: resolved.description,
             descriptionLanguage: resolved.descriptionLanguage,
             descriptionSource: resolved.descriptionSource,
+            descriptions: bundles,
             location: meta?.Location || null,
             address: hotel.address,
             addressCity: hotel.addressCity,

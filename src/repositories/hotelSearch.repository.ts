@@ -3,9 +3,11 @@ import Decimal from 'decimal.js';
 import { pickBestGiataImage } from '../config/imagePriority';
 import { buildSethubDetailsUrl } from '../config/sethubUrl';
 import {
-    resolveHotelDescription,
+    resolveMultiLangDescriptions,
+    pickLegacyDescription,
     GIATA_LOCATION_SECTION,
     type SupportedLang,
+    type MultiLangDescriptions,
 } from '../utils/hotelDescription';
 
 const prisma = new PrismaClient();
@@ -43,6 +45,13 @@ export interface HotelCodeRow {
     descriptionLanguage?: SupportedLang | null;
     /** 'giata' when the text came from GIATA MHG, 'wbe' on metadata fallback, null when nothing was found. */
     descriptionSource?: 'giata' | 'wbe' | null;
+    /**
+     * Both supported translations of the description in one payload so the
+     * FE can swap text instantly when the user toggles the language switcher
+     * without re-running the search. Always present on results from
+     * getHotelsByCode().
+     */
+    descriptions?: MultiLangDescriptions;
 }
 
 export class HotelSearchRepository {
@@ -258,15 +267,17 @@ export class HotelSearchRepository {
                     urlOriginal: true,
                 },
             }),
-            // GIATA short location description for the requested language.
-            // Section type '100' = Lage / Location — short summary suitable for cards.
+            // GIATA short location description in BOTH supported languages —
+            // we always return both so the FE can switch languages instantly
+            // without re-running the search. Section type '100' = Lage /
+            // Location — short summary suitable for cards.
             prisma.hotelGiataText.findMany({
                 where: {
                     hotelCode: { in: hotelCodes },
-                    lang,
+                    lang: { in: ['en', 'de'] },
                     sectionType: GIATA_LOCATION_SECTION,
                 },
-                select: { hotelCode: true, content: true },
+                select: { hotelCode: true, lang: true, content: true },
             }),
         ]);
 
@@ -281,18 +292,25 @@ export class HotelSearchRepository {
             giataByHotel.set(img.hotelCode, arr);
         }
 
-        // Map hotelCode → GIATA description content (already filtered by lang).
-        const giataTextByHotel = new Map<string, string>();
-        for (const t of giataTexts) giataTextByHotel.set(t.hotelCode, t.content);
+        // Map hotelCode → { en, de } GIATA section-100 content.
+        const giataTextByHotel = new Map<string, { en: string | null; de: string | null }>();
+        for (const t of giataTexts) {
+            const existing = giataTextByHotel.get(t.hotelCode) ?? { en: null, de: null };
+            if (t.lang === 'en' || t.lang === 'de') existing[t.lang] = t.content;
+            giataTextByHotel.set(t.hotelCode, existing);
+        }
 
         const map = new Map<string, HotelCodeRow>();
         for (const h of hotels) {
             const meta = h.metadata as Record<string, any> | null;
-            const resolved = resolveHotelDescription(
-                giataTextByHotel.get(h.hotelCode) ?? null,
+            const bundles = resolveMultiLangDescriptions(
+                giataTextByHotel.get(h.hotelCode) ?? { en: null, de: null },
                 meta,
-                lang,
             );
+            // Keep the legacy single-language fields populated so existing FE
+            // code paths (and downstream consumers like the proposal builder)
+            // keep working unchanged.
+            const resolved = pickLegacyDescription(bundles, lang);
 
             // Pick the best GIATA image per Oliver's priority (exterior → room → lobby → ...).
             // GIATA URLs need HTTP Basic Auth, so we wrap them in our proxy endpoint
@@ -316,6 +334,7 @@ export class HotelSearchRepository {
                 description: resolved.description,
                 descriptionLanguage: resolved.descriptionLanguage,
                 descriptionSource: resolved.descriptionSource,
+                descriptions: bundles,
             });
         }
         return map;
