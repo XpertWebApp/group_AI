@@ -87,6 +87,18 @@ router.post(
 );
 
 /**
+ * POST /requests/:id/hotel-search/more
+ * User-triggered "Search More" — queues the next 200-hotel batch at the
+ * same destination/star level the previous search settled at.
+ */
+router.post(
+    '/:id/hotel-search/more',
+    authMiddleware,
+    searchLimiter,
+    hotelSearchController.searchMore,
+);
+
+/**
  * GET /requests/:id/hotel-search/events
  * SSE stream — real-time hotel probe progress + completed events.
  */

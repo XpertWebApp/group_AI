@@ -334,6 +334,13 @@ model BookingRequest {
   /// Values: 'in_progress' | 'settled' | 'exhausted'. NULL = no search has run yet
   /// (frontend treats NULL as 'in_progress' for safety).
   searchPhase            String?                    @map("search_phase") @db.VarChar(20)
+  /// Last-known pagination cursor for the manual hotel-search flow. Holds
+  /// { usedDestinationId, starRatings, totalCandidates, nextOffset } — the
+  /// watcher persists this just before broadcasting searchSettled so that
+  /// a subsequent "Search More" click can resume pagination exactly where
+  /// it left off. NULL when no cursor is available (search exhausted, or
+  /// pre-feature row).
+  searchPaginationCursor Json?                      @map("search_pagination_cursor")
   attachments            BookingRequestAttachment[]
   proposals              Proposal[]
 

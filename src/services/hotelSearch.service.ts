@@ -1148,6 +1148,16 @@ export class HotelSearchService {
                     },
                     'Post-probe relaxation: probes succeeded — watcher exiting',
                 );
+                // Persist the pagination cursor BEFORE flipping phase so a
+                // racing "Search More" click sees a consistent state: cursor
+                // present iff phase === 'settled'. Best-effort; a missed
+                // cursor just means the user has to re-run the search to
+                // unlock Search More — not data loss.
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, paginationContext);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(settled) failed');
+                }
                 // Mark phase=settled BEFORE the SSE broadcast so a polling FE
                 // racing the SSE will see the terminal phase on the next poll.
                 try {
@@ -1181,6 +1191,11 @@ export class HotelSearchService {
                     await requestRepository.updateSearchPhase(requestId, 'exhausted');
                 } catch (err: any) {
                     logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, null);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
                 }
                 broadcast(requestId, 'searchExhausted', {
                     requestId,
@@ -1227,6 +1242,11 @@ export class HotelSearchService {
                     await requestRepository.updateSearchPhase(requestId, 'exhausted');
                 } catch (err: any) {
                     logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, null);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
                 }
                 return;
             }
@@ -1404,6 +1424,11 @@ export class HotelSearchService {
             } catch (err: any) {
                 logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
             }
+            try {
+                await requestRepository.setSearchPaginationCursor(requestId, null);
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
+            }
             broadcast(requestId, 'searchExhausted', {
                 requestId,
                 finalLevel: relaxResult.appliedLevel,
@@ -1432,6 +1457,14 @@ export class HotelSearchService {
             await requestRepository.updateSearchPhase(requestId, 'in_progress');
         } catch (err: any) {
             logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(in_progress) failed — search continues');
+        }
+        // Clear any stale pagination cursor from a previous search on this
+        // request — a fresh search means a fresh cursor, persisted later
+        // by the watcher.
+        try {
+            await requestRepository.setSearchPaginationCursor(requestId, null);
+        } catch (err: any) {
+            logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) failed — search continues');
         }
 
         // Dispatch one HotelProbeJob per hotel to RabbitMQ
@@ -2158,14 +2191,19 @@ export class HotelSearchService {
         requestId: string,
         paginationContext: NonNullable<HotelSearchQueueResponse['paginationContext']>,
         params: { mealType?: string; markupPercent?: number; currencyCode?: string; nationalityCode?: string; waitSeconds?: number } = {},
+        options: { bypassCeiling?: boolean } = {},
     ): Promise<{
         decision: 'queued' | 'destination_exhausted' | 'max_batches_reached';
         queuedCount: number;
         queuedHotelCodes: string[];
         nextOffset: number;
     }> {
-        // Hard ceiling — never exceed SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES per relaxation level.
-        if (paginationContext.nextOffset >= SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES) {
+        // Hard ceiling — never exceed SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES
+        // per relaxation level. The "Search More" feature explicitly opts out
+        // via `bypassCeiling: true` because it's user-driven (one click = one
+        // batch) and the user is in control of how many batches to probe.
+        // The auto-offer flow leaves the ceiling in place.
+        if (!options.bypassCeiling && paginationContext.nextOffset >= SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES) {
             return {
                 decision: 'max_batches_reached',
                 queuedCount: 0,
@@ -2274,6 +2312,137 @@ export class HotelSearchService {
             queuedCount: freshHotels.length,
             queuedHotelCodes: freshHotels.map((h) => h.hotelCode),
             nextOffset,
+        };
+    }
+
+    /**
+     * User-triggered "Search More" — queue ONE additional 200-hotel batch at
+     * the current destination/star level, picking up exactly where the
+     * post-probe watcher left off. Reads the persisted cursor on the
+     * BookingRequest (written by the watcher just before searchSettled).
+     *
+     * Differences from the watcher's internal pagination loop:
+     *   - Skips the MAX_SEARCH_BATCHES ceiling (`bypassCeiling: true`) — the
+     *     user is in control of when to stop clicking.
+     *   - Does NOT advance the relaxation ladder. If the destination at the
+     *     current level is fully drained, we return `destination_exhausted`
+     *     and clear the cursor so the FE can hide the button.
+     *   - Spawns a minimal mini-watcher that waits for the new probes to
+     *     settle, advances the cursor's `nextOffset`, flips phase back to
+     *     'settled', and re-broadcasts `searchSettled`.
+     *
+     * Decisions returned to the caller:
+     *   - 'queued'                : the next batch is queued + mini-watcher running.
+     *   - 'destination_exhausted' : nothing left to probe at this level; cursor cleared.
+     *   - 'in_progress'           : another Search More / fresh search is already running.
+     *   - 'no_cursor'             : no cursor is persisted yet (pre-feature row, or search exhausted).
+     *   - 'exhausted'             : the request's search ended in 'exhausted' — no Search More.
+     */
+    async searchMoreForRequest(
+        requestId: string,
+        params: { mealType?: string; markupPercent?: number; currencyCode?: string; nationalityCode?: string; waitSeconds?: number } = {},
+    ): Promise<{
+        decision: 'queued' | 'destination_exhausted' | 'in_progress' | 'no_cursor' | 'exhausted';
+        message?: string;
+        queuedCount?: number;
+        nextOffset?: number;
+        sseEndpoint?: string;
+        statusEndpoint?: string;
+    }> {
+        const phase = await requestRepository.getSearchPhase(requestId);
+        if (phase === 'exhausted') {
+            return { decision: 'exhausted', message: 'Destination already fully exhausted.' };
+        }
+        if (phase === 'in_progress') {
+            return { decision: 'in_progress', message: 'A search is already in progress for this request.' };
+        }
+
+        const cursor = await requestRepository.getSearchPaginationCursor(requestId);
+        if (!cursor) {
+            return { decision: 'no_cursor', message: 'Search More not available — run a fresh search first.' };
+        }
+
+        // Flip phase to in_progress BEFORE queueing so a racing second click
+        // sees the in_progress phase and bails out cleanly.
+        try {
+            await requestRepository.updateSearchPhase(requestId, 'in_progress');
+        } catch (err: any) {
+            logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(in_progress) in searchMore failed — continuing');
+        }
+
+        const result = await this.enqueueAdditionalCandidates(
+            requestId,
+            cursor,
+            params,
+            { bypassCeiling: true },
+        );
+
+        if (result.decision !== 'queued' || result.queuedCount === 0) {
+            // Destination fully drained at this level — clear cursor, flip
+            // phase back, and notify the FE so the button hides.
+            try {
+                await requestRepository.setSearchPaginationCursor(requestId, null);
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) in searchMore failed');
+            }
+            try {
+                await requestRepository.updateSearchPhase(requestId, 'settled');
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) in searchMore failed');
+            }
+            const successCount = await hotelProbeJobRepository.countViable(requestId);
+            broadcast(requestId, 'searchSettled', {
+                requestId,
+                finalLevel: 'searchMoreExhausted' as any,
+                successCount,
+                totalCount: cursor.totalCandidates,
+            });
+            return {
+                decision: 'destination_exhausted',
+                message: 'No more hotels available at this level.',
+                queuedCount: 0,
+                nextOffset: cursor.nextOffset,
+            };
+        }
+
+        // Fire-and-forget mini-watcher. Waits for the new batch to settle,
+        // advances cursor, flips phase back to 'settled', re-broadcasts.
+        const newNextOffset = result.nextOffset;
+        setImmediate(() => {
+            this.waitForProbeJobsToTerminate(requestId)
+                .then(async (probeResult) => {
+                    try {
+                        await requestRepository.setSearchPaginationCursor(requestId, {
+                            ...cursor,
+                            nextOffset: newNextOffset,
+                        });
+                    } catch (err: any) {
+                        logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(advance) in searchMore failed');
+                    }
+                    try {
+                        await requestRepository.updateSearchPhase(requestId, 'settled');
+                    } catch (err: any) {
+                        logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) in searchMore mini-watcher failed');
+                    }
+                    const successCount = await hotelProbeJobRepository.countViable(requestId);
+                    broadcast(requestId, 'searchSettled', {
+                        requestId,
+                        finalLevel: 'searchMore' as any,
+                        successCount,
+                        totalCount: probeResult.totalCount,
+                    });
+                })
+                .catch((err) => {
+                    logger.error({ err: err?.message, requestId }, 'Search More mini-watcher crashed');
+                });
+        });
+
+        return {
+            decision: 'queued',
+            queuedCount: result.queuedCount,
+            nextOffset: newNextOffset,
+            sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+            statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
         };
     }
 

@@ -53,6 +53,7 @@ const FULL_SELECT = {
     source: true,
     status: true,
     searchPhase: true,
+    searchPaginationCursor: true,
     processed: true,
     processedAt: true,
     createdAt: true,
@@ -245,6 +246,66 @@ export class RequestRepository {
             select: { searchPhase: true },
         });
         return (row?.searchPhase as 'in_progress' | 'settled' | 'exhausted' | null | undefined) ?? null;
+    }
+
+    /**
+     * Read the persisted pagination cursor. NULL when no search has settled
+     * yet, the search ended in 'exhausted' (cursor explicitly cleared), or
+     * the request pre-dates the Search More feature.
+     *
+     * Shape: { usedDestinationId, starRatings, totalCandidates, nextOffset }.
+     */
+    async getSearchPaginationCursor(id: string): Promise<{
+        usedDestinationId: number;
+        starRatings: number[];
+        totalCandidates: number;
+        nextOffset: number;
+    } | null> {
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id },
+            select: { searchPaginationCursor: true },
+        });
+        const v = row?.searchPaginationCursor as any;
+        if (!v || typeof v !== 'object') return null;
+        // Defensive: validate the four fields we depend on. A malformed row
+        // (manual DB edit, schema drift) yields null instead of crashing.
+        if (
+            typeof v.usedDestinationId !== 'number' ||
+            !Array.isArray(v.starRatings) ||
+            typeof v.totalCandidates !== 'number' ||
+            typeof v.nextOffset !== 'number'
+        ) {
+            return null;
+        }
+        return {
+            usedDestinationId: v.usedDestinationId,
+            starRatings: v.starRatings,
+            totalCandidates: v.totalCandidates,
+            nextOffset: v.nextOffset,
+        };
+    }
+
+    /**
+     * Persist (or clear) the pagination cursor on the BookingRequest.
+     * Called by the post-probe watcher just before broadcasting
+     * searchSettled, and again by the Search More mini-watcher to advance
+     * `nextOffset` after each user-triggered batch. Pass `null` to clear
+     * (used when the destination has been fully drained).
+     */
+    async setSearchPaginationCursor(
+        id: string,
+        cursor: {
+            usedDestinationId: number;
+            starRatings: number[];
+            totalCandidates: number;
+            nextOffset: number;
+        } | null,
+    ) {
+        return prisma.bookingRequest.update({
+            where: { id },
+            data: { searchPaginationCursor: cursor === null ? Prisma.JsonNull : (cursor as any) },
+            select: { id: true },
+        });
     }
 
     /**
