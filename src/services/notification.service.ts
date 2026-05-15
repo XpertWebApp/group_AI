@@ -522,6 +522,8 @@ export class NotificationService {
         destinationName: string;
         source: 'portal' | 'wix' | 'wordpress';
         staffEmail?: string;
+        groupType?: string | null;
+        averageAge?: number | null;
     }) {
         const sourceLabel = opts.source === 'portal' ? 'portal form' : opts.source === 'wix' ? 'Wix webhook' : 'WordPress webhook';
         const title = `New group request received (#${opts.referenceNumber})`;
@@ -533,6 +535,8 @@ export class NotificationService {
             destinationName: opts.destinationName,
             source: sourceLabel,
             requestId: opts.requestId,
+            groupType: opts.groupType,
+            averageAge: opts.averageAge,
         });
         const replyTo = await this.resolveStaffReplyTo(opts.requestId);
 

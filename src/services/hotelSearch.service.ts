@@ -868,6 +868,12 @@ export class HotelSearchService {
          * Defaults to 0 (full ladder).
          */
         startLevelIndex?: number;
+        /**
+         * When true, the repository orders youth-friendly hotels first so
+         * pagination probes them before chain hotels. Driven by the
+         * request's groupType (youth / school).
+         */
+        prioritiseYouthFriendly?: boolean;
     }): Promise<{
         candidates: Awaited<ReturnType<typeof hotelSearchRepository.getHotelCodesByDestination>>;
         appliedLevel: RelaxationLevel;
@@ -882,7 +888,13 @@ export class HotelSearchService {
             for (let i = fromIndex; i < RELAXATION_LADDER.length; i++) {
                 const config = RELAXATION_LADDER[i]!;
                 const stars = buildStarList(opts.requestedStarRating, config.starWindow);
-                let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(destId, stars);
+                let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
+                    destId,
+                    stars,
+                    undefined,
+                    undefined,
+                    { prioritiseYouthFriendly: opts.prioritiseYouthFriendly === true },
+                );
                 if (dbHotels.length === 0) continue;
 
                 if (config.keepFacilities && opts.facilityIds && opts.facilityIds.length > 0) {
@@ -1318,11 +1330,14 @@ export class HotelSearchService {
         // (`includeAlternativeStars` is preserved for backwards-compat but
         //  is now superseded by the explicit ladder.)
         void includeAlternativeStars;
+        const groupTypeForPriority = ((request as any).groupType as string | null | undefined) ?? null;
+        const prioritiseYouthFriendly = groupTypeForPriority === 'youth' || groupTypeForPriority === 'school';
         const relaxResult = await this.findCandidatesWithRelaxation({
             destinationId,
             requestedStarRating,
             facilityIds: params.facilityIds,
             startLevelIndex: internalOpts?.startLevelIndex,
+            prioritiseYouthFriendly,
         });
         let dbHotels = relaxResult.candidates;
 
@@ -1609,6 +1624,8 @@ export class HotelSearchService {
         };
         const found = new Map<string, Candidate>();
 
+        const altGroupType = ((request as any).groupType as string | null | undefined) ?? null;
+        const altPrioritiseYouthFriendly = altGroupType === 'youth' || altGroupType === 'school';
         const collectAtDestination = async (
             destId: number,
             isFallback: boolean,
@@ -1617,7 +1634,13 @@ export class HotelSearchService {
             for (let i = fromIndex; i < RELAXATION_LADDER.length; i++) {
                 const config = RELAXATION_LADDER[i]!;
                 const stars = buildStarList(requestedStarRating, config.starWindow);
-                let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(destId, stars);
+                let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
+                    destId,
+                    stars,
+                    undefined,
+                    undefined,
+                    { prioritiseYouthFriendly: altPrioritiseYouthFriendly },
+                );
 
                 if (config.keepFacilities && params.facilityIds && params.facilityIds.length > 0) {
                     const allCodes = dbHotels.map((h) => h.hotelCode);
@@ -1930,10 +1953,13 @@ export class HotelSearchService {
         void includeAlternativeStars; // superseded by the explicit relaxation ladder
 
         // ── "Never say no" candidate selection (auto-offer flow) ──────────
+        const autoGroupType = ((request as any).groupType as string | null | undefined) ?? null;
+        const autoPrioritiseYouthFriendly = autoGroupType === 'youth' || autoGroupType === 'school';
         const relaxResult = await this.findCandidatesWithRelaxation({
             destinationId: request.destinationId,
             requestedStarRating,
             facilityIds: params.facilityIds,
+            prioritiseYouthFriendly: autoPrioritiseYouthFriendly,
         });
         const dbHotels = relaxResult.candidates;
 
@@ -2176,11 +2202,16 @@ export class HotelSearchService {
         const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
 
         // Fetch the next page of candidates at the same destination + star filter as the first batch.
+        // Pass through the same youth-friendly prioritisation flag the first batch used so subsequent
+        // batches keep the same ordering and don't skip youth-friendly inventory.
+        const batchGroupType = ((request as any).groupType as string | null | undefined) ?? null;
+        const batchPrioritiseYouthFriendly = batchGroupType === 'youth' || batchGroupType === 'school';
         const batch = await hotelSearchRepository.getHotelCodesByDestination(
             paginationContext.usedDestinationId,
             paginationContext.starRatings,
             SEARCH_BATCH_SIZE,
             paginationContext.nextOffset,
+            { prioritiseYouthFriendly: batchPrioritiseYouthFriendly },
         );
         if (batch.length === 0) {
             return {

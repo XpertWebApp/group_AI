@@ -1,6 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { pickBestGiataImage, sortGiataImagesByPriority } from '../config/imagePriority';
+import { YOUTH_FRIENDLY_NAME_PATTERNS } from '../config/youthFriendlyPatterns';
 import { buildSethubDetailsUrl } from '../config/sethubUrl';
 import {
     resolveMultiLangDescriptions,
@@ -78,7 +79,22 @@ export class HotelSearchRepository {
         starRatings: number[],
         limit = 200,
         offset = 0,
+        options: { prioritiseYouthFriendly?: boolean } = {},
     ): Promise<HotelCodeRow[]> {
+        // Youth / school group requests promote hotels whose names match the
+        // multilingual youth-friendly pattern list to the FRONT of the
+        // pagination queue. This is not a filter — every hotel is still
+        // probed in subsequent batches; we just reach the youth-friendly
+        // inventory first so the auto-offer's TARGET_VIABLE_HOTELS quota
+        // fills with hostels / guesthouses / Jugendherbergen before
+        // pagination stops. Required because high-`total_rooms` hotels
+        // (chain hotels) dominate the default ordering and youth-friendly
+        // inventory typically has NULL total_rooms (pushed to the tail by
+        // `NULLS LAST`).
+        if (options.prioritiseYouthFriendly) {
+            return this.getHotelCodesByDestinationRaw(destinationId, starRatings, limit, offset);
+        }
+
         const select = {
             hotelCode: true,
             name: true,
@@ -123,6 +139,76 @@ export class HotelSearchRepository {
             take: limit,
             skip: offset,
         });
+    }
+
+    /**
+     * Raw SQL variant of `getHotelCodesByDestination` used ONLY when
+     * `prioritiseYouthFriendly: true`. Adds a leading ORDER BY tier that
+     * sorts youth-friendly hotels (by name match against the shared
+     * pattern list) before non-friendly ones, then falls back to the
+     * standard `total_rooms DESC NULLS LAST, hotel_code ASC` ordering.
+     *
+     * Returns rows shaped to match `HotelCodeRow` so callers don't have
+     * to discriminate on which path produced the result.
+     */
+    private async getHotelCodesByDestinationRaw(
+        destinationId: number,
+        starRatings: number[],
+        limit: number,
+        offset: number,
+    ): Promise<HotelCodeRow[]> {
+        // Build the youth-friendly CASE expression: 0 when ANY pattern matches
+        // (lowercased substring), 1 otherwise. ANDed via OR of LIKE clauses.
+        const yfClauses = Prisma.join(
+            YOUTH_FRIENDLY_NAME_PATTERNS.map(
+                (p) => Prisma.sql`LOWER(name) LIKE ${'%' + p + '%'}`,
+            ),
+            ' OR ',
+        );
+
+        // Star-rating WHERE — match the half-star ±0.5 logic from the
+        // Prisma path exactly. If starRatings is empty, the clause is TRUE.
+        const starClause = starRatings.length === 0
+            ? Prisma.sql`TRUE`
+            : Prisma.join(
+                starRatings.map(
+                    (star) => Prisma.sql`(star_rating >= ${star - 0.5} AND star_rating <= ${star + 0.5})`,
+                ),
+                ' OR ',
+            );
+
+        const rows = await prisma.$queryRaw<Array<{
+            hotelCode: string;
+            name: string;
+            starRating: Decimal | null;
+            destinationId: number | null;
+            addressCity: string | null;
+            addressCountry: string | null;
+            latitude: Decimal | null;
+            longitude: Decimal | null;
+            totalRooms: number | null;
+        }>>`
+            SELECT
+                hotel_code           AS "hotelCode",
+                name,
+                star_rating          AS "starRating",
+                destination_id       AS "destinationId",
+                address_city         AS "addressCity",
+                address_country      AS "addressCountry",
+                latitude,
+                longitude,
+                total_rooms          AS "totalRooms"
+            FROM master.hotels
+            WHERE destination_id = ${destinationId}
+              AND (${starClause})
+            ORDER BY
+                CASE WHEN (${yfClauses}) THEN 0 ELSE 1 END ASC,
+                total_rooms DESC NULLS LAST,
+                hotel_code ASC
+            LIMIT ${limit} OFFSET ${offset};
+        `;
+
+        return rows;
     }
 
     /**

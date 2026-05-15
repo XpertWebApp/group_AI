@@ -120,6 +120,9 @@ export type CanonicalGroupType =
     | 'school'
     | 'family'
     | 'wedding'
+    | 'mice'
+    // Retained so historic rows with this value still type-check; new inputs
+    // are mapped to 'mice' instead.
     | 'conference'
     | 'other';
 
@@ -139,12 +142,15 @@ export function parseGroupType(raw: string | undefined | null): CanonicalGroupTy
     // Order matters: more specific patterns first.
     if (/(school|schule|schulgruppe|klassenfahrt)/.test(s)) return 'school';
     if (/(youth|jugend|jugendgruppe)/.test(s)) return 'youth';
-    if (/(business|corporate|gesch.?ftsgruppe|firmen|firmengruppe)/.test(s)) return 'business';
+    if (/(business|corporate|gesch.?ftsgruppe|firmengruppe)/.test(s)) return 'business';
     if (/(leisure|reisegruppe|holiday|urlaub)/.test(s)) return 'leisure';
     if (/(sport|sportgruppe|mannschaft)/.test(s)) return 'sports';
     if (/(family|familie|familiengruppe)/.test(s)) return 'family';
     if (/(wedding|hochzeit|brautpaar)/.test(s)) return 'wedding';
-    if (/(conference|konferenz|tagung|kongress|meeting)/.test(s)) return 'conference';
+    // MICE = Meetings, Incentives, Conferences, Exhibitions. Folds the
+    // legacy 'conference' branch in; conference/kongress/tagung/meeting
+    // are sub-cases of MICE and now share the same canonical bucket.
+    if (/(mice|meetings_incentives|meetings|incentive|exhibition|firmenevent|firmenveranstaltung|firmen|conference|konferenz|tagung|kongress|meeting)/.test(s)) return 'mice';
 
     return 'other';
 }
@@ -424,6 +430,8 @@ export class WebhookService {
                     destinationName: destination.name,
                     source: webhookSource,
                     staffEmail,
+                    groupType: (bookingRequest as any).groupType ?? null,
+                    averageAge: (bookingRequest as any).averageAge ?? null,
                 })
                 .catch((err) => logger.warn({ err: err.message, id: bookingRequest.id }, 'Webhook notifyNewRequestStaff failed'));
         }

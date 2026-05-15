@@ -153,6 +153,8 @@ export class RequestService {
                     destinationName: destName,
                     source: 'portal',
                     staffEmail,
+                    groupType: (request as any).groupType ?? data.groupType ?? null,
+                    averageAge: (request as any).averageAge ?? data.averageAge ?? null,
                 })
                 .catch((err) => logger.warn({ err: err.message, reqId }, 'notifyNewRequestStaff failed'));
         }

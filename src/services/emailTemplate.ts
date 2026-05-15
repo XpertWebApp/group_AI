@@ -423,24 +423,71 @@ export function buildNewRequestStaffEmail(opts: {
     destinationName: string;
     source: string;
     requestId?: string;
+    groupType?: string | null;
+    averageAge?: number | null;
 }): string {
     const dashboardUrl = requestLink(opts.requestId);
+    const groupLine = formatGroupLine(opts.groupType, opts.averageAge);
+    const baseRows = [
+        { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
+        { label: 'Client', value: opts.contactName },
+        { label: 'Destination', value: opts.destinationName },
+        { label: 'Source', value: opts.source },
+    ];
+    const rows = groupLine ? [...baseRows, { label: 'Group', value: groupLine }] : baseRows;
     return emailLayout({
         type: 'group',
         preheader: `New group request #${opts.referenceNumber} from ${opts.contactName} — ${opts.destinationName}`,
         body: `
             ${heading('New Group Request')}
             ${paragraph(`A new group request has been received via <strong>${opts.source}</strong> and is ready to be processed.`)}
-            ${detailsTable([
-                { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
-                { label: 'Client', value: opts.contactName },
-                { label: 'Destination', value: opts.destinationName },
-                { label: 'Source', value: opts.source },
-            ])}
+            ${detailsTable(rows)}
             ${ctaButton('Open Request', dashboardUrl)}
             ${quotePromise()}
         `,
     });
+}
+
+/**
+ * Format the "Group" line for staff-facing emails. Returns null when no
+ * groupType is set so the row is omitted entirely (avoids "Group: —" noise
+ * on legacy requests that pre-date the group_type field).
+ *
+ * For youth and school groups with a known average age, appends "(avg
+ * age: N)" so staff sees the age before opening the request.
+ */
+function formatGroupLine(
+    groupType: string | null | undefined,
+    averageAge: number | null | undefined,
+): string | null {
+    if (!groupType) return null;
+    const label = GROUP_TYPE_LABELS[groupType] ?? capitalise(groupType);
+    if ((groupType === 'youth' || groupType === 'school') && typeof averageAge === 'number') {
+        return `${label} (avg age: ${averageAge})`;
+    }
+    return label;
+}
+
+/**
+ * English fallback labels for the staff email. The frontend owns full i18n;
+ * we keep a tight English-only map here so the staff sees a clean label
+ * regardless of where the request came from.
+ */
+const GROUP_TYPE_LABELS: Record<string, string> = {
+    business:   'Business Group',
+    leisure:    'Leisure Group',
+    sports:     'Sports Group',
+    youth:      'Youth Group',
+    school:     'School Group',
+    family:     'Family Group',
+    wedding:    'Wedding Group',
+    mice:       'MICE Group',
+    conference: 'MICE Group', // legacy value — display as MICE
+    other:      'Other',
+};
+
+function capitalise(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**

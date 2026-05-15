@@ -32,7 +32,7 @@ export const CreateBookingRequestSchema = z
         budget: z.number().positive().optional(),
         groupType: z.string().max(100).optional(),
         groupSize: z.number().int().min(1).optional(),
-        averageAge: z.number().int().min(1).max(120).optional(),
+        averageAge: z.number().int().min(6).max(25).optional(),
         currencyCode: z.string().min(2).max(10).optional(),
         nationalityCode: z.string().min(1).max(10).optional(),
 
@@ -101,7 +101,7 @@ export const UpdateBookingRequestSchema = z.object({
     budget: z.number().positive().optional(),
     groupType: z.string().max(100).optional(),
     groupSize: z.number().int().min(1).optional(),
-    averageAge: z.number().int().min(1).max(120).nullable().optional(),
+    averageAge: z.number().int().min(6).max(25).nullable().optional(),
     currencyCode: z.string().min(2).max(10).optional(),
     nationalityCode: z.string().min(1).max(10).optional(),
     // Step 2

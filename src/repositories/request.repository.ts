@@ -72,6 +72,8 @@ const LIST_SELECT = {
     checkoutDate: true,
     nights: true,
     groupSize: true,
+    groupType: true,
+    averageAge: true,
     rooms: true,
     status: true,
     createdAt: true,

@@ -58,13 +58,29 @@ function applyAccumulationGate(
     completedJobs: any[],
     roomsNeeded: number,
     requestedStarRating: number | null,
+    groupType: string | null = null,
 ): AccumulationResult {
     const statusOrder: Record<string, number> = { CONFIRMED: 0, LIMITED: 1 };
 
-    // Sort: star match first → CONFIRMED before LIMITED → most rooms → cheapest price
+    // For youth and school groups, hotels whose names match the youth-friendly
+    // pattern list (hostels, Jugendherbergen, auberges, ostelli, B&Bs, …) get
+    // promoted ahead of everything else. Non-friendly hotels still stay in the
+    // result set — Oliver's "Athens hotel" precedent: a regular hotel can
+    // legitimately serve a school group.
+    const promoteYouthFriendly = groupType === 'youth' || groupType === 'school';
+
+    // Sort: [youth-friendly tier when applicable] → star match → CONFIRMED
+    // before LIMITED → most rooms → cheapest price
     const sorted = [...completedJobs].sort((a, b) => {
         const ra = a.resultJson as any;
         const rb = b.resultJson as any;
+
+        // Top tier (youth/school only): youth-friendly first
+        if (promoteYouthFriendly) {
+            const aYF = ra.youthFriendly === true ? 0 : 1;
+            const bYF = rb.youthFriendly === true ? 0 : 1;
+            if (aYF !== bYF) return aYF - bYF;
+        }
 
         // Primary: star rating match
         const aStarMatch = requestedStarRating != null && ra.starRating === requestedStarRating ? 0 : 1;
@@ -90,7 +106,7 @@ function applyAccumulationGate(
     let roomsCommitted = 0;
 
     console.log(`[Step 3.5] Starting accumulation gate: ${sorted.length} completed hotels, roomsNeeded=${roomsNeeded}`);
-    logger.info({ completedCount: sorted.length, roomsNeeded, requestedStarRating }, 'Step 3.5: Starting accumulation gate');
+    logger.info({ completedCount: sorted.length, roomsNeeded, requestedStarRating, groupType, promoteYouthFriendly }, 'Step 3.5: Starting accumulation gate');
 
     for (const job of sorted) {
         const result = job.resultJson as any;
@@ -277,8 +293,9 @@ export class OfferGenerationService {
             }
 
             // ── Step 3.5 — Accumulation Gate ──────────────────────────────────
+            const requestGroupType = ((request as any).groupType as string | null | undefined) ?? null;
             const { accepted: acceptedHotels, roomsCommitted, targetMet } =
-                applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRating);
+                applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRating, requestGroupType);
 
             if (acceptedHotels.length === 0) {
                 try {

@@ -12,6 +12,7 @@ import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import wbeClientService from '../services/wbe.client.service';
 import { broadcast } from '../services/sseManager';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
+import { isYouthFriendlyName } from '../config/youthFriendlyPatterns';
 import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import { floorStarRating } from '../utils/starRating';
@@ -1256,6 +1257,12 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         searchKind: searchKind ?? 'main',
         alternativeReason: alternativeReason ?? null,
         hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
+        // Soft ranking signal — true when the hotel's name matches any of
+        // the multilingual youth-friendly patterns (hostel, Jugendherberge,
+        // auberge, ostello, etc). Consumed by the accumulation gate to
+        // promote these hotels for Youth/School group requests. Never used
+        // as a filter — all hotels still flow through to the proposal.
+        youthFriendly: isYouthFriendlyName(dbHotel?.name ?? wbeHotelMeta.hotelName ?? ''),
         starRating: floorStarRating(dbHotel?.starRating ? Number(dbHotel.starRating) : null),
         imageUrl,
         // Ordered fallback chain — FE renders the first URL and `onerror`s
