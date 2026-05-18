@@ -3,6 +3,28 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export class HotelRepository {
+    async findByCode(hotelCode: string) {
+        return prisma.hotel.findUnique({
+            where: { hotelCode },
+            select: {
+                hotelCode: true,
+                name: true,
+                starRating: true,
+                address: true,
+                addressCity: true,
+                addressCountry: true,
+                latitude: true,
+                longitude: true,
+                totalRooms: true,
+                propertyType: true,
+                category: true,
+                metadata: true,
+                hotelDetailsUrl: true,
+                detailsFetchedAt: true,
+            },
+        });
+    }
+
     async search(options: {
         q?: string;
         destinationId?: number;

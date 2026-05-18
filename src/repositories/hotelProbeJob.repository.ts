@@ -9,8 +9,22 @@ export class HotelProbeJobRepository {
         hotelCode: string;
         requestedRooms: number;
         probeLimit: number;
+        /** 'main' (default) or 'alternative' — see schema doc. */
+        searchKind?: 'main' | 'alternative';
+        /** Short label, set when searchKind = 'alternative'. */
+        alternativeReason?: string | null;
     }) {
-        return prisma.hotelProbeJob.create({ data });
+        return prisma.hotelProbeJob.create({
+            data: {
+                id: data.id,
+                searchRequestId: data.searchRequestId,
+                hotelCode: data.hotelCode,
+                requestedRooms: data.requestedRooms,
+                probeLimit: data.probeLimit,
+                searchKind: data.searchKind ?? 'main',
+                alternativeReason: data.alternativeReason ?? null,
+            },
+        });
     }
 
     async setRunning(id: string) {
@@ -78,6 +92,24 @@ export class HotelProbeJobRepository {
         return prisma.hotelProbeJob.findMany({
             where: { searchRequestId },
             orderBy: { createdAt: 'asc' },
+        });
+    }
+
+    /**
+     * Count viable hotels for a given search request. "Viable" means the worker
+     * finished probing and the hotel survived all the EC3 filters — i.e.
+     * status='COMPLETED'. Both CONFIRMED and LIMITED outcomes are inside this
+     * bucket (their distinction lives in the result.capacityStatus JSON field).
+     *
+     * Used by the pagination orchestrator to decide whether to queue more
+     * batches: when this count reaches TARGET_VIABLE_HOTELS we stop iterating.
+     */
+    async countViable(searchRequestId: string): Promise<number> {
+        return prisma.hotelProbeJob.count({
+            where: {
+                searchRequestId,
+                status: 'COMPLETED',
+            },
         });
     }
 

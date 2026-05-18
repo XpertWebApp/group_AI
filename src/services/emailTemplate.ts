@@ -37,7 +37,33 @@ const GROUP_OFFER_LOGO_URL = SERVER_BASE_URL.includes('localhost')
     ? SVG_LOGO_URL
     : `${SERVER_BASE_URL}/assets/group-offer-header.png`;
 
+/** Marketing site — used in the email FOOTER only (links to www.s-e-t-t.com home). */
 const WEBSITE_URL = 'https://www.s-e-t-t.com';
+
+/**
+ * GroupHub dashboard base URL — used in CTA buttons inside emails.
+ * Local dev: http://localhost:3000   |   Production: https://group-ai.s-e-t-t.com
+ * Configurable via DASHBOARD_BASE_URL env var so the email links resolve to the
+ * correct host across environments. Trailing slashes stripped.
+ */
+function dashboardBase(): string {
+    const raw = process.env.DASHBOARD_BASE_URL || 'https://group-ai.s-e-t-t.com';
+    return raw.replace(/\/+$/, '');
+}
+
+/** Build a deep link to the request detail page; falls back to the list when id missing. */
+function requestLink(requestId?: string): string {
+    return requestId
+        ? `${dashboardBase()}/booking-requests/${requestId}`
+        : `${dashboardBase()}/booking-requests`;
+}
+
+/** Build a deep link to the proposal detail page; falls back to the list when id missing. */
+function proposalLink(proposalId?: string): string {
+    return proposalId
+        ? `${dashboardBase()}/proposals/${proposalId}`
+        : `${dashboardBase()}/booking-requests`;
+}
 
 // ─── Font stack ──────────────────────────────────────────────────────────────
 const FONT_STACK = "'Montserrat',Arial,Helvetica,sans-serif";
@@ -222,9 +248,9 @@ export function buildOfferReadyEmail(opts: {
     referenceNumber: number;
     contactName: string;
     destinationName: string;
-    dashboardUrl?: string;
+    requestId?: string;
 }): string {
-    const dashboardUrl = opts.dashboardUrl ?? `${WEBSITE_URL}/dashboard`;
+    const url = requestLink(opts.requestId);
     return emailLayout({
         type: 'group',
         preheader: `New group offer #${opts.referenceNumber} for ${opts.destinationName} is ready for review`,
@@ -237,7 +263,7 @@ export function buildOfferReadyEmail(opts: {
                 { label: 'Destination', value: opts.destinationName },
             ])}
             ${alertBox('This offer was generated automatically. Please review the hotel selection and pricing before approving.', 'info')}
-            ${ctaButton('Review Offer', dashboardUrl)}
+            ${ctaButton('Review Offer', url)}
             ${paragraph('Log in to the SETT Hub dashboard to review, adjust, and approve the offer.')}
         `,
     });
@@ -256,9 +282,9 @@ export function buildInsufficientInventoryEmail(opts: {
     roomsMissing: number;
     hotelsAccepted: number;
     suggestion: string;
-    dashboardUrl?: string;
+    requestId?: string;
 }): string {
-    const dashboardUrl = opts.dashboardUrl ?? `${WEBSITE_URL}/dashboard`;
+    const dashboardUrl = requestLink(opts.requestId);
     const coveragePct = opts.roomsNeeded > 0 ? Math.round((opts.roomsFound / opts.roomsNeeded) * 100) : 0;
     return emailLayout({
         type: 'group',
@@ -297,9 +323,9 @@ export function buildOfferDeclinedEmail(opts: {
     contactName: string;
     destinationName: string;
     rejectionReason: string;
-    dashboardUrl?: string;
+    proposalId?: string;
 }): string {
-    const dashboardUrl = opts.dashboardUrl ?? `${WEBSITE_URL}/dashboard`;
+    const dashboardUrl = proposalLink(opts.proposalId);
     return emailLayout({
         type: 'general',
         preheader: `Offer #${opts.referenceNumber} declined — action required`,
@@ -360,9 +386,9 @@ export function buildOfferPdfEmail(opts: {
 export function buildOfferGenerationFailedEmail(opts: {
     referenceNumber: number;
     reason: string;
-    dashboardUrl?: string;
+    requestId?: string;
 }): string {
-    const dashboardUrl = opts.dashboardUrl ?? `${WEBSITE_URL}/dashboard`;
+    const dashboardUrl = requestLink(opts.requestId);
     return emailLayout({
         type: 'general',
         preheader: `Offer #${opts.referenceNumber} generation failed — manual action required`,
@@ -375,6 +401,217 @@ export function buildOfferGenerationFailedEmail(opts: {
             ])}
             ${ctaButton('Handle Manually', dashboardUrl)}
             ${paragraph('Please log in to the dashboard to create the offer manually.')}
+        `,
+    });
+}
+
+// ─── Phase 1 templates (Brevo SMTP rollout) ──────────────────────────────────
+// All include the brand promise: "Quote within 24 hours".
+
+/** Reusable promise line used at the bottom of every Phase 1 email body. */
+function quotePromise(): string {
+    return `<p style="margin:18px 0 0 0;font-family:${FONT_STACK};font-size:13px;font-weight:600;color:${SETT_NAVY};">Quote within 24 hours.</p>`;
+}
+
+/**
+ * Staff notification: a new booking request was just received.
+ * Uses GROUP OFFER logo since this is the start of a group-offer workflow.
+ */
+export function buildNewRequestStaffEmail(opts: {
+    referenceNumber: number;
+    contactName: string;
+    destinationName: string;
+    source: string;
+    requestId?: string;
+    groupType?: string | null;
+    averageAge?: number | null;
+}): string {
+    const dashboardUrl = requestLink(opts.requestId);
+    const groupLine = formatGroupLine(opts.groupType, opts.averageAge);
+    const baseRows = [
+        { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
+        { label: 'Client', value: opts.contactName },
+        { label: 'Destination', value: opts.destinationName },
+        { label: 'Source', value: opts.source },
+    ];
+    const rows = groupLine ? [...baseRows, { label: 'Group', value: groupLine }] : baseRows;
+    return emailLayout({
+        type: 'group',
+        preheader: `New group request #${opts.referenceNumber} from ${opts.contactName} — ${opts.destinationName}`,
+        body: `
+            ${heading('New Group Request')}
+            ${paragraph(`A new group request has been received via <strong>${opts.source}</strong> and is ready to be processed.`)}
+            ${detailsTable(rows)}
+            ${ctaButton('Open Request', dashboardUrl)}
+            ${quotePromise()}
+        `,
+    });
+}
+
+/**
+ * Format the "Group" line for staff-facing emails. Returns null when no
+ * groupType is set so the row is omitted entirely (avoids "Group: —" noise
+ * on legacy requests that pre-date the group_type field).
+ *
+ * For youth and school groups with a known average age, appends "(avg
+ * age: N)" so staff sees the age before opening the request.
+ */
+function formatGroupLine(
+    groupType: string | null | undefined,
+    averageAge: number | null | undefined,
+): string | null {
+    if (!groupType) return null;
+    const label = GROUP_TYPE_LABELS[groupType] ?? capitalise(groupType);
+    if ((groupType === 'youth' || groupType === 'school') && typeof averageAge === 'number') {
+        return `${label} (avg age: ${averageAge})`;
+    }
+    return label;
+}
+
+/**
+ * English fallback labels for the staff email. The frontend owns full i18n;
+ * we keep a tight English-only map here so the staff sees a clean label
+ * regardless of where the request came from.
+ */
+const GROUP_TYPE_LABELS: Record<string, string> = {
+    business:   'Business Group',
+    leisure:    'Leisure Group',
+    sports:     'Sports Group',
+    youth:      'Youth Group',
+    school:     'School Group',
+    family:     'Family Group',
+    wedding:    'Wedding Group',
+    mice:       'MICE Group',
+    conference: 'MICE Group', // legacy value — display as MICE
+    other:      'Other',
+};
+
+function capitalise(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Customer-facing: confirmation that we received the enquiry.
+ * Uses GROUP OFFER logo. Customer-facing tone, no internal links.
+ */
+export function buildNewRequestContactEmail(opts: {
+    referenceNumber: number;
+    contactName: string;
+    destinationName: string;
+}): string {
+    return emailLayout({
+        type: 'group',
+        preheader: `We've received your enquiry for ${opts.destinationName} — Reference #${opts.referenceNumber}`,
+        body: `
+            ${heading('We have received your enquiry')}
+            ${paragraph(`Dear ${opts.contactName},`)}
+            ${paragraph(`Thank you for choosing SETT Groups. We have received your group accommodation request for <strong>${opts.destinationName}</strong>.`)}
+            ${detailsTable([
+                { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
+                { label: 'Destination', value: opts.destinationName },
+            ])}
+            ${paragraph('Our team is preparing your offer. You will receive a detailed quote shortly.')}
+            ${quotePromise()}
+            <p style="margin:18px 0 0 0;font-family:${FONT_STACK};font-size:14px;color:${SETT_GREY};line-height:1.6;">
+              For any questions, please reply to this email.
+            </p>
+            <p style="margin:24px 0 0 0;font-family:${FONT_STACK};font-size:15px;color:${SETT_NAVY};line-height:1.6;">
+              Best regards,<br/>
+              <strong>SETT Groups</strong>
+            </p>
+        `,
+    });
+}
+
+/**
+ * Staff notification: a proposal was approved.
+ * Phase 1 reverses the previous "in-app only" rule — staff now receive an email too.
+ */
+export function buildOfferApprovedEmail(opts: {
+    referenceNumber: number;
+    contactName: string;
+    destinationName: string;
+    approvedBy: string;
+    proposalId?: string;
+}): string {
+    const dashboardUrl = proposalLink(opts.proposalId);
+    return emailLayout({
+        type: 'group',
+        preheader: `Offer #${opts.referenceNumber} approved`,
+        body: `
+            ${heading('Offer Approved')}
+            ${alertBox('This offer has been approved and is ready to be sent to the contact.', 'success')}
+            ${detailsTable([
+                { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
+                { label: 'Client', value: opts.contactName },
+                { label: 'Destination', value: opts.destinationName },
+                { label: 'Approved by', value: opts.approvedBy },
+            ])}
+            ${ctaButton('Open Offer', dashboardUrl)}
+            ${quotePromise()}
+        `,
+    });
+}
+
+/**
+ * Customer-facing: notification that a proposal was declined.
+ * Counterpart to the staff-side buildOfferDeclinedEmail. Tone is courteous and brief.
+ */
+export function buildOfferDeclinedContactEmail(opts: {
+    referenceNumber: number;
+    contactName: string;
+    destinationName: string;
+    rejectionReason: string;
+}): string {
+    return emailLayout({
+        type: 'group',
+        preheader: `Update on your group offer #${opts.referenceNumber}`,
+        body: `
+            ${heading('Update on your group offer')}
+            ${paragraph(`Dear ${opts.contactName},`)}
+            ${paragraph(`We are writing regarding your group accommodation enquiry for <strong>${opts.destinationName}</strong>.`)}
+            ${detailsTable([
+                { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
+                { label: 'Destination', value: opts.destinationName },
+            ])}
+            ${paragraph(`Unfortunately, we are not able to proceed with this offer at this time. Reason: ${opts.rejectionReason}`)}
+            ${paragraph('Please feel free to reply to this email if you would like to discuss alternatives or submit a new enquiry.')}
+            ${quotePromise()}
+            <p style="margin:24px 0 0 0;font-family:${FONT_STACK};font-size:15px;color:${SETT_NAVY};line-height:1.6;">
+              Best regards,<br/>
+              <strong>SETT Groups</strong>
+            </p>
+        `,
+    });
+}
+
+/**
+ * Staff notification: booking request status transitioned to a tracked state.
+ * Used for sent / completed / cancelled (configured via NOTIFY_STATUS_TRANSITIONS env var).
+ */
+export function buildStatusChangeEmail(opts: {
+    referenceNumber: number;
+    contactName: string;
+    destinationName: string;
+    fromStatus: string;
+    toStatus: string;
+    requestId?: string;
+}): string {
+    const dashboardUrl = requestLink(opts.requestId);
+    return emailLayout({
+        type: 'general',
+        preheader: `Request #${opts.referenceNumber} status: ${opts.fromStatus} → ${opts.toStatus}`,
+        body: `
+            ${heading('Request Status Updated')}
+            ${detailsTable([
+                { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
+                { label: 'Client', value: opts.contactName },
+                { label: 'Destination', value: opts.destinationName },
+                { label: 'Previous status', value: opts.fromStatus },
+                { label: 'New status', value: `<strong style="color:${SETT_NAVY};">${opts.toStatus}</strong>` },
+            ])}
+            ${ctaButton('Open Request', dashboardUrl)}
+            ${quotePromise()}
         `,
     });
 }

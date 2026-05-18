@@ -14,6 +14,7 @@ import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import logger from '../utils/logger';
 import { countTotalRooms } from '../utils/roomUtils';
 import { BookingRequestStatus } from '@prisma/client';
+import { TARGET_VIABLE_HOTELS, SEARCH_BATCH_SIZE, MAX_SEARCH_BATCHES } from '../config/probeConfig';
 
 const DEFAULT_MARKUP_PCT = 18;
 
@@ -57,13 +58,29 @@ function applyAccumulationGate(
     completedJobs: any[],
     roomsNeeded: number,
     requestedStarRating: number | null,
+    groupType: string | null = null,
 ): AccumulationResult {
     const statusOrder: Record<string, number> = { CONFIRMED: 0, LIMITED: 1 };
 
-    // Sort: star match first → CONFIRMED before LIMITED → most rooms → cheapest price
+    // For youth and school groups, hotels whose names match the youth-friendly
+    // pattern list (hostels, Jugendherbergen, auberges, ostelli, B&Bs, …) get
+    // promoted ahead of everything else. Non-friendly hotels still stay in the
+    // result set — Oliver's "Athens hotel" precedent: a regular hotel can
+    // legitimately serve a school group.
+    const promoteYouthFriendly = groupType === 'youth' || groupType === 'school';
+
+    // Sort: [youth-friendly tier when applicable] → star match → CONFIRMED
+    // before LIMITED → most rooms → cheapest price
     const sorted = [...completedJobs].sort((a, b) => {
         const ra = a.resultJson as any;
         const rb = b.resultJson as any;
+
+        // Top tier (youth/school only): youth-friendly first
+        if (promoteYouthFriendly) {
+            const aYF = ra.youthFriendly === true ? 0 : 1;
+            const bYF = rb.youthFriendly === true ? 0 : 1;
+            if (aYF !== bYF) return aYF - bYF;
+        }
 
         // Primary: star rating match
         const aStarMatch = requestedStarRating != null && ra.starRating === requestedStarRating ? 0 : 1;
@@ -89,7 +106,7 @@ function applyAccumulationGate(
     let roomsCommitted = 0;
 
     console.log(`[Step 3.5] Starting accumulation gate: ${sorted.length} completed hotels, roomsNeeded=${roomsNeeded}`);
-    logger.info({ completedCount: sorted.length, roomsNeeded, requestedStarRating }, 'Step 3.5: Starting accumulation gate');
+    logger.info({ completedCount: sorted.length, roomsNeeded, requestedStarRating, groupType, promoteYouthFriendly }, 'Step 3.5: Starting accumulation gate');
 
     for (const job of sorted) {
         const result = job.resultJson as any;
@@ -174,7 +191,6 @@ export class OfferGenerationService {
         const destinationName = (request as any).destinationName ?? 'Unknown destination';
         const roomsNeeded = countTotalRooms((request as any).rooms);
         const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
-        const assignedUserId: string | undefined = (request as any).assignedUserId ?? undefined;
 
         await requestRepository.updateStatus(requestId, BookingRequestStatus.processing);
 
@@ -187,29 +203,106 @@ export class OfferGenerationService {
             });
 
             if (queueResult.jobsQueued === 0) {
-                const reason = 'No candidate hotels found for this destination and star rating.';
+                // "Never say no" — even after the relaxation ladder + destination
+                // fallback, there are no hotels available. Flag the request so
+                // staff can pick it up manually instead of the customer hitting
+                // a dead end.
+                if (queueResult.manualRequestOnly) {
+                    await requestRepository.updateStatus(
+                        requestId,
+                        BookingRequestStatus.needs_manual_handling,
+                    );
+                }
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
+                const reason = queueResult.manualRequestOnly
+                    ? 'No hotels found at any relaxation level — flagged for manual handling.'
+                    : 'No candidate hotels found for this destination and star rating.';
                 await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;
             }
 
             logger.info({ requestId, jobsQueued: queueResult.jobsQueued }, 'Waiting for probe jobs to complete');
 
-            // Step 2: Wait for all jobs to reach a terminal state
-            const jobs = await waitForJobs(requestId);
+            // Step 2: Wait for all jobs to reach a terminal state, then iterate
+            // additional batches until TARGET_VIABLE_HOTELS is reached, the
+            // destination is exhausted, or MAX_SEARCH_BATCHES is hit. The first
+            // batch was already queued by generateAutoOffer above; this loop
+            // chains follow-up batches via enqueueAdditionalCandidates.
+            let jobs = await waitForJobs(requestId);
+            let viableCount = await hotelProbeJobRepository.countViable(requestId);
+            let paginationContext = queueResult.paginationContext;
+
+            while (
+                paginationContext &&
+                viableCount < TARGET_VIABLE_HOTELS &&
+                paginationContext.nextOffset < paginationContext.totalCandidates &&
+                paginationContext.nextOffset < SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES
+            ) {
+                logger.info(
+                    {
+                        requestId,
+                        viableSoFar: viableCount,
+                        target: TARGET_VIABLE_HOTELS,
+                        nextOffset: paginationContext.nextOffset,
+                        totalCandidates: paginationContext.totalCandidates,
+                    },
+                    'Auto-offer: viable count below target — queueing next batch',
+                );
+
+                const batch = await hotelSearchService.enqueueAdditionalCandidates(
+                    requestId,
+                    paginationContext,
+                    { mealType, markupPercent: DEFAULT_MARKUP_PCT },
+                );
+                if (batch.decision !== 'queued' || batch.queuedCount === 0) {
+                    logger.info(
+                        { requestId, decision: batch.decision, viableCount },
+                        'Auto-offer: pagination stopped',
+                    );
+                    break;
+                }
+
+                paginationContext = { ...paginationContext, nextOffset: batch.nextOffset };
+                jobs = await waitForJobs(requestId);
+                viableCount = await hotelProbeJobRepository.countViable(requestId);
+            }
+
             const completedJobs = jobs.filter((j) => (j.status as string) === 'COMPLETED');
 
             if (completedJobs.length === 0) {
-                const reason = 'No hotels with sufficient capacity found after probing.';
+                // All probes finished but none yielded a usable result. From the
+                // customer's perspective this is the same dead end as zero
+                // candidates — flag it for manual handling.
+                await requestRepository.updateStatus(
+                    requestId,
+                    BookingRequestStatus.needs_manual_handling,
+                );
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
+                const reason = 'No hotels with sufficient capacity found after probing — flagged for manual handling.';
                 logger.warn({ requestId }, reason);
                 await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
                 return;
             }
 
             // ── Step 3.5 — Accumulation Gate ──────────────────────────────────
+            const requestGroupType = ((request as any).groupType as string | null | undefined) ?? null;
             const { accepted: acceptedHotels, roomsCommitted, targetMet } =
-                applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRating);
+                applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRating, requestGroupType);
 
             if (acceptedHotels.length === 0) {
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
                 const reason = 'No hotels passed the accumulation gate (all had < 6 rooms or no valid supplier split).';
                 logger.warn({ requestId, completedJobs: completedJobs.length }, reason);
                 await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
@@ -302,11 +395,17 @@ export class OfferGenerationService {
                 const perTypeAllocs: any[] = result.perTypeAllocations ?? [];
 
                 if (perTypeAllocs.length > 0) {
-                    // ── EC3: Per-room-type entries ──────────────────────────────
+                    // ── Consolidated: one ProposalHotel per hotel with ALL room types bundled ──
+                    // This matches the frontend's "Add Hotel" flow and avoids showing the
+                    // same hotel as multiple cards in the proposal.
+                    const rooms: Record<string, any> = {};
+                    let hotelTotal = 0;
+                    let totalAllocated = 0;
+                    let cheapestAcrossTypes: any = null;
+
                     for (const typeAlloc of perTypeAllocs) {
                         if (typeAlloc.roomsAllocated <= 0) continue;
 
-                        // Find the cheapest supplier for THIS room type
                         const typeSplitEntries = (result.supplierSplit ?? [])
                             .filter((e: any) => e.roomType === typeAlloc.roomType);
                         const cheapest = [...typeSplitEntries].sort(
@@ -315,38 +414,52 @@ export class OfferGenerationService {
                         if (!cheapest) continue;
 
                         const typeTotal = unifiedSellingPrice * typeAlloc.roomsAllocated * nights;
+                        hotelTotal += typeTotal;
+                        totalAllocated += typeAlloc.roomsAllocated;
 
-                        console.log(
-                            `[Step 4.2] Adding ${result.hotelName} — ${typeAlloc.roomType}: ${typeAlloc.roomsAllocated} rooms × ${unifiedSellingPrice}/night × ${nights} nights = ${typeTotal} ${unifiedCurrency}`,
-                        );
+                        // Track the cheapest entry across all room types for the hotel-level
+                        // TID/supplierCode fields.
+                        if (!cheapestAcrossTypes || cheapest.pricePerRoomPerNight < cheapestAcrossTypes.pricePerRoomPerNight) {
+                            cheapestAcrossTypes = cheapest;
+                        }
 
-                        // Include bonus alternative flag if detected
-                        const hotelNameWithBonus = result.bonusAlternative
-                            ? `${result.hotelName ?? result.hotelCode} ★ BONUS`
-                            : (result.hotelName ?? undefined);
-
-                        await proposalRepository.addHotelTx(proposal.id, {
-                            hotelCode: result.hotelCode,
-                            hotelName: hotelNameWithBonus,
-                            tid: cheapest.tid,
-                            currency: unifiedCurrency,
-                            totalPrice: typeTotal,
-                            freeCancellation: true,
-                            cancelDeadline: result.cxlDeadline ?? null,
-                            supplierCode: cheapest.supplierCode,
-                            latitude: result.latitude ?? null,
-                            longitude: result.longitude ?? null,
-                            rooms: {
-                                [typeAlloc.roomType]: {
-                                    net: cheapest.pricePerRoomPerNight,
-                                    sell: unifiedSellingPrice,
-                                    qty: typeAlloc.roomsAllocated,
-                                    nights,
-                                    ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
-                                },
-                            },
-                        });
+                        rooms[typeAlloc.roomType] = {
+                            net: cheapest.pricePerRoomPerNight,
+                            sell: unifiedSellingPrice,
+                            qty: typeAlloc.roomsAllocated,
+                            nights,
+                            actualDescriptions: typeAlloc.actualDescriptions ?? [],
+                            ...(result.bonusAlternative ? { bonusAlternative: true, bonusNote: result.bonusNote } : {}),
+                        };
                     }
+
+                    if (!cheapestAcrossTypes || totalAllocated === 0) continue;
+
+                    console.log(
+                        `[Step 4.2] Adding ${result.hotelName}: ${totalAllocated} rooms across ${Object.keys(rooms).length} room type(s) × ${unifiedSellingPrice}/night × ${nights} nights = ${hotelTotal} ${unifiedCurrency}`,
+                    );
+
+                    const hotelNameWithBonus = result.bonusAlternative
+                        ? `${result.hotelName ?? result.hotelCode} ★ BONUS`
+                        : (result.hotelName ?? undefined);
+
+                    await proposalRepository.addHotelTx(proposal.id, {
+                        hotelCode: result.hotelCode,
+                        hotelName: hotelNameWithBonus,
+                        tid: cheapestAcrossTypes.tid,
+                        currency: unifiedCurrency,
+                        totalPrice: hotelTotal,
+                        freeCancellation: true,
+                        cancelDeadline: result.cxlDeadline ?? null,
+                        supplierCode: cheapestAcrossTypes.supplierCode,
+                        latitude: result.latitude ?? null,
+                        longitude: result.longitude ?? null,
+                        starRating: result.starRating ?? null,
+                        address: result.address ?? null,
+                        addressCity: result.addressCity ?? null,
+                        addressCountry: result.addressCountry ?? null,
+                        rooms,
+                    });
                 } else {
                     // ── Fallback: old-style single aggregate entry ─────────────
                     const cheapestSplit = [...result.supplierSplit].sort(
@@ -376,6 +489,10 @@ export class OfferGenerationService {
                         supplierCode: cheapestSplit.supplierCode,
                         latitude: result.latitude ?? null,
                         longitude: result.longitude ?? null,
+                        starRating: result.starRating ?? null,
+                        address: result.address ?? null,
+                        addressCity: result.addressCity ?? null,
+                        addressCountry: result.addressCountry ?? null,
                         rooms: {
                             standard: {
                                 net: cheapestSplit.pricePerRoomPerNight,
@@ -405,6 +522,11 @@ export class OfferGenerationService {
                 );
 
                 await requestRepository.updateStatus(requestId, BookingRequestStatus.ai_generated);
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'settled');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) failed');
+                }
 
                 await notificationService.notifyNewOfferReady({
                     requestId,
@@ -427,6 +549,11 @@ export class OfferGenerationService {
                 );
 
                 await requestRepository.updateStatus(requestId, BookingRequestStatus.ai_generated);
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'settled');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) failed');
+                }
 
                 await notificationService.notifyInsufficientInventory({
                     requestId,
@@ -443,6 +570,11 @@ export class OfferGenerationService {
             }
         } catch (err: any) {
             logger.error({ err, requestId }, 'AI offer generation failed');
+            try {
+                await requestRepository.updateSearchPhase(requestId, 'exhausted');
+            } catch (phaseErr: any) {
+                logger.warn({ err: phaseErr?.message, requestId }, 'updateSearchPhase(exhausted) after error failed');
+            }
             await notificationService.notifyOfferGenerationFailed({
                 requestId,
                 referenceNumber: refNum,

@@ -53,6 +53,8 @@ export interface OfferPdfData {
     companyName: string;
     companyAddress: string;
     companyPhone: string;
+    /** Optional international dial code (e.g. "+971") — prefixed in the PDF when set. */
+    companyPhoneCountryCode?: string | null;
     companyEmail: string;
     companyWebsite: string;
     companyTaxId: string;
@@ -64,6 +66,8 @@ export interface OfferPdfData {
     companyNameClient: string;
     contactEmail: string;
     contactPhone: string;
+    /** Optional international dial code — prefixed in the PDF when set. */
+    contactPhoneCountryCode?: string | null;
 
     // Trip
     destinationName: string;

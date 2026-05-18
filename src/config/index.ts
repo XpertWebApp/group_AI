@@ -22,10 +22,17 @@ const config = {
         password: process.env.WBE_PASSWORD,
         acceptLanguage: process.env.WBE_ACCEPT_LANGUAGE || 'en',
     },
-    google: {
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/v1/auth/google/callback',
+    giata: {
+        mhgBaseUrl: process.env.GIATA_MHG_BASE_URL || 'http://ghgml.giatamedia.com/webservice/rest/1.0',
+        multicodesBaseUrl: process.env.GIATA_MULTICODES_BASE_URL || 'https://multicodes.giatamedia.com/webservice/rest/1.latest',
+        username: process.env.GIATA_USERNAME || '',
+        password: process.env.GIATA_PASSWORD || '',
+    },
+    webhook: {
+        // Wix (legacy, plain secret header)
+        wixSecret: process.env.WEBHOOK_SECRET || '',
+        // WordPress (HMAC-SHA256)
+        wordpressSecret: process.env.WP_WEBHOOK_SECRET || '',
     },
     s3: {
         endpoint: process.env.S3_ENDPOINT || '',
@@ -33,6 +40,11 @@ const config = {
         bucket: process.env.S3_BUCKET || '',
         accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
         secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+    },
+    google: {
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/v1/auth/google/callback',
     },
     logLevel: process.env.LOG_LEVEL || 'info',
 };

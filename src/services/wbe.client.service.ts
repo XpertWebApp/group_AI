@@ -23,9 +23,25 @@ limiter.on('failed', async (error: any, jobInfo) => {
     }
 });
 
+// Circuit breaker — protects critical search/booking calls only.
+// Non-critical calls (details, images, static data) DO NOT trip the breaker
+// and bypass it entirely so they never affect an in-progress search.
+const CIRCUIT_BREAKER_BLOCK_MS = 60 * 1000; // 60s (was 15 min — too aggressive)
 let circuitBreakerBlockedUntil = 0;
 
-const execute = async <T>(fn: () => Promise<T>): Promise<T> => {
+interface ExecuteOpts {
+    /** If true, this call neither trips the circuit breaker nor is blocked by it. */
+    bypassCircuitBreaker?: boolean;
+    /** Label for logs (e.g. 'getHotelDetails'). */
+    label?: string;
+}
+
+const execute = async <T>(fn: () => Promise<T>, opts: ExecuteOpts = {}): Promise<T> => {
+    // Bypass entirely for non-critical calls (e.g. hotel details)
+    if (opts.bypassCircuitBreaker) {
+        return limiter.schedule(fn);
+    }
+
     if (Date.now() < circuitBreakerBlockedUntil) {
         throw new Error('Circuit Breaker Open: WBE API call blocked due to recent 401/403 error.');
     }
@@ -33,16 +49,29 @@ const execute = async <T>(fn: () => Promise<T>): Promise<T> => {
         return await limiter.schedule(fn);
     } catch (error: any) {
         if (error.response?.status === 401 || error.response?.status === 403) {
-            circuitBreakerBlockedUntil = Date.now() + 15 * 60 * 1000;
-            logger.error({ msg: 'WBE API 401/403 Error. Trips circuit breaker for 15 mins.', status: error.response?.status });
+            circuitBreakerBlockedUntil = Date.now() + CIRCUIT_BREAKER_BLOCK_MS;
+            logger.error({
+                msg: `WBE API ${error.response?.status} Error. Trips circuit breaker for ${CIRCUIT_BREAKER_BLOCK_MS / 1000}s.`,
+                status: error.response?.status,
+                label: opts.label,
+            });
         }
         throw error;
     }
 };
 
+// Default axios wrapper — uses circuit breaker (for critical search/booking calls)
 const axios = {
     get: (...args: Parameters<typeof originalAxios.get>) => execute(() => originalAxios.get(...args)),
     post: (...args: Parameters<typeof originalAxios.post>) => execute(() => originalAxios.post(...args)),
+};
+
+// Non-critical axios wrapper — bypasses circuit breaker (for details, images, static CDN)
+const axiosNonCritical = {
+    get: (...args: Parameters<typeof originalAxios.get>) =>
+        execute(() => originalAxios.get(...args), { bypassCircuitBreaker: true, label: 'non-critical' }),
+    post: (...args: Parameters<typeof originalAxios.post>) =>
+        execute(() => originalAxios.post(...args), { bypassCircuitBreaker: true, label: 'non-critical' }),
 };
 
 export class WbeClientService {
@@ -165,7 +194,8 @@ export class WbeClientService {
 
     async getHotelDetails(url: string) {
         try {
-            const response = await axios.get(url, {
+            // Use non-critical wrapper — details calls must NEVER affect in-progress searches
+            const response = await axiosNonCritical.get(url, {
                 headers: this.getDefaultHeaders(),
             });
             return response.data;
@@ -225,8 +255,9 @@ export class WbeClientService {
      */
     async getHotelImage(imageKey: string): Promise<{ data: Buffer; contentType: string } | null> {
         // Primary — WBE content CDN (no auth required, publicly accessible)
+        // Use non-critical wrapper — image fetches must NEVER affect in-progress searches
         try {
-            const response = await axios.get(`${this.contentUrl}/Image/getimage`, {
+            const response = await axiosNonCritical.get(`${this.contentUrl}/Image/getimage`, {
                 params: { pic: imageKey },
                 responseType: 'arraybuffer',
                 timeout: 10000,
@@ -247,7 +278,7 @@ export class WbeClientService {
 
         for (const url of legacyUrls) {
             try {
-                const response = await axios.get(url, {
+                const response = await axiosNonCritical.get(url, {
                     auth: this.getAuth(),
                     headers: { ...this.getDefaultHeaders(), Accept: 'image/*' },
                     responseType: 'arraybuffer',

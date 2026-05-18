@@ -4,6 +4,7 @@ import {
     HotelProbeCompletedEvent,
     HotelProbeProgressEvent,
     RoomTypeProbeProgress,
+    RoomTypeProbeTarget,
     ExpandedRoom,
 } from './hotelProbeJob.types';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
@@ -11,10 +12,13 @@ import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import wbeClientService from '../services/wbe.client.service';
 import { broadcast } from '../services/sseManager';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
+import { isYouthFriendlyName } from '../config/youthFriendlyPatterns';
 import logger from '../utils/logger';
+import { normalisePricePerRoomPerNight } from '../utils/pricing';
+import { floorStarRating } from '../utils/starRating';
 import {
     PROBE_BATCH_SIZE,
-    PROBE_WAIT_SECONDS,
+    PROBE_MULTIPLIER,
     PROBE_POLL_INTERVAL_MS,
     PROBE_POLL_TIMEOUT_MS,
     MULTI_SUPPLIER_OVERLAP_THRESHOLD,
@@ -28,11 +32,6 @@ function field<T>(obj: any, ...keys: string[]): T | undefined {
         if (obj != null && obj[k] !== undefined) return obj[k] as T;
     }
     return undefined;
-}
-
-function normalisePricePerRoomPerNight(rawPrice: number, nights: number, batchSize: number): number {
-    if (!rawPrice || !nights || !batchSize) return 0;
-    return rawPrice / (batchSize * nights);
 }
 
 function deduplicateBySupplier(options: any[]): any[] {
@@ -63,6 +62,9 @@ function matchesRoomType(roomDescriptions: string[], requestedType: string | nul
     if (type === 'single') acceptable.push('twin');
     if (type === 'double') acceptable.push('twin');
     if (type === 'triple') acceptable.push('quad');
+    // New breakdown types: standardDoubleBeds → match "double"/"twin", twinBeds → match "twin"/"double"
+    if (type === 'standarddoublebeds') { acceptable.push('double', 'twin'); }
+    if (type === 'twinbeds') { acceptable.push('twin', 'double'); }
     return descs.some((d) => acceptable.some((kw) => d.includes(kw)));
 }
 
@@ -177,11 +179,18 @@ function parseProbeOptions(wbeHotelOptions: any[], nights: number, batchSize: nu
             .map((r) => field<string>(r, 'Description', 'description', 'RoomName', 'roomName') ?? '')
             .filter(Boolean);
 
+        // Divide by the ACTUAL number of rooms WBE returned in this option, not
+        // the hardcoded batchSize. WBE may return options with fewer rooms than
+        // requested (partial availability), and using batchSize in those cases
+        // under-divides the price. Fall back to batchSize only if Rooms is empty.
+        const roomsInOption = rawRooms.length > 0 ? rawRooms.length : batchSize;
+
         result.push({
             tid,
             supplierCode,
-            pricePerRoomPerNight: normalisePricePerRoomPerNight(rawPrice, nights, batchSize),
+            pricePerRoomPerNight: normalisePricePerRoomPerNight(rawPrice, roomsInOption, nights, { tid, supplierCode }),
             rawTotalPrice: rawPrice,
+            roomsInOption,
             currency,
             freeCancellation,
             onRequest,
@@ -216,6 +225,9 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         expandedRooms,
         dominantRoomType,
         roomTypeTargets,
+        searchKind,
+        alternativeReason,
+        lang,
     } = payload;
 
     logger.info({ jobId, hotelCode, requestedRooms, probeLimit, hasPerTypeTargets: !!roomTypeTargets }, 'Processing HotelProbeJob');
@@ -226,6 +238,34 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     const allOptions: any[] = [];
     let roomsFound = 0;
     let lastProbeRange = '';
+
+    // Capture hotel metadata from WBE responses as fallback when DB is missing it
+    // (address, lat/lng etc). Used when dbHotel doesn't have this data populated.
+    const wbeHotelMeta: {
+        latitude?: number;
+        longitude?: number;
+        address?: string;
+        hotelName?: string;
+    } = {};
+    const captureWbeHotelMeta = (h: any) => {
+        if (!h) return;
+        const lat = field<number>(h, 'Latitude', 'latitude');
+        const lng = field<number>(h, 'Longitude', 'longitude');
+        if (wbeHotelMeta.latitude === undefined && typeof lat === 'number' && lat !== 0) {
+            wbeHotelMeta.latitude = Number(lat);
+        }
+        if (wbeHotelMeta.longitude === undefined && typeof lng === 'number' && lng !== 0) {
+            wbeHotelMeta.longitude = Number(lng);
+        }
+        if (!wbeHotelMeta.address) {
+            const addr = field<string>(h, 'Address', 'address');
+            if (addr) wbeHotelMeta.address = String(addr);
+        }
+        if (!wbeHotelMeta.hotelName) {
+            const name = field<string>(h, 'HotelName', 'hotelName', 'Name', 'name');
+            if (name) wbeHotelMeta.hotelName = String(name);
+        }
+    };
 
     // Per-room-type progress tracking
     const typeProgressMap = new Map<string, RoomTypeProbeProgress>();
@@ -242,6 +282,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         }
 
         let globalRoomId = 1; // Running RoomID across all type phases
+        const substituteTargets: RoomTypeProbeTarget[] = []; // Quadruple fallback targets added during probing
 
         for (const target of roomTypeTargets) {
             const typeBatches = Math.ceil(target.probeLimit / PROBE_BATCH_SIZE);
@@ -292,6 +333,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 const wbeHotel = hotelEntries.find(
                     (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
                 );
+                captureWbeHotelMeta(wbeHotel);
 
                 if (!wbeHotel) {
                     logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No hotel entry — stopping probes for this type');
@@ -316,9 +358,15 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                     break;
                 }
 
-                // Tag options with roomType + sessionId for downstream use (Step 3.4 needs sessionId)
+                // Tag options with the requested roomType (for grouping/allocation) +
+                // requestedRoomType (what the client asked for) + sessionId.
+                // Preserve the ACTUAL WBE room description separately so the UI can
+                // show the real room name (e.g. "Double Room, Terrace (1 Double Bed)")
+                // instead of just "Single" — per M5 data-integrity requirement.
                 for (const opt of roomTypeFiltered) {
-                    opt.roomType = target.roomType;
+                    opt.requestedRoomType = target.roomType;
+                    opt.roomType = target.roomType;                       // kept for backwards compat (allocation logic)
+                    opt.actualRoomDescription = opt.roomDescriptions?.[0] ?? null;
                     opt.sessionId = sessionId;
                 }
 
@@ -363,6 +411,158 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 { jobId, hotelCode, roomType: target.roomType, typeRoomsFound, probeLimit: target.probeLimit },
                 'Per-type probe phase finished',
             );
+
+            // ── Quadruple fallback: if quads came up short, probe doubles (2 doubles = 1 quad).
+            // Secondary fallback (2 twins) collapses into this phase because matchesRoomType('double', ...)
+            // already accepts "twin" descriptions — doubles preferred, twins allowed.
+            if (target.roomType === 'quadruple' && typeRoomsFound < target.requested) {
+                const quadShortfall = target.requested - typeRoomsFound;
+                const fallbackRoomsNeeded = quadShortfall * 2;
+                const fallbackProbeLimit = fallbackRoomsNeeded * PROBE_MULTIPLIER;
+                const fallbackBatches = Math.ceil(fallbackProbeLimit / PROBE_BATCH_SIZE);
+                let fallbackRoomsFound = 0;
+
+                const fallbackTarget: RoomTypeProbeTarget = {
+                    roomType: 'quadruple__sub_double',
+                    requested: fallbackRoomsNeeded,
+                    probeLimit: fallbackProbeLimit,
+                    adults: 2,
+                    children: 0,
+                    childrenAges: [],
+                    substituteFor: 'quadruple',
+                    substituteRatio: 2,
+                    matchKeyword: 'double',
+                };
+
+                typeProgressMap.set('quadruple__sub_double', {
+                    roomType: 'quadruple__sub_double',
+                    requested: fallbackRoomsNeeded,
+                    probeLimit: fallbackProbeLimit,
+                    roomsFound: 0,
+                    substituteFor: 'quadruple',
+                    substituteRatio: 2,
+                });
+
+                logger.info(
+                    { jobId, hotelCode, quadShortfall, fallbackRoomsNeeded, fallbackProbeLimit, fallbackBatches },
+                    'Starting quadruple fallback probe (doubles, twin allowed)',
+                );
+
+                for (let fb = 0; fb < fallbackBatches; fb++) {
+                    const startRoomId = globalRoomId;
+                    const endRoomId = startRoomId + PROBE_BATCH_SIZE - 1;
+                    lastProbeRange = `R${startRoomId}-R${endRoomId}`;
+                    globalRoomId += PROBE_BATCH_SIZE;
+
+                    let wbeResult: any;
+                    try {
+                        wbeResult = await wbeClientService.searchAndGetByHotelsV2({
+                            HotelIds: [hotelCode],
+                            CheckInDate: checkinDate,
+                            Nights: nights,
+                            WaitSeconds: waitSeconds,
+                            CurrencyCode: currencyCode,
+                            NationalityCode: nationalityCode,
+                            Rooms: buildHomogeneousBatch(2, 0, [], startRoomId),
+                        });
+                    } catch (err: any) {
+                        logger.warn({ jobId, hotelCode, lastProbeRange, error: err.message }, 'Quadruple fallback WBE call failed');
+                        break;
+                    }
+
+                    if (!wbeResult) break;
+
+                    const sessionId = field<string>(wbeResult, 'SessionID', 'sessionId', 'SessionId') ?? '';
+                    const isFinished = field<boolean>(wbeResult, 'Finished', 'finished') ?? true;
+                    let hotelEntries: any[] = field<any[]>(wbeResult, 'Data', 'data', 'Hotels', 'hotels') ?? [];
+
+                    if (!isFinished && sessionId) {
+                        const polled = await pollUntilFinished(sessionId);
+                        hotelEntries.push(...polled);
+                    }
+
+                    const wbeHotel = hotelEntries.find(
+                        (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
+                    );
+                    captureWbeHotelMeta(wbeHotel);
+
+                    if (!wbeHotel) {
+                        logger.info({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no hotel entry — stopping');
+                        break;
+                    }
+
+                    const rawOptions: any[] = field<any[]>(wbeHotel, 'Options', 'options') ?? [];
+                    const batchOptions = parseProbeOptions(rawOptions, nights, PROBE_BATCH_SIZE);
+
+                    const mealFiltered = mealType
+                        ? batchOptions.filter((o) => o.mealType?.toUpperCase() === mealType.toUpperCase())
+                        : batchOptions;
+
+                    // matchesRoomType('double', ...) accepts double + twin — secondary "2 twins" fallback is subsumed here.
+                    const roomTypeFiltered = mealFiltered.filter((o) =>
+                        matchesRoomType(o.roomDescriptions, 'double'),
+                    );
+
+                    if (roomTypeFiltered.length === 0) {
+                        logger.info({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no double/twin matches — stopping');
+                        break;
+                    }
+
+                    // Tag as synthetic substitute type so EC3 allocation groups these separately
+                    for (const opt of roomTypeFiltered) {
+                        opt.requestedRoomType = 'quadruple';
+                        opt.roomType = 'quadruple__sub_double';
+                        opt.substituteFor = 'quadruple';
+                        opt.substituteRatio = 2;
+                        opt.actualRoomDescription = opt.roomDescriptions?.[0] ?? null;
+                        opt.sessionId = sessionId;
+                    }
+
+                    fallbackRoomsFound += PROBE_BATCH_SIZE;
+                    roomsFound += PROBE_BATCH_SIZE;
+                    allOptions.push(...roomTypeFiltered);
+
+                    const subProgress = typeProgressMap.get('quadruple__sub_double')!;
+                    subProgress.roomsFound = fallbackRoomsFound;
+
+                    const typeProgressArray = Array.from(typeProgressMap.values());
+                    const progressSummary = typeProgressArray
+                        .map((tp) => `${tp.roomsFound}/${tp.probeLimit} ${tp.roomType}s`)
+                        .join(', ');
+
+                    await hotelProbeJobRepository.updateProbing(jobId, {
+                        roomsFound,
+                        lastProbeRange,
+                        optionsSnapshot: allOptions,
+                    });
+
+                    const progressEvent: HotelProbeProgressEvent = {
+                        hotelCode,
+                        status: 'PROBING',
+                        roomsFound,
+                        lastProbeRange,
+                        percentComplete: Math.min(100, Math.round((roomsFound / probeLimit) * 100)),
+                        message: `Probing quadruple fallback (double) ${lastProbeRange}: ${progressSummary}`,
+                        roomTypeProgress: typeProgressArray,
+                    };
+                    broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
+
+                    if (fallbackRoomsFound >= fallbackRoomsNeeded) break;
+                }
+
+                substituteTargets.push(fallbackTarget);
+
+                logger.info(
+                    { jobId, hotelCode, fallbackRoomsFound, fallbackRoomsNeeded },
+                    'Quadruple fallback phase finished',
+                );
+            }
+        }
+
+        // Append substitute targets so the capacity check + EC3 allocation see them.
+        // Done after the main per-type loop so the for-of above doesn't re-iterate them.
+        if (substituteTargets.length > 0) {
+            roomTypeTargets.push(...substituteTargets);
         }
     } else {
         // ── LEGACY: Aggregate probing (backward compat for old jobs) ──────────
@@ -403,6 +603,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             const wbeHotel = hotelEntries.find(
                 (h: any) => (field<string>(h, 'HotelCode', 'hotelCode', 'Code') ?? '') === hotelCode,
             );
+            captureWbeHotelMeta(wbeHotel);
 
             if (!wbeHotel) {
                 logger.info({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
@@ -468,11 +669,31 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         const insufficientTypes: string[] = [];
 
         for (const target of roomTypeTargets) {
+            // Substitute targets (e.g. quadruple__sub_double) are credited against their parent
+            // type below — they don't stand on their own.
+            if (target.substituteFor) continue;
+
             const found = typeProgressMap.get(target.roomType)?.roomsFound ?? 0;
-            if (found < target.requested) {
+
+            // Sum credits from any substitute targets that back this room type.
+            // Each substitute room counts as 1/ratio of its parent type (2 doubles = 1 quad).
+            const substituteCredit = roomTypeTargets
+                .filter((t) => t.substituteFor === target.roomType)
+                .reduce((sum, sub) => {
+                    const subFound = typeProgressMap.get(sub.roomType)?.roomsFound ?? 0;
+                    const ratio = sub.substituteRatio ?? 1;
+                    return sum + Math.floor(subFound / ratio);
+                }, 0);
+
+            const effectiveFound = found + substituteCredit;
+
+            if (effectiveFound < target.requested) {
                 anyInsufficient = true;
-                insufficientTypes.push(`${target.roomType}: found ${found}, need ${target.requested}`);
-            } else if (found === target.requested) {
+                const detail = substituteCredit > 0
+                    ? `found ${found} + ${substituteCredit} substitute`
+                    : `found ${found}`;
+                insufficientTypes.push(`${target.roomType}: ${detail}, need ${target.requested}`);
+            } else if (effectiveFound === target.requested) {
                 allConfirmed = false;
             }
         }
@@ -524,7 +745,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     // ── Fetch DB hotel info (needed for Step 3.2 overlap check + enrichment) ──
     const [dbHotelMap, facilityMap] = await Promise.all([
-        hotelSearchRepository.getHotelsByCode([hotelCode]),
+        hotelSearchRepository.getHotelsByCode([hotelCode], lang === 'de' ? 'de' : 'en'),
         hotelSearchRepository.getFacilitiesByHotelCodes([hotelCode]),
     ]);
     const dbHotel = dbHotelMap.get(hotelCode);
@@ -791,6 +1012,33 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             entry.cxlConditions = rawConditions;
             entry.roomBreakdown = roomBreakdown;
 
+            // Recompute per-room-per-night from the AUTHORITATIVE OptionDetailsV2 total.
+            // WBE search can return a bogus-low rawTotalPrice; OptionDetailsV2 reflects the
+            // real booking total. Use detail.Rooms.length as the divisor (not allocated
+            // rooms, which is a different concept).
+            const detailRoomsCount = roomBreakdown.length > 0 ? roomBreakdown.length : (entry.roomsInOption ?? 1);
+            if (detailTotalPrice && detailRoomsCount > 0 && nights > 0) {
+                entry.detailPricePerRoomPerNight = detailTotalPrice / (detailRoomsCount * nights);
+
+                // Log when search vs detail diverge by >30% — useful to spot WBE data
+                // inconsistencies like the one Oliver's team reported on Bella Sky.
+                const searchPPRPN = entry.pricePerRoomPerNight ?? 0;
+                if (searchPPRPN > 0) {
+                    const ratio = entry.detailPricePerRoomPerNight / searchPPRPN;
+                    if (ratio > 1.3 || ratio < 0.77) {
+                        logger.warn(
+                            {
+                                hotelCode, tid: entry.tid, supplierCode: entry.supplierCode,
+                                searchPPRPN, detailPPRPN: entry.detailPricePerRoomPerNight,
+                                searchTotal: entry.rawTotalPrice, detailTotal: detailTotalPrice,
+                                detailRoomsCount, nights,
+                            },
+                            'Step 3.4: Search vs OptionDetails price divergence detected — trusting OptionDetails',
+                        );
+                    }
+                }
+            }
+
             validatedSplit.push(entry);
 
             console.log(`[Step 3.4] ✅ ${entry.supplierCode}: cxlDeadline=${optionDate}, totalPrice=${detailTotalPrice}, rooms=${entry.rooms}`);
@@ -875,16 +1123,37 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     console.log(`[Step 3.4] PASS ${hotelCode}: validatedRooms=${validatedRoomsAllocated}, suppliers=${validatedSplit.length}, earliestCxlDeadline=${earliestCxlDeadline}`);
 
     // ── Enrich with DB hotel info ────────────────────────────────────────────
-    const rawImageKey = dbHotel?.primaryImageKey ?? null;
-    let imageUrl: string | null = null;
-    if (rawImageKey) {
-        let decodedKey = rawImageKey;
-        try { decodedKey = decodeURIComponent(rawImageKey); } catch { /* use as-is */ }
-        imageUrl = `/api/v1/hotels/image?key=${encodeURIComponent(decodedKey)}`;
-    }
+    // Build a fallback chain of image URLs so the FE can walk to the next one
+    // when the proxy returns 404 / blank bytes. Priority:
+    //   1. All GIATA categorised images (exterior → room → lobby → …).
+    //   2. All WBE imageKeys ordered by displayOrder, wrapped in our proxy.
+    // The first entry is the "primary" — exposed as the legacy `imageUrl`
+    // field for backwards compatibility; `imageUrls` is the new full list.
+    const wbeImageUrls = (dbHotel?.allImageKeys ?? []).map((key) => {
+        let decoded = key;
+        try { decoded = decodeURIComponent(key); } catch { /* use as-is */ }
+        return `/api/v1/hotels/image?key=${encodeURIComponent(decoded)}`;
+    });
+    const imageUrls: string[] = [...(dbHotel?.giataImageUrls ?? []), ...wbeImageUrls];
+    const imageUrl: string | null = imageUrls[0] ?? null;
+    const imageSource: 'giata' | 'wbe' | 'none' =
+        (dbHotel?.giataImageUrls?.length ?? 0) > 0
+            ? 'giata'
+            : wbeImageUrls.length > 0
+                ? 'wbe'
+                : 'none';
+    logger.debug({ hotelCode, imageSource, total: imageUrls.length }, 'Primary image source');
 
     // Calculate sell price — uses HIGHEST mid-range price across ALL room types (Step 4.1)
-    const buyingPriceBase = overallHighestMidRangePrice;
+    // Prefer OptionDetailsV2-derived prices (authoritative) over search prices (WBE
+    // sometimes returns bogus-low rawTotalPrice in search that doesn't match the real
+    // booking total — see Oliver's M* pricing issue).
+    const detailPPRPNs: number[] = validatedSplit
+        .map((e: any) => e.detailPricePerRoomPerNight)
+        .filter((p: any) => typeof p === 'number' && p > 0);
+    const buyingPriceBase = detailPPRPNs.length > 0
+        ? Math.max(...detailPPRPNs)
+        : overallHighestMidRangePrice;
     const raw = buyingPriceBase * (1 + markupPercent / 100);
     const rounded = Math.ceil(raw);
     let sellingPrice = rounded;
@@ -924,12 +1193,58 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         // Count validated rooms for this type (some suppliers may have been removed in Step 3.4)
         const validatedForType = validatedSplit.filter((e: any) => e.roomType === type);
         const validatedTypeRooms = validatedForType.reduce((s: number, e: any) => s + e.rooms, 0);
+
+        // M5 — Collect the ACTUAL WBE room descriptions for this type so the UI can
+        // show the real room name (e.g. "Double Room, Terrace (1 Double Bed)") instead
+        // of just the requested type label (e.g. "Single"). Deduplicate and cap to 5.
+        const actualDescriptions = Array.from(new Set(
+            (optionsByType.get(type) ?? [])
+                .map((o: any) => o.actualRoomDescription ?? o.roomDescriptions?.[0])
+                .filter(Boolean),
+        )).slice(0, 5);
+
+        // Rate basis — pick from the cheapest mid-range option for this room type,
+        // fallback to any option for this type. Default "RO" (Room Only) when absent.
+        const sourceOption =
+            data.midRangeOptions?.[0] ??
+            (optionsByType.get(type) ?? [])[0];
+        const mealType = sourceOption?.mealType?.toString().trim() || 'RO';
+        const mealName = sourceOption?.mealName?.toString().trim() || 'Room only';
+
+        // Prefer validated OptionDetails prices over search-time prices for this type
+        const typeDetailPPRPNs = validatedForType
+            .map((e: any) => e.detailPricePerRoomPerNight)
+            .filter((p: any) => typeof p === 'number' && p > 0);
+        const highestMidRangePrice = typeDetailPPRPNs.length > 0
+            ? Math.max(...typeDetailPPRPNs)
+            : data.highestMidRangePrice;
+
+        // Substitution metadata — carried from the synthetic target (e.g. quadruple__sub_double).
+        // The source is the first option in the group since all options in a synthetic type share
+        // the same substituteFor/substituteRatio tags.
+        const firstOption = (optionsByType.get(type) ?? [])[0];
+        const substituteFor = firstOption?.substituteFor as string | undefined;
+        const substituteRatio = firstOption?.substituteRatio as number | undefined;
+        const substituteUnitsCovered = substituteFor && substituteRatio
+            ? Math.floor(validatedTypeRooms / substituteRatio)
+            : undefined;
+        const substitutionNote = substituteFor && substituteUnitsCovered
+            ? `In place of ${substituteUnitsCovered} ${substituteFor} room${substituteUnitsCovered === 1 ? '' : 's'}`
+            : undefined;
+
         return {
             roomType: type,
             requested: data.requested,
             roomsAllocated: validatedTypeRooms,
-            highestMidRangePrice: data.highestMidRangePrice,
+            highestMidRangePrice,
             supplierCount: validatedForType.length,
+            actualDescriptions,
+            mealType,
+            mealName,
+            substituteFor,
+            substituteRatio,
+            substituteUnitsCovered,
+            substitutionNote,
         };
     }).filter((t) => t.roomsAllocated > 0); // Only include types that have rooms
 
@@ -940,13 +1255,39 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     const resultJson = {
         hotelCode,
-        hotelName: dbHotel?.name ?? hotelCode,
-        starRating: dbHotel?.starRating ? Number(dbHotel.starRating) : null,
+        // 'main' = exact-criteria search; 'alternative' = relaxed-criteria search.
+        // FE filters by this to render two sections ("Matching your request" vs
+        // "Similar alternatives"). Defaults to 'main' for legacy probes.
+        searchKind: searchKind ?? 'main',
+        alternativeReason: alternativeReason ?? null,
+        hotelName: dbHotel?.name ?? wbeHotelMeta.hotelName ?? hotelCode,
+        // Soft ranking signal — true when the hotel's name matches any of
+        // the multilingual youth-friendly patterns (hostel, Jugendherberge,
+        // auberge, ostello, etc). Consumed by the accumulation gate to
+        // promote these hotels for Youth/School group requests. Never used
+        // as a filter — all hotels still flow through to the proposal.
+        youthFriendly: isYouthFriendlyName(dbHotel?.name ?? wbeHotelMeta.hotelName ?? ''),
+        starRating: floorStarRating(dbHotel?.starRating ? Number(dbHotel.starRating) : null),
         imageUrl,
+        // Ordered fallback chain — FE renders the first URL and `onerror`s
+        // down the list until one loads. Always non-empty when imageUrl is
+        // set; empty array when the hotel has no images at all.
+        imageUrls,
+        // Public SETTHub detail page URL — frontend wraps the hotel name in a
+        // link to open it (Oliver's "no duplicate detail page, just link out" ask).
+        // Null when masterHotelId isn't synced yet — frontend renders plain text.
+        sethubDetailsUrl: dbHotel?.sethubDetailsUrl ?? null,
+        description: dbHotel?.description ?? null,
+        descriptionLanguage: dbHotel?.descriptionLanguage ?? null,
+        descriptionSource: dbHotel?.descriptionSource ?? null,
+        // Both EN/DE translations in one payload — lets the FE swap card text
+        // instantly on language toggle without re-running the search.
+        descriptions: (dbHotel as any)?.descriptions ?? null,
+        address: (dbHotel as any)?.address ?? wbeHotelMeta.address ?? null,
         addressCity: dbHotel?.addressCity ?? null,
         addressCountry: dbHotel?.addressCountry ?? null,
-        latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : null,
-        longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : null,
+        latitude: dbHotel?.latitude ? Number(dbHotel.latitude) : (wbeHotelMeta.latitude ?? null),
+        longitude: dbHotel?.longitude ? Number(dbHotel.longitude) : (wbeHotelMeta.longitude ?? null),
         roomsFound,
         roomsAllocated: validatedRoomsAllocated,
         capacityStatus,
@@ -957,7 +1298,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         totalSupplierClaim,
         physicalCapacity,
         cxlDeadline: earliestCxlDeadline,
-        highestMidRangePrice: overallHighestMidRangePrice,
+        highestMidRangePrice: buyingPriceBase,
         sellingPricePerRoomPerNight: sellingPrice,
         currency: allOptions[0]?.currency ?? currencyCode,
         supplierSplit: validatedSplit,

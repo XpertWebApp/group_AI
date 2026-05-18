@@ -62,10 +62,15 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime? @updatedAt @map("updated_at")
   refreshToken       String?   @map("refresh_token")
+  // DEPRECATED: Google OAuth columns. Email sending now uses Brevo SMTP only.
+  // Kept as nullable columns to avoid a destructive migration; no code reads them.
+  // Drop in a future migration once we're confident no rollback needs them.
   googleAccessToken  String?   @map("google_access_token")
   googleRefreshToken String?   @map("google_refresh_token")
   googleTokenExpiry  DateTime? @map("google_token_expiry")
+  googleEmail        String?   @map("google_email") @db.VarChar(255)
   role               UserRole  @relation(fields: [roleId], references: [id])
+  assignedRequests   BookingRequest[] @relation("BookingRequestAssignee")
 
   @@index([roleId])
   @@map("users")
@@ -139,6 +144,8 @@ model Hotel {
   createdAt        DateTime  @default(now()) @map("created_at")
   lastSyncedAt     DateTime? @map("last_synced_at")
   detailsFetchedAt DateTime? @map("details_fetched_at")
+  giataSyncedAt    DateTime? @map("giata_synced_at")
+  giataStatus      String?   @map("giata_status") @db.VarChar(20)
 
   @@index([destinationId, name])
   @@index([destinationId])
@@ -199,6 +206,88 @@ model HotelFacilityGroup {
   @@schema("master")
 }
 
+// ─── GIATA MHG: Multilingual hotel text sections ─────────────────────────────
+model HotelGiataText {
+  id          String    @id @default(uuid()) @db.Uuid
+  hotelCode   String    @map("hotel_code") @db.VarChar(255)
+  giataId     String    @map("giata_id") @db.VarChar(50)
+  lang        String    @db.VarChar(10)
+  sectionType String    @map("section_type") @db.VarChar(20)
+  title       String    @db.VarChar(255)
+  content     String    @db.Text
+  lastUpdate  DateTime? @map("last_update")
+  syncedAt    DateTime  @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, lang, sectionType])
+  @@index([hotelCode])
+  @@index([giataId])
+  @@map("hotel_giata_texts")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Structured fact sheet data ───────────────────────────────────
+model HotelGiataFact {
+  id          String   @id @default(uuid()) @db.Uuid
+  hotelCode   String   @map("hotel_code") @db.VarChar(255)
+  giataId     String   @map("giata_id") @db.VarChar(50)
+  sectionType String   @map("section_type") @db.VarChar(20)
+  sectionName String   @map("section_name") @db.VarChar(100)
+  factId      Int      @map("fact_id")
+  factName    String   @map("fact_name") @db.VarChar(100)
+  typeHint    String   @map("type_hint") @db.VarChar(20)
+  value       String   @db.VarChar(500)
+  unit        String?  @db.VarChar(20)
+  fee         Boolean? @default(false)
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, factId])
+  @@index([hotelCode])
+  @@index([sectionType])
+  @@map("hotel_giata_facts")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Hotel image URLs ─────────────────────────────────────────────
+model HotelGiataImage {
+  id           String    @id @default(uuid()) @db.Uuid
+  hotelCode    String    @map("hotel_code") @db.VarChar(255)
+  giataId      String    @map("giata_id") @db.VarChar(50)
+  imageType    String    @map("image_type") @db.VarChar(5)
+  displayOrder Int       @default(0) @map("display_order")
+  urlSmall     String?   @map("url_small")
+  urlMedium    String?   @map("url_medium")
+  urlLarge     String?   @map("url_large")
+  /// Full HD variant (maxwidth=1920, typically 1624×1080). Populated on re-sync.
+  urlFullHd    String?   @map("url_full_hd")
+  /// Original / 4K variant (maxwidth=3840, typically 3248×2160). Populated on re-sync.
+  urlOriginal  String?   @map("url_original")
+  lastUpdate   DateTime? @map("last_update")
+  syncedAt     DateTime  @default(now()) @map("synced_at")
+
+  @@index([hotelCode])
+  @@index([hotelCode, displayOrder])
+  @@map("hotel_giata_images")
+  @@schema("master")
+}
+
+// ─── GIATA Multicodes: Supplier/GDS mapping codes ────────────────────────────
+model HotelGiataMapping {
+  id           String   @id @default(uuid()) @db.Uuid
+  hotelCode    String   @map("hotel_code") @db.VarChar(255)
+  giataId      String   @map("giata_id") @db.VarChar(50)
+  providerCode String   @map("provider_code") @db.VarChar(50)
+  providerType String   @map("provider_type") @db.VarChar(20)
+  codeValue    String   @map("code_value") @db.VarChar(255)
+  syncedAt     DateTime @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, providerCode, codeValue])
+  @@index([hotelCode])
+  @@index([giataId])
+  @@index([providerCode])
+  @@map("hotel_giata_mappings")
+  @@schema("master")
+}
+
 model BookingRequest {
   id                     String                     @id @default(uuid()) @db.Uuid
   rawPayload             Json                       @map("raw_payload")
@@ -210,6 +299,7 @@ model BookingRequest {
   contactName            String?                    @map("contact_name") @db.VarChar(255)
   contactEmail           String?                    @map("contact_email") @db.VarChar(255)
   contactPhone           String?                    @map("contact_phone") @db.VarChar(50)
+  contactPhoneCountryCode String?                   @map("contact_phone_country_code") @db.VarChar(8)
   currencyCode           String?                    @map("currency_code") @db.VarChar(10)
   destinationName        String?                    @map("destination_name") @db.VarChar(255)
   destinationId          Int                        @map("destination_id")
@@ -229,6 +319,7 @@ model BookingRequest {
   budgetRange            String?                    @map("budget_range") @db.VarChar(100)
   groupType              String?                    @map("group_type") @db.VarChar(100)
   groupSize              Int?                       @map("group_size")
+  averageAge             Int?                       @map("average_age")
   breakfastPreference    String?                    @map("breakfast_preference") @db.VarChar(10)
   hotelLocation          String?                    @map("hotel_location") @db.VarChar(50)
   firstName              String?                    @map("first_name") @db.VarChar(100)
@@ -238,6 +329,18 @@ model BookingRequest {
   termsAndConditions     String?                    @map("terms_and_conditions")
   cancellationConditions String?                    @map("cancellation_conditions")
   assignedUserId         String?                    @map("assigned_user_id") @db.Uuid
+  assignedUser           User?                      @relation("BookingRequestAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  /// Terminal-detection signal for the polling frontend.
+  /// Values: 'in_progress' | 'settled' | 'exhausted'. NULL = no search has run yet
+  /// (frontend treats NULL as 'in_progress' for safety).
+  searchPhase            String?                    @map("search_phase") @db.VarChar(20)
+  /// Last-known pagination cursor for the manual hotel-search flow. Holds
+  /// { usedDestinationId, starRatings, totalCandidates, nextOffset } — the
+  /// watcher persists this just before broadcasting searchSettled so that
+  /// a subsequent "Search More" click can resume pagination exactly where
+  /// it left off. NULL when no cursor is available (search exhausted, or
+  /// pre-feature row).
+  searchPaginationCursor Json?                      @map("search_pagination_cursor")
   attachments            BookingRequestAttachment[]
   proposals              Proposal[]
 
@@ -290,6 +393,7 @@ model Proposal {
   pdfUrl           String?           @map("pdf_url") @db.Text
   hotels           ProposalHotel[]
   services         ProposalService[]
+  offers           ProposalOffer[]
   bookingRequest   BookingRequest?   @relation(fields: [requestId], references: [id])
 
   @@index([requestId])
@@ -297,6 +401,31 @@ model Proposal {
   @@index([sentAt])
   @@index([lockedAt])
   @@map("proposals")
+  @@schema("app")
+}
+
+model ProposalOffer {
+  id              String    @id @default(uuid()) @db.Uuid
+  proposalId      String    @map("proposal_id") @db.Uuid
+  offerNumber     Int       @map("offer_number")
+  type            String    @db.VarChar(20)
+  pdfKey          String    @map("pdf_key") @db.Text
+  pdfUrl          String    @map("pdf_url") @db.Text
+  sentAt          DateTime  @default(now()) @map("sent_at")
+  sentBy          String    @map("sent_by") @db.Uuid
+  sentToEmails    String[]  @map("sent_to_emails")
+  hotelSnapshot   Json?     @map("hotel_snapshot")
+  serviceSnapshot Json?     @map("service_snapshot")
+  totalPrice      Decimal?  @map("total_price") @db.Decimal(12, 2)
+  currency        String?   @db.VarChar(10)
+  method          String?   @db.VarChar(20)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  proposal        Proposal  @relation(fields: [proposalId], references: [id])
+
+  @@unique([proposalId, offerNumber])
+  @@index([proposalId])
+  @@index([sentAt])
+  @@map("proposal_offers")
   @@schema("app")
 }
 
@@ -314,10 +443,16 @@ model ProposalHotel {
   rooms                Json?
   latitude             Decimal?  @db.Decimal(10, 7)
   longitude            Decimal?  @db.Decimal(10, 7)
+  starRating           Int?      @map("star_rating")
+  address              String?
+  addressCity          String?   @map("address_city") @db.VarChar(255)
+  addressCountry       String?   @map("address_country") @db.VarChar(10)
+  hotelRef             String?   @map("hotel_ref") @db.VarChar(32)
   optionDetailsId      String?   @map("option_details_id") @db.Uuid
   createdAt            DateTime  @default(now()) @map("created_at")
   deletedAt            DateTime? @map("deleted_at")
   optionDetailsFetched Boolean   @default(false) @map("option_details_fetched")
+  includedInTotal      Boolean   @default(true) @map("included_in_total")
   proposal             Proposal  @relation(fields: [proposalId], references: [id])
 
   @@index([proposalId])
@@ -325,6 +460,7 @@ model ProposalHotel {
   @@index([tid])
   @@index([optionDetailsId])
   @@index([proposalId, deletedAt])
+  @@unique([proposalId, hotelRef], map: "proposal_hotels_proposal_id_hotel_ref_key")
   @@map("proposal_hotels")
   @@schema("app")
 }
@@ -342,6 +478,7 @@ model ProposalService {
   days        Int?
   notes       String?
   createdAt   DateTime  @default(now()) @map("created_at")
+  includedInTotal Boolean @default(true) @map("included_in_total")
   proposal    Proposal  @relation(fields: [proposalId], references: [id])
 
   @@index([proposalId])
@@ -417,6 +554,11 @@ enum BookingRequestStatus {
   completed
   cancelled
   ai_generated
+  sent
+  declined
+  /// Auto-search exhausted all relaxation levels and destination fallbacks
+  /// without finding hotels. Staff must handle this request manually.
+  needs_manual_handling
 
   @@schema("app")
 }
@@ -482,6 +624,11 @@ model HotelProbeJob {
   resultJson      Json?               @map("result_json")
   optionsSnapshot Json?               @map("options_snapshot")
   errorMsg        String?             @map("error_msg")
+  /// 'main' = exact-criteria search; 'alternative' = relaxed-criteria search.
+  searchKind        String  @default("main") @map("search_kind") @db.VarChar(20)
+  /// Short label for why this is an alternative (e.g. 'Wider star rating').
+  /// Null when searchKind = 'main'.
+  alternativeReason String? @map("alternative_reason") @db.VarChar(80)
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([searchRequestId])
@@ -504,5 +651,31 @@ model SupplierLimit {
 
   @@index([supplierCode])
   @@map("supplier_limits")
+  @@schema("app")
+}
+
+/// Dead-letter queue for outbound emails that exhausted all retry attempts.
+/// One row per failed email; staff are alerted via in-app notification on insertion.
+/// Phase 1 has no admin UI — rows here exist for audit/debug + future manual replay.
+model FailedEmail {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(64)
+  recipient     String    @db.VarChar(255)
+  subject       String    @db.VarChar(500)
+  body          String
+  replyTo       String?   @map("reply_to") @db.VarChar(255)
+  requestId     String?   @map("request_id") @db.Uuid
+  proposalId    String?   @map("proposal_id") @db.Uuid
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  resolvedAt    DateTime? @map("resolved_at")
+
+  @@index([eventType])
+  @@index([requestId])
+  @@index([proposalId])
+  @@index([resolvedAt])
+  @@map("failed_emails")
   @@schema("app")
 }

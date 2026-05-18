@@ -24,6 +24,9 @@ export class UserRepository {
     }
 
     async createUser(data: any): Promise<User> {
+        if (data.email && typeof data.email === 'string') {
+            data.email = data.email.toLowerCase();
+        }
         return prisma.user.create({
             data,
         });

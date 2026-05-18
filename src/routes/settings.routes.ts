@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import settingsController from '../controllers/settings.controller';
 import staffController from '../controllers/staff.controller';
+import giataSyncController from '../controllers/giataSync.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { adminGuard } from '../middlewares/adminGuard.middleware';
 import { validate } from '../middlewares/validate.middleware';
@@ -52,5 +53,14 @@ router.post('/staff', validate(AddStaffSchema), staffController.add);
 router.patch('/staff/:id/status', validate(ToggleStaffStatusSchema), staffController.toggleStatus);
 router.post('/staff/:id/reset-password', staffController.resetPassword);
 router.delete('/staff/:id', staffController.delete);
+
+// GIATA Sync (admin)
+// Order matters: specific routes BEFORE parameterized routes
+router.post('/giata/sync-full', giataSyncController.triggerFullSync);
+router.post('/giata/sync-incremental', giataSyncController.triggerIncrementalSync);
+router.post('/giata/sync-hotel', giataSyncController.syncSingleHotel);  // hotelCode via query or body
+router.post('/giata/resolve', giataSyncController.resolveGiataCodes);
+router.get('/giata/status', giataSyncController.getStatus);
+router.get('/giata/missing', giataSyncController.getMissingHotels);
 
 export default router;

@@ -6,6 +6,7 @@ import {
     UpdateProposalSchema,
     AddProposalHotelSchema,
     AdjustHotelPricingSchema,
+    ToggleProposalHotelSchema,
     AddProposalServiceSchema,
     UpdateProposalServiceSchema,
     PreviewPdfSchema,
@@ -52,6 +53,13 @@ router.post(
     authMiddleware,
     validate(AdjustHotelPricingSchema, 'body'),
     proposalsController.adjustHotelPricing,
+);
+
+router.patch(
+    '/:id/hotels/:hotelId',
+    authMiddleware,
+    validate(ToggleProposalHotelSchema, 'body'),
+    proposalsController.toggleHotelIncluded,
 );
 
 // Services on proposal
@@ -105,5 +113,9 @@ router.post(
     validate(DeclineProposalSchema, 'body'),
     proposalsController.decline,
 );
+
+// Offer history (initial / final / revisions)
+router.get('/:id/offers', authMiddleware, proposalsController.listOffers);
+router.get('/:id/offers/:offerId/pdf', authMiddleware, proposalsController.downloadOfferPdf);
 
 export default router;

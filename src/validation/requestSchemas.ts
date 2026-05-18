@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseGroupType } from '../services/webhook.service';
 
 // ── Rooms (Step 2 - Room & Accommodations) ─────────────────────────────────
 export const RoomsSchema = z.object({
@@ -8,6 +9,8 @@ export const RoomsSchema = z.object({
     triple: z.number().int().min(0).default(0),
     quadruple: z.number().int().min(0).default(0),
     suites: z.number().int().min(0).default(0),
+    standardDoubleBeds: z.number().int().min(0).default(0),
+    twinBeds: z.number().int().min(0).default(0),
     extraRoomsNote: z.string().trim().max(2000).nullable().optional(),
 });
 
@@ -29,6 +32,7 @@ export const CreateBookingRequestSchema = z
         budget: z.number().positive().optional(),
         groupType: z.string().max(100).optional(),
         groupSize: z.number().int().min(1).optional(),
+        averageAge: z.number().int().min(6).max(25).optional(),
         currencyCode: z.string().min(2).max(10).optional(),
         nationalityCode: z.string().min(1).max(10).optional(),
 
@@ -45,6 +49,11 @@ export const CreateBookingRequestSchema = z
         contactName: z.string().optional(),
         contactEmail: z.string().email(),
         contactPhone: z.string().min(5),
+        contactPhoneCountryCode: z.string()
+            .regex(/^\+\d{1,5}$/, 'Country code must start with + followed by 1-5 digits')
+            .max(8)
+            .optional()
+            .nullable(),
         guestListFileKey: z.string().optional(),
         customerNotes: z.string().max(5000).nullable().optional(),
 
@@ -69,6 +78,15 @@ export const CreateBookingRequestSchema = z
             return true;
         },
         { message: 'Either nights or checkoutDate must be provided and checkout must be after checkin' },
+    )
+    .refine(
+        (d) => {
+            if (!d.groupType) return true;
+            const code = parseGroupType(d.groupType);
+            const ageRequired = code === 'youth' || code === 'school';
+            return !ageRequired || typeof d.averageAge === 'number';
+        },
+        { message: 'averageAge is required when groupType is Youth Group or School Group', path: ['averageAge'] },
     );
 
 export const UpdateBookingRequestSchema = z.object({
@@ -83,6 +101,7 @@ export const UpdateBookingRequestSchema = z.object({
     budget: z.number().positive().optional(),
     groupType: z.string().max(100).optional(),
     groupSize: z.number().int().min(1).optional(),
+    averageAge: z.number().int().min(6).max(25).nullable().optional(),
     currencyCode: z.string().min(2).max(10).optional(),
     nationalityCode: z.string().min(1).max(10).optional(),
     // Step 2
@@ -97,6 +116,11 @@ export const UpdateBookingRequestSchema = z.object({
     contactName: z.string().optional(),
     contactEmail: z.string().email().optional(),
     contactPhone: z.string().min(5).optional(),
+    contactPhoneCountryCode: z.string()
+        .regex(/^\+\d{1,5}$/, 'Country code must start with + followed by 1-5 digits')
+        .max(8)
+        .optional()
+        .nullable(),
     guestListFileKey: z.string().optional(),
     customerNotes: z.string().max(5000).nullable().optional(),
     // Step 4
@@ -104,7 +128,18 @@ export const UpdateBookingRequestSchema = z.object({
     cancellationConditions: z.string().optional(),
     // System
     source: z.string().optional(),
-    status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled']).optional(),
+    status: z.enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling']).optional(),
+}).superRefine((d, ctx) => {
+    if (d.groupType === undefined) return;
+    const code = parseGroupType(d.groupType ?? '');
+    const ageRequired = code === 'youth' || code === 'school';
+    if (ageRequired && (d.averageAge === undefined || d.averageAge === null)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['averageAge'],
+            message: 'averageAge is required when groupType is Youth Group or School Group',
+        });
+    }
 });
 
 // ── Group Requests list (pagination + search + filter) ─────────────────────
@@ -113,7 +148,7 @@ export const ListRequestsQuerySchema = z.object({
     limit: z.string().optional().transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 20)),
     search: z.string().optional(),
     status: z
-        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', ''])
+        .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling', ''])
         .optional()
         .transform((v) => v || undefined),
     dateFrom: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid dateFrom' }),
@@ -156,6 +191,10 @@ export const AddProposalHotelSchema = z.object({
     optionDetailsId: z.string().uuid().optional(),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
+    starRating: z.number().int().min(1).max(5).optional().nullable(),
+    address: z.string().max(2000).optional().nullable(),
+    addressCity: z.string().max(255).optional().nullable(),
+    addressCountry: z.string().max(10).optional().nullable(),
 });
 
 export const AdjustHotelPricingSchema = z.object({
@@ -206,6 +245,12 @@ export const UpdateProposalServiceSchema = z.object({
     quantity: z.number().int().nonnegative().optional(),
     days: z.number().int().nonnegative().optional(),
     notes: z.string().max(2000).optional(),
+    includedInTotal: z.boolean().optional(),
+});
+
+// ── Toggle Hotel Inclusion in Proposal Total ───────────────────────────────
+export const ToggleProposalHotelSchema = z.object({
+    includedInTotal: z.boolean(),
 });
 
 // ── Preview PDF ──────────────────────────────────────────────────────────
@@ -216,7 +261,11 @@ export const PreviewPdfSchema = z.object({
 // ── Send Proposal ─────────────────────────────────────────────────────────
 export const SendProposalSchema = z.object({
     sendToEmail: z.string().email().optional(),
-});
+    sendToEmails: z.array(z.string().email()).min(1).max(20).optional(),
+}).refine(
+    (d) => !(d.sendToEmail && d.sendToEmails),
+    { message: 'Provide either sendToEmail or sendToEmails, not both' },
+);
 
 // ── Approve / Decline Proposal ───────────────────────────────────────────────
 export const ApproveProposalSchema = z.object({
@@ -250,6 +299,11 @@ export const UpdateCompanyDetailsSchema = z.object({
     assignedPerson: z.string().min(1, 'Assigned person is required'),
     emailAddress: z.string().email('Invalid email address'),
     phoneNumber: z.string().min(5, 'Phone number is required'),
+    phoneCountryCode: z.string()
+        .regex(/^\+\d{1,5}$/, 'Country code must start with + followed by 1-5 digits')
+        .max(8)
+        .optional()
+        .nullable(),
     website: z.string().min(1, 'Website is required'),
     taxId: z.string().min(1, 'Tax ID is required'),
     address: z.string().min(1, 'Address is required'),
@@ -317,6 +371,8 @@ export const WbeHotelSearchSchema = z.object({
     nationalityCode: z.string().min(1).max(10).optional(),
     /** Filter hotels by facility/amenity IDs. Only hotels with ALL listed facilities are included. */
     facilityIds: z.array(z.number().int().positive()).optional(),
+    /** Frontend portal language. Determines which language the hotel description is returned in. */
+    lang: z.enum(['en', 'de']).optional(),
 });
 
 // ── Option Details (Step 6) ───────────────────────────────────────────────

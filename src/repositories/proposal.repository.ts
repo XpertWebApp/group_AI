@@ -1,25 +1,27 @@
 import { PrismaClient, ProposalStatus, Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
+import { floorStarRating } from '../utils/starRating';
 
 const prisma = new PrismaClient();
 
 // Lock timeout in minutes
 const LOCK_TIMEOUT_MINUTES = 15;
 
-/** Recalculate proposal totals from live hotel + service rows */
+/** Recalculate proposal totals from live hotel + service rows.
+ *  Only items where includedInTotal = true are summed (Oliver's "options" feature). */
 async function recalcTotals(
     tx: Prisma.TransactionClient,
     proposalId: string,
     markupSettings?: any,
 ): Promise<{ totalBuy: Decimal; totalSell: Decimal }> {
-    // Sum active (non-deleted) hotel totalPrice → buy side
+    // Sum active (non-deleted) hotel totalPrice → buy side, ONLY hotels marked included
     const hotelAgg = await tx.proposalHotel.aggregate({
-        where: { proposalId, deletedAt: null },
+        where: { proposalId, deletedAt: null, includedInTotal: true },
         _sum: { totalPrice: true },
     });
-    // Sum service buyPrice * quantity (quantity defaults to 1 if null)
+    // Sum service buyPrice * quantity ONLY for services marked included
     const services = await tx.proposalService.findMany({
-        where: { proposalId },
+        where: { proposalId, includedInTotal: true },
         select: { buyPrice: true, sellPrice: true, quantity: true },
     });
 
@@ -37,14 +39,9 @@ async function recalcTotals(
 
     // totalSell = apply globalMarkupPercent to totalBuy (hotel side) then add service sell prices
     let totalSell: Decimal;
-    const globalMarkupPercent = markupSettings?.globalMarkupPercent;
-    if (typeof globalMarkupPercent === 'number' && globalMarkupPercent >= 0) {
-        const hotelSell = hotelBuy.mul(new Decimal(1).plus(new Decimal(globalMarkupPercent).div(100)));
-        totalSell = hotelSell.plus(serviceSell);
-    } else {
-        // Fallback: totalSell = sum(hotel buy) + sum(service sellPrice * qty)
-        totalSell = hotelBuy.plus(serviceSell);
-    }
+    const globalMarkupPercent = markupSettings?.globalMarkupPercent ?? 18; // default 18% until settings feature (milestone 5)
+    const hotelSell = hotelBuy.mul(new Decimal(1).plus(new Decimal(globalMarkupPercent).div(100)));
+    totalSell = hotelSell.plus(serviceSell);
 
     return { totalBuy, totalSell };
 }
@@ -128,6 +125,10 @@ export class ProposalRepository {
             optionDetailsId?: string;
             latitude?: number | null;
             longitude?: number | null;
+            starRating?: number | null;
+            address?: string | null;
+            addressCity?: string | null;
+            addressCountry?: string | null;
         },
         markupSettings?: any,
     ) {
@@ -145,6 +146,17 @@ export class ProposalRepository {
                 });
                 optionDetailsFetched = !!cachedByTid;
             }
+
+            // Generate stable hotel reference: SETT-{requestRef}-{seq 3-digit}.
+            // Counts ALL rows (including soft-deleted) so refs are append-only and never collide.
+            const parent = await tx.proposal.findUnique({
+                where: { id: proposalId },
+                select: { bookingRequest: { select: { referenceNumber: true } } },
+            });
+            const refNum = parent?.bookingRequest?.referenceNumber;
+            const count = await tx.proposalHotel.count({ where: { proposalId } });
+            const seq = String(count + 1).padStart(3, '0');
+            const hotelRef = refNum ? `SETT-${refNum}-${seq}` : null;
 
             const hotel = await tx.proposalHotel.create({
                 data: {
@@ -164,6 +176,11 @@ export class ProposalRepository {
                     optionDetailsFetched,
                     latitude: hotelData.latitude != null ? new Decimal(hotelData.latitude).toFixed(7) : null,
                     longitude: hotelData.longitude != null ? new Decimal(hotelData.longitude).toFixed(7) : null,
+                    starRating: floorStarRating(hotelData.starRating ?? null),
+                    address: hotelData.address ?? null,
+                    addressCity: hotelData.addressCity ?? null,
+                    addressCountry: hotelData.addressCountry ?? null,
+                    hotelRef,
                 },
             });
 
@@ -264,6 +281,7 @@ export class ProposalRepository {
             quantity?: number;
             days?: number;
             notes?: string;
+            includedInTotal?: boolean;
         },
     ) {
         return prisma.$transaction(async (tx) => {
@@ -291,6 +309,7 @@ export class ProposalRepository {
                     ...(serviceData.quantity !== undefined && { quantity: serviceData.quantity }),
                     ...(serviceData.days !== undefined && { days: serviceData.days }),
                     ...(serviceData.notes !== undefined && { notes: serviceData.notes }),
+                    ...(serviceData.includedInTotal !== undefined && { includedInTotal: serviceData.includedInTotal }),
                 },
             });
 
@@ -346,6 +365,33 @@ export class ProposalRepository {
             });
 
             const proposal = await tx.proposal.findUnique({ where: { id: proposalId }, select: { markupSettings: true } });
+            const { totalBuy, totalSell } = await recalcTotals(tx, proposalId, proposal?.markupSettings);
+
+            const updatedProposal = await tx.proposal.update({
+                where: { id: proposalId },
+                data: { totalBuy: totalBuy.toFixed(2), totalSell: totalSell.toFixed(2) },
+            });
+
+            return { hotel, proposal: updatedProposal };
+        });
+    }
+
+    /**
+     * Toggle whether a hotel is included in the proposal grand total.
+     * Used for Oliver's "options" feature where multiple hotels can be offered
+     * but only checked ones contribute to the customer-facing total.
+     */
+    async toggleHotelIncluded(proposalId: string, hotelId: string, includedInTotal: boolean) {
+        return prisma.$transaction(async (tx) => {
+            const hotel = await tx.proposalHotel.update({
+                where: { id: hotelId },
+                data: { includedInTotal },
+            });
+
+            const proposal = await tx.proposal.findUnique({
+                where: { id: proposalId },
+                select: { markupSettings: true },
+            });
             const { totalBuy, totalSell } = await recalcTotals(tx, proposalId, proposal?.markupSettings);
 
             const updatedProposal = await tx.proposal.update({
@@ -468,6 +514,59 @@ export class ProposalRepository {
         return prisma.proposalService.create({
             data: { ...serviceData, proposalId },
         });
+    }
+
+    // ─── Proposal Offer History ─────────────────────────────────────────
+
+    /** Count how many offers have been sent for this proposal. */
+    async countOffers(proposalId: string): Promise<number> {
+        return prisma.proposalOffer.count({ where: { proposalId } });
+    }
+
+    /** Create a new ProposalOffer history row. */
+    async createOffer(data: {
+        proposalId: string;
+        offerNumber: number;
+        type: string;
+        pdfKey: string;
+        pdfUrl: string;
+        sentBy: string;
+        sentToEmails: string[];
+        hotelSnapshot?: any;
+        serviceSnapshot?: any;
+        totalPrice?: number | null;
+        currency?: string | null;
+        method?: string | null;
+    }) {
+        return prisma.proposalOffer.create({
+            data: {
+                proposalId: data.proposalId,
+                offerNumber: data.offerNumber,
+                type: data.type,
+                pdfKey: data.pdfKey,
+                pdfUrl: data.pdfUrl,
+                sentBy: data.sentBy,
+                sentToEmails: data.sentToEmails,
+                hotelSnapshot: data.hotelSnapshot ?? null,
+                serviceSnapshot: data.serviceSnapshot ?? null,
+                totalPrice: data.totalPrice ?? null,
+                currency: data.currency ?? null,
+                method: data.method ?? null,
+            },
+        });
+    }
+
+    /** List all offers for a proposal (oldest first by offerNumber). */
+    async listOffers(proposalId: string) {
+        return prisma.proposalOffer.findMany({
+            where: { proposalId },
+            orderBy: { offerNumber: 'asc' },
+        });
+    }
+
+    /** Fetch a single offer by id. */
+    async getOfferById(offerId: string) {
+        return prisma.proposalOffer.findUnique({ where: { id: offerId } });
     }
 }
 

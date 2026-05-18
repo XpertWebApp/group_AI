@@ -7,10 +7,30 @@ import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import wbeClientService from './wbe.client.service';
 import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
+import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
-import { PROBE_BATCH_SIZE, PROBE_MULTIPLIER, PROBE_WAIT_SECONDS, ROOM_TYPE_ADULTS } from '../config/probeConfig';
+import {
+    PROBE_BATCH_SIZE,
+    PROBE_MULTIPLIER,
+    PROBE_WAIT_SECONDS,
+    ROOM_TYPE_ADULTS,
+    SEARCH_BATCH_SIZE,
+    MAX_SEARCH_BATCHES,
+    TARGET_VIABLE_HOTELS,
+} from '../config/probeConfig';
 import type { ExpandedRoom, RoomTypeProbeTarget } from '../queue/hotelProbeJob.types';
-import { countTotalRooms } from '../utils/roomUtils';
+import { countTotalRooms, hasNewDoubleBreakdown, normalizeRoomCounts } from '../utils/roomUtils';
+import {
+    RELAXATION_LADDER,
+    buildStarList,
+    describeRelaxation,
+    describeDestinationFallback,
+    describeAlternativeReason,
+    type RelaxationLevel,
+} from './searchRelaxation';
+import { logAuditEvent } from '../utils/audit';
+import { BookingRequestStatus } from '@prisma/client';
+import { broadcast } from './sseManager';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,6 +52,7 @@ const MAX_POLL_WAIT_MS = 60_000;
 /** Option detail cache TTL in hours. */
 const OPTION_DETAIL_TTL_HOURS = 2;
 
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface HotelSearchParams {
@@ -47,6 +68,8 @@ export interface HotelSearchParams {
     nationalityCode?: string;
     /** Filter hotels by facility/amenity IDs. Only hotels with ALL listed facilities are included. */
     facilityIds?: number[];
+    /** Frontend portal language. Determines GIATA description language returned per hotel. */
+    lang?: 'en' | 'de';
 }
 
 export interface ProcessedOption {
@@ -102,6 +125,7 @@ export interface HotelBestOption {
 export interface HotelResult {
     hotelCode: string;
     hotelName: string;
+    description?: string | null;
     starRating?: number | null;
     imageUrl?: string | null;
     address?: string | null;
@@ -172,6 +196,67 @@ export interface HotelSearchQueueResponse {
     sseEndpoint: string;
     /** Poll this endpoint if SSE is not available. */
     statusEndpoint: string;
+    /**
+     * Set when the search auto-relaxed filters because exact criteria returned zero
+     * hotels. Frontend should show a banner ("We couldn't find exact matches…").
+     */
+    relaxation?: {
+        level: import('./searchRelaxation').RelaxationLevel;
+        bannerMessage: string;
+    } | null;
+    /**
+     * Set when the search fell back to a wider destination (parent / country / nearby)
+     * because the requested destination + relaxed filters still returned zero.
+     */
+    destinationFallback?: {
+        originalDestinationId: number;
+        originalDestinationName: string;
+        usedDestinationId: number;
+        usedDestinationName: string;
+        bannerMessage: string;
+    } | null;
+    /**
+     * True when even the destination fallback returned zero hotels. Frontend
+     * should show a "Submit manual request" CTA so the user is never left
+     * with a dead end.
+     */
+    manualRequestOnly?: boolean;
+    /**
+     * @deprecated The backend no longer computes this — the FE decides locally
+     * by counting successful (COMPLETED) probe jobs after they all terminate:
+     * show the "Show Alternatives" button when 1 ≤ successfulCount ≤ 4.
+     * Kept on the type for backwards-compatibility; always undefined now.
+     */
+    hasAlternativesAvailable?: boolean;
+    /**
+     * True when this call hit the in-flight guard — a previous search was
+     * still running when the FE re-clicked "Search". The backend did NOT
+     * start a fresh search; the FE should keep polling /status or stay on
+     * the existing SSE connection.
+     */
+    alreadyInFlight?: boolean;
+
+    /**
+     * Pagination context — set when the search was issued and the destination
+     * has more candidate hotels than the first batch could cover. The async
+     * orchestrator (offerGeneration.service.ts for auto-offers, or the
+     * post-probe watcher for manual searches) uses this to call
+     * `enqueueAdditionalCandidates()` and chain more probe batches until
+     * TARGET_VIABLE_HOTELS is reached or the destination is exhausted.
+     *
+     * Only present when paginated search is active (i.e. when the destination
+     * has more hotels than SEARCH_BATCH_SIZE).
+     */
+    paginationContext?: {
+        /** Destination ID used for the search (may differ from request.destinationId if relaxation widened). */
+        usedDestinationId: number;
+        /** Star ratings filter actually applied (may be ±1 from request if relaxation widened). */
+        starRatings: number[];
+        /** Total hotels in master.hotels matching the destination + star filter (used to detect "exhausted"). */
+        totalCandidates: number;
+        /** Next batch starts at this offset (= hotels probed so far at this relaxation level). */
+        nextOffset: number;
+    };
 }
 
 // ─── Auto-Offer Types (accumulation loop — PDF Steps 2–4) ────────────────────
@@ -277,9 +362,12 @@ export interface OptionDetailsResponse {
  */
 export function expandRequestRooms(rooms: any): ExpandedRoom[] {
     if (!rooms || typeof rooms !== 'object') return [{ adults: ADULTS_PER_ROOM, children: 0, childrenAges: [] }];
+    // Normalize to avoid double-counting double/twin when new breakdown fields are present
+    const normalized = normalizeRoomCounts(rooms);
     const expanded: ExpandedRoom[] = [];
-    for (const [type, count] of Object.entries(rooms)) {
+    for (const [type, count] of Object.entries(normalized)) {
         const n = Number(count) || 0;
+        if (n <= 0) continue;
         const adults = ROOM_TYPE_ADULTS[type as string] ?? ADULTS_PER_ROOM;
         for (let i = 0; i < n; i++) {
             expanded.push({ adults, children: 0, childrenAges: [] });
@@ -298,8 +386,10 @@ export function expandRequestRooms(rooms: any): ExpandedRoom[] {
  */
 export function buildRoomTypeTargets(rooms: any): RoomTypeProbeTarget[] {
     if (!rooms || typeof rooms !== 'object') return [];
+    // Normalize to avoid double-counting double/twin when new breakdown fields are present
+    const normalized = normalizeRoomCounts(rooms);
     const targets: RoomTypeProbeTarget[] = [];
-    for (const [type, count] of Object.entries(rooms)) {
+    for (const [type, count] of Object.entries(normalized)) {
         const n = Number(count) || 0;
         if (n <= 0) continue;
         const adults = ROOM_TYPE_ADULTS[type] ?? ADULTS_PER_ROOM;
@@ -364,10 +454,7 @@ function field<T>(obj: any, ...keys: string[]): T | undefined {
  * Normalise the price from WBE option to a per-room-per-night value.
  * WBE returns a total for the searched configuration (SEARCH_ROOMS × nights).
  */
-function normalisePricePerRoomPerNight(rawPrice: number, nights: number): number {
-    if (!rawPrice || !nights) return 0;
-    return rawPrice / (SEARCH_ROOMS * nights);
-}
+// normalisePricePerRoomPerNight moved to src/utils/pricing.ts (shared with the probe worker).
 
 /**
  * Skip the bottom `trimPct`% and top `trimPct`% of prices.
@@ -456,13 +543,21 @@ function buildSupplierSplit(
  */
 function getDominantRoomType(rooms: any): string | null {
     if (!rooms || typeof rooms !== 'object') return null;
+
+    const useNewBreakdown = hasNewDoubleBreakdown(rooms);
+
     const types = [
-        { type: 'double',    count: rooms.double    ?? 0 },
-        { type: 'single',    count: rooms.single    ?? 0 },
-        { type: 'twin',      count: rooms.twin      ?? 0 },
-        { type: 'triple',    count: rooms.triple    ?? 0 },
-        { type: 'quadruple', count: rooms.quadruple ?? 0 },
-        { type: 'suite',     count: rooms.suites    ?? 0 },
+        // Legacy double/twin — only counted when new breakdown fields are absent
+        { type: 'double',            count: useNewBreakdown ? 0 : (rooms.double ?? 0) },
+        { type: 'twin',              count: useNewBreakdown ? 0 : (rooms.twin ?? 0) },
+        // New breakdown fields
+        { type: 'standardDoubleBeds', count: rooms.standardDoubleBeds ?? 0 },
+        { type: 'twinBeds',          count: rooms.twinBeds ?? 0 },
+        // Other types — always counted
+        { type: 'single',            count: rooms.single ?? 0 },
+        { type: 'triple',            count: rooms.triple ?? 0 },
+        { type: 'quadruple',         count: rooms.quadruple ?? 0 },
+        { type: 'suite',             count: rooms.suites ?? 0 },
     ];
     const max = types.reduce((a, b) => (b.count > a.count ? b : a), { type: null as string | null, count: 0 });
     return max.count > 0 ? max.type : null;
@@ -599,7 +694,10 @@ function parseWbeOptions(wbeHotelOptions: any[], nights: number): ProcessedOptio
             .map((r) => field<string>(r, 'Description', 'description', 'RoomName', 'roomName') ?? '')
             .filter(Boolean);
 
-        const pricePerRoomPerNight = normalisePricePerRoomPerNight(rawPrice, nights);
+        // Use the actual number of rooms WBE returned in this option (not a hardcoded batch size).
+        // WBE can return options with fewer rooms than requested when partial availability exists.
+        const roomsInOption = rawRooms.length > 0 ? rawRooms.length : SEARCH_ROOMS;
+        const pricePerRoomPerNight = normalisePricePerRoomPerNight(rawPrice, roomsInOption, nights, { tid, supplierCode });
         const maxRoomsFromSupplier = getSupplierMaxRooms(supplierCode);
 
         result.push({
@@ -751,18 +849,482 @@ function parseOptionDetails(raw: any): {
 
 export class HotelSearchService {
     /**
+     * "Never say no" candidate selection — Oliver's approved pipeline.
+     *
+     * 1. Walks the RELAXATION_LADDER for the original destination, returning
+     *    the first level that yields ≥ 1 candidate hotel.
+     * 2. If all levels return zero, walks the destination chain
+     *    (parent → country → nearby) and tries the full ladder at each.
+     * 3. If everything still returns zero, signals manualRequestOnly so the
+     *    frontend can show a "submit manual request" CTA instead of a dead end.
+     *
+     * Travel dates are NEVER altered — Oliver explicitly rejected flexible dates.
+     */
+    private async findCandidatesWithRelaxation(opts: {
+        destinationId: number;
+        requestedStarRating: number | null;
+        facilityIds?: number[];
+        /**
+         * For the ORIGINAL destination only, skip ladder levels < this index.
+         * Used by the post-probe relaxation watcher to advance one level at a
+         * time when prior probe results came back empty. Fallback destinations
+         * (parent / country / nearby) always start the ladder at 0.
+         * Defaults to 0 (full ladder).
+         */
+        startLevelIndex?: number;
+        /**
+         * When true, the repository orders youth-friendly hotels first so
+         * pagination probes them before chain hotels. Driven by the
+         * request's groupType (youth / school).
+         */
+        prioritiseYouthFriendly?: boolean;
+    }): Promise<{
+        candidates: Awaited<ReturnType<typeof hotelSearchRepository.getHotelCodesByDestination>>;
+        appliedLevel: RelaxationLevel;
+        usedDestinationId: number;
+        manualRequestOnly: boolean;
+        /** Star rating filter actually used in the winning attempt — needed for pagination follow-up batches. */
+        appliedStars: number[];
+    }> {
+        const startIdx = Math.max(0, Math.min(opts.startLevelIndex ?? 0, RELAXATION_LADDER.length - 1));
+
+        const tryAtDestination = async (destId: number, fromIndex: number) => {
+            for (let i = fromIndex; i < RELAXATION_LADDER.length; i++) {
+                const config = RELAXATION_LADDER[i]!;
+                const stars = buildStarList(opts.requestedStarRating, config.starWindow);
+                let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
+                    destId,
+                    stars,
+                    undefined,
+                    undefined,
+                    { prioritiseYouthFriendly: opts.prioritiseYouthFriendly === true },
+                );
+                if (dbHotels.length === 0) continue;
+
+                if (config.keepFacilities && opts.facilityIds && opts.facilityIds.length > 0) {
+                    const allCodes = dbHotels.map((h) => h.hotelCode);
+                    const matchingCodes = await hotelSearchRepository.filterHotelCodesByFacilities(
+                        allCodes,
+                        opts.facilityIds,
+                    );
+                    const matchingSet = new Set(matchingCodes);
+                    dbHotels = dbHotels.filter((h) => matchingSet.has(h.hotelCode));
+                }
+
+                if (dbHotels.length > 0) {
+                    return { candidates: dbHotels, level: config.level, stars };
+                }
+            }
+            return null;
+        };
+
+        // 1. Try the original destination through the ladder, starting at startIdx.
+        const direct = await tryAtDestination(opts.destinationId, startIdx);
+        if (direct) {
+            return {
+                candidates: direct.candidates,
+                appliedLevel: direct.level,
+                usedDestinationId: opts.destinationId,
+                manualRequestOnly: false,
+                appliedStars: direct.stars,
+            };
+        }
+
+        // 2. Build the destination fallback chain: parent → country → nearby.
+        // Fallback destinations always run the FULL ladder (start at 0) — they're
+        // wider areas, not subject to the "we already tried lower levels" logic.
+        const ancestry = await hotelSearchRepository.getDestinationAncestry(opts.destinationId);
+        const nearby = await hotelSearchRepository.getNearbyDestinations(opts.destinationId, 5);
+        const fallbackChain = [...ancestry, ...nearby];
+
+        for (const destId of fallbackChain) {
+            const result = await tryAtDestination(destId, 0);
+            if (result) {
+                return {
+                    candidates: result.candidates,
+                    appliedLevel: result.level,
+                    usedDestinationId: destId,
+                    manualRequestOnly: false,
+                    appliedStars: result.stars,
+                };
+            }
+        }
+
+        // 3. Nothing worked anywhere — surface manualRequestOnly.
+        return {
+            candidates: [],
+            appliedLevel: 'facilities_dropped',
+            usedDestinationId: opts.destinationId,
+            manualRequestOnly: true,
+            appliedStars: [],
+        };
+    }
+
+    // ─── Post-probe relaxation watcher ───────────────────────────────────
+    // Fires only when probes complete with ZERO successful hotels. Advances
+    // the relaxation ladder one step, deletes failed probes, queues fresh
+    // ones at the wider criteria. Repeats until either probes succeed or
+    // the ladder is exhausted (then status → needs_manual_handling).
+    //
+    // Does NOT fire when the user has 1+ successful hotels — that case is
+    // handled by the user-driven "Show Alternatives" button.
+
+    /**
+     * Poll probe jobs for a search request until all reach a terminal state
+     * (or timeout). Returns the success count + total count once done.
+     */
+    private async waitForProbeJobsToTerminate(
+        requestId: string,
+    ): Promise<{ successCount: number; totalCount: number; timedOut: boolean }> {
+        const TERMINAL = new Set(['COMPLETED', 'SKIPPED_INSUFFICIENT', 'FAILED']);
+        const POLL_INTERVAL_MS = 5_000;
+        const MAX_WAIT_MS = 5 * 60 * 1000; // 5 min per relaxation iteration
+
+        const start = Date.now();
+        while (Date.now() - start < MAX_WAIT_MS) {
+            const jobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+            if (jobs.length === 0) {
+                return { successCount: 0, totalCount: 0, timedOut: false };
+            }
+            // Only consider 'main' probes — alternatives are user-driven and
+            // the watcher's job is to advance the MAIN search ladder.
+            const mainJobs = jobs.filter((j: any) => (j.searchKind ?? 'main') === 'main');
+            if (mainJobs.length === 0) {
+                return { successCount: 0, totalCount: 0, timedOut: false };
+            }
+            const allTerminal = mainJobs.every((j: any) => TERMINAL.has(j.status));
+            if (allTerminal) {
+                return {
+                    successCount: mainJobs.filter((j: any) => j.status === 'COMPLETED').length,
+                    totalCount: mainJobs.length,
+                    timedOut: false,
+                };
+            }
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        }
+        // Timed out — return whatever we have
+        const jobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+        const mainJobs = jobs.filter((j: any) => (j.searchKind ?? 'main') === 'main');
+        return {
+            successCount: mainJobs.filter((j: any) => j.status === 'COMPLETED').length,
+            totalCount: mainJobs.length,
+            timedOut: true,
+        };
+    }
+
+    /**
+     * Background watcher that advances the relaxation ladder one step at a
+     * time when probes return zero successful hotels. Spawned as fire-and-
+     * forget from `searchForRequest`. Recurses by re-calling `searchForRequest`
+     * with `suppressWatcher: true` so we don't spawn nested watchers.
+     *
+     * Critically: only advances when successCount === 0. If even 1 main hotel
+     * succeeds, the user is shown the "Show Alternatives" button instead and
+     * the watcher exits silently.
+     */
+    private async runPostProbeRelaxation(
+        requestId: string,
+        params: HotelSearchParams,
+        startLevel: RelaxationLevel,
+        initialPaginationContext: NonNullable<HotelSearchQueueResponse['paginationContext']>,
+    ): Promise<void> {
+        // Two-level state machine:
+        //   Outer loop: relaxation ladder (current level → next level → …)
+        //   Inner loop: pagination batches AT the current level (offset 0 → 200 → 400 → …)
+        //
+        // The inner loop is new for Option 1 pagination (N=50). It chains
+        // additional 200-hotel batches at the same destination + star filter
+        // until either TARGET_VIABLE_HOTELS viable hotels accumulate, the
+        // destination is exhausted at this level, or MAX_SEARCH_BATCHES is hit.
+        //
+        // When the inner loop ends without enough hotels, the outer loop
+        // advances the relaxation ladder (existing behaviour) — UNLESS we
+        // already have at least one viable hotel, in which case we broadcast
+        // searchSettled (don't blow away usable results by widening criteria).
+        let currentLevel: RelaxationLevel = startLevel;
+        let paginationContext = initialPaginationContext;
+        const MAX_ITERATIONS = RELAXATION_LADDER.length;
+
+        for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+            // ── Inner loop: paginate within the CURRENT relaxation level ──
+            let paginationStopReason:
+                | 'target_met'
+                | 'destination_exhausted'
+                | 'max_batches_reached'
+                | 'level_zero_results'
+                | 'timeout'
+                | 'unknown' = 'unknown';
+
+            // The first iteration of this inner loop waits for the batch that
+            // was queued by the search (or by a prior ladder-advance). Each
+            // additional iteration waits for a batch we just queued ourselves.
+            let probeResult = await this.waitForProbeJobsToTerminate(requestId);
+
+            // Pagination inner loop: keep fetching batches at this level until
+            // we hit a terminal condition.
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                if (probeResult.timedOut) {
+                    paginationStopReason = 'timeout';
+                    break;
+                }
+                if (probeResult.totalCount === 0) {
+                    paginationStopReason = 'level_zero_results';
+                    break;
+                }
+
+                const viableCount = await hotelProbeJobRepository.countViable(requestId);
+
+                // Target met — show results.
+                if (viableCount >= TARGET_VIABLE_HOTELS) {
+                    paginationStopReason = 'target_met';
+                    break;
+                }
+
+                // Try to queue the next batch at this level.
+                const nextBatch = await this.enqueueAdditionalCandidates(
+                    requestId,
+                    paginationContext,
+                    params,
+                );
+
+                if (nextBatch.decision !== 'queued' || nextBatch.queuedCount === 0) {
+                    // Can't paginate further — destination exhausted at this
+                    // level, or we hit the safety ceiling. Outer loop will
+                    // decide whether to advance the ladder based on
+                    // viableCount (success vs zero).
+                    paginationStopReason =
+                        nextBatch.decision === 'max_batches_reached'
+                            ? 'max_batches_reached'
+                            : 'destination_exhausted';
+                    break;
+                }
+
+                logger.info(
+                    {
+                        requestId,
+                        level: currentLevel,
+                        viableSoFar: viableCount,
+                        target: TARGET_VIABLE_HOTELS,
+                        nextOffset: nextBatch.nextOffset,
+                        queuedThisBatch: nextBatch.queuedCount,
+                    },
+                    'Post-probe pagination: queued next batch at same level',
+                );
+
+                paginationContext = {
+                    ...paginationContext,
+                    nextOffset: nextBatch.nextOffset,
+                };
+                probeResult = await this.waitForProbeJobsToTerminate(requestId);
+            }
+
+            // ── End of inner loop. Decide: settle, exit, or advance ladder. ──
+            const finalViableCount = await hotelProbeJobRepository.countViable(requestId);
+
+            if (paginationStopReason === 'timeout') {
+                logger.warn(
+                    { requestId, level: currentLevel },
+                    'Post-probe relaxation: timed out waiting for probes — watcher exiting',
+                );
+                return;
+            }
+
+            if (paginationStopReason === 'level_zero_results') {
+                logger.info(
+                    { requestId, level: currentLevel },
+                    'Post-probe relaxation: no probes found for this request — watcher exiting',
+                );
+                return;
+            }
+
+            // If we have viable hotels (target met, OR partial result after
+            // exhausting the level), broadcast searchSettled and exit.
+            if (finalViableCount > 0) {
+                logger.info(
+                    {
+                        requestId,
+                        level: currentLevel,
+                        viableCount: finalViableCount,
+                        target: TARGET_VIABLE_HOTELS,
+                        stopReason: paginationStopReason,
+                        offsetReached: paginationContext.nextOffset,
+                    },
+                    'Post-probe relaxation: probes succeeded — watcher exiting',
+                );
+                // Persist the pagination cursor BEFORE flipping phase so a
+                // racing "Search More" click sees a consistent state: cursor
+                // present iff phase === 'settled'. Best-effort; a missed
+                // cursor just means the user has to re-run the search to
+                // unlock Search More — not data loss.
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, paginationContext);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(settled) failed');
+                }
+                // Mark phase=settled BEFORE the SSE broadcast so a polling FE
+                // racing the SSE will see the terminal phase on the next poll.
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'settled');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) failed');
+                }
+                broadcast(requestId, 'searchSettled', {
+                    requestId,
+                    finalLevel: currentLevel,
+                    successCount: finalViableCount,
+                    totalCount: probeResult.totalCount,
+                });
+                return;
+            }
+
+            // Zero viable hotels at this level after pagination exhausted — advance the relaxation ladder.
+            const currentIndex = RELAXATION_LADDER.findIndex((l) => l.level === currentLevel);
+            const nextIndex = currentIndex + 1;
+            if (currentIndex < 0 || nextIndex >= RELAXATION_LADDER.length) {
+                // Ladder exhausted — flag as needs_manual_handling.
+                logger.info(
+                    { requestId, level: currentLevel },
+                    'Post-probe relaxation: ladder exhausted — flagging as needs_manual_handling',
+                );
+                await requestRepository.updateStatus(
+                    requestId,
+                    BookingRequestStatus.needs_manual_handling,
+                );
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, null);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
+                }
+                broadcast(requestId, 'searchExhausted', {
+                    requestId,
+                    finalLevel: currentLevel,
+                });
+                return;
+            }
+
+            const nextLevel = RELAXATION_LADDER[nextIndex]!.level;
+            logger.info(
+                { requestId, fromLevel: currentLevel, toLevel: nextLevel },
+                'Post-probe relaxation: advancing level',
+            );
+            await logAuditEvent({
+                action: 'search_post_probe_relaxation',
+                entity: 'booking_request',
+                entityId: requestId,
+                details: { fromLevel: currentLevel, toLevel: nextLevel, iteration: iter + 1 },
+            });
+
+            // Notify the FE so it can update banners / loading copy.
+            broadcast(requestId, 'searchRelaxed', {
+                requestId,
+                fromLevel: currentLevel,
+                toLevel: nextLevel,
+                iteration: iter + 1,
+            });
+
+            // Re-run the search starting at the next level. suppressWatcher: true
+            // prevents this from spawning ANOTHER watcher (we drive the loop here).
+            const result = await this.searchForRequest(requestId, params, {
+                startLevelIndex: nextIndex,
+                suppressWatcher: true,
+            });
+
+            if (result.manualRequestOnly) {
+                // No candidates at this or further levels — searchForRequest
+                // already updated status to needs_manual_handling.
+                logger.info(
+                    { requestId, level: nextLevel },
+                    'Post-probe relaxation: re-search returned manualRequestOnly — watcher exiting',
+                );
+                try {
+                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+                }
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, null);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
+                }
+                return;
+            }
+
+            const newAppliedLevel: RelaxationLevel | undefined = result.relaxation?.level
+                ?? RELAXATION_LADDER[nextIndex]?.level;
+            currentLevel = newAppliedLevel ?? nextLevel;
+            // Refresh the pagination context to the new relaxation level so
+            // the inner loop starts paginating from offset = batch1.length at
+            // the new destination/star filter. Falls back to a "no pagination
+            // possible" shape if the recursive call didn't return one
+            // (shouldn't happen for non-manualRequestOnly returns, but defensive).
+            if (result.paginationContext) {
+                paginationContext = result.paginationContext;
+            }
+        }
+    }
+
+    /**
      * Queue-based hotel search orchestration for a booking request.
      *
      * Dispatches one HotelProbeJob per candidate hotel to RabbitMQ.
      * Each job probes R1-R3, R4-R6, R7-R9 … sequentially until capacity is confirmed.
      * Returns immediately — results arrive via SSE (GET /requests/:id/hotel-search/events)
      * or polling (GET /requests/:id/hotel-search/status).
+     *
+     * Spawns a background post-probe relaxation watcher: if all probes return
+     * SKIPPED_INSUFFICIENT / FAILED (zero successful hotels), the watcher
+     * automatically advances the relaxation ladder and re-queues until either
+     * probes succeed OR the ladder is exhausted (status → needs_manual_handling).
+     *
+     * @param internalOpts INTERNAL — used by the post-probe watcher to recursively
+     *                     re-trigger the search at higher levels without spawning
+     *                     another nested watcher.
      */
-    async searchForRequest(requestId: string, params: HotelSearchParams = {}): Promise<HotelSearchQueueResponse> {
+    async searchForRequest(
+        requestId: string,
+        params: HotelSearchParams = {},
+        internalOpts?: { startLevelIndex?: number; suppressWatcher?: boolean },
+    ): Promise<HotelSearchQueueResponse> {
         // 1. Load request
         const request = await requestRepository.findById(requestId);
         if (!request) {
             throw { status: 404, message: 'Booking request not found', code: 'NOT_FOUND' };
+        }
+
+        // In-flight guard: if the FE re-clicks "Search" while a previous search
+        // is still processing (probes in QUEUED/RUNNING/PROBING, or a watcher
+        // is still iterating), DON'T spawn a duplicate search. Just return the
+        // current snapshot. Skipped for internal recursive calls from the
+        // watcher (those already own the in-flight slot).
+        if (!internalOpts?.suppressWatcher) {
+            const existingJobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+            const liveJobs = existingJobs.filter((j: any) =>
+                j.status === 'QUEUED' || j.status === 'RUNNING' || j.status === 'PROBING',
+            );
+            if (liveJobs.length > 0) {
+                logger.info(
+                    { requestId, liveCount: liveJobs.length },
+                    'searchForRequest: search already in flight — returning current snapshot, skipping duplicate spawn',
+                );
+                return {
+                    requestId,
+                    totalCandidates: existingJobs.length,
+                    jobsQueued: 0,
+                    message: 'Search already in progress — subscribe to the SSE / status endpoint for updates.',
+                    sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+                    statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+                    relaxation: null,
+                    destinationFallback: null,
+                    manualRequestOnly: false,
+                    alreadyInFlight: true,
+                };
+            }
         }
 
         const totalRooms = countTotalRooms(request.rooms);
@@ -786,46 +1348,145 @@ export class HotelSearchService {
         const dominantRoomType = getDominantRoomType((request as any).rooms);
         const expandedRooms = expandRequestRooms((request as any).rooms);
 
-        // Resolve candidate hotels from DB
-        const primaryStars = requestedStarRating ? [requestedStarRating] : [];
-        const altStars = includeAlternativeStars && requestedStarRating
-            ? [requestedStarRating - 1, requestedStarRating + 1].filter((s) => s >= 1 && s <= 5)
-            : [];
-        const allSearchStars = [...new Set([...primaryStars, ...altStars])];
-
-        let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
+        // ── "Never say no" candidate selection ─────────────────────────────
+        // Walks the relaxation ladder + destination fallback chain so we
+        // surface the closest available options instead of a dead end.
+        // (`includeAlternativeStars` is preserved for backwards-compat but
+        //  is now superseded by the explicit ladder.)
+        void includeAlternativeStars;
+        const groupTypeForPriority = ((request as any).groupType as string | null | undefined) ?? null;
+        const prioritiseYouthFriendly = groupTypeForPriority === 'youth' || groupTypeForPriority === 'school';
+        const relaxResult = await this.findCandidatesWithRelaxation({
             destinationId,
-            allSearchStars.length > 0 ? allSearchStars : [],
-        );
+            requestedStarRating,
+            facilityIds: params.facilityIds,
+            startLevelIndex: internalOpts?.startLevelIndex,
+            prioritiseYouthFriendly,
+        });
+        let dbHotels = relaxResult.candidates;
 
-        // Filter by facilities/amenities if requested
-        if (params.facilityIds && params.facilityIds.length > 0) {
-            const allCodes = dbHotels.map((h) => h.hotelCode);
-            const matchingCodes = await hotelSearchRepository.filterHotelCodesByFacilities(allCodes, params.facilityIds);
-            const matchingSet = new Set(matchingCodes);
-            dbHotels = dbHotels.filter((h) => matchingSet.has(h.hotelCode));
-            logger.info({ requestId, before: allCodes.length, after: dbHotels.length, facilityIds: params.facilityIds }, 'Filtered candidates by facilities');
+        // Build banner / fallback metadata for the response
+        const relaxationBanner = describeRelaxation(relaxResult.appliedLevel);
+        const usedDifferentDestination = relaxResult.usedDestinationId !== destinationId;
+        let destinationFallbackInfo: HotelSearchQueueResponse['destinationFallback'] = null;
+        if (usedDifferentDestination && dbHotels.length > 0) {
+            const [origName, usedName] = await Promise.all([
+                hotelSearchRepository.getDestinationName(destinationId),
+                hotelSearchRepository.getDestinationName(relaxResult.usedDestinationId),
+            ]);
+            destinationFallbackInfo = {
+                originalDestinationId: destinationId,
+                originalDestinationName: origName ?? request.destinationName ?? '',
+                usedDestinationId: relaxResult.usedDestinationId,
+                usedDestinationName: usedName ?? '',
+                bannerMessage: describeDestinationFallback(
+                    dbHotels.length,
+                    origName ?? request.destinationName ?? 'the requested area',
+                    usedName ?? 'a wider area',
+                ),
+            };
+        }
+
+        // Audit log when relaxation actually kicked in (skip the "default" levels
+        // exact / star_pm1 to avoid log spam — those are normal behaviour).
+        if (
+            relaxResult.appliedLevel !== 'exact' &&
+            relaxResult.appliedLevel !== 'star_pm1'
+        ) {
+            await logAuditEvent({
+                action: 'search_relaxation_applied',
+                entity: 'booking_request',
+                entityId: requestId,
+                details: {
+                    appliedLevel: relaxResult.appliedLevel,
+                    fallbackDestinationId: usedDifferentDestination
+                        ? relaxResult.usedDestinationId
+                        : null,
+                    candidateCount: dbHotels.length,
+                    manualRequestOnly: relaxResult.manualRequestOnly,
+                },
+            });
         }
 
         if (dbHotels.length === 0) {
-            logger.warn({ requestId, destinationId, starRatings: allSearchStars }, 'No hotels found in DB for destination');
+            // Total dead end — surface manualRequestOnly so the frontend
+            // shows a "submit manual request" CTA instead of an empty page.
+            logger.warn(
+                { requestId, destinationId },
+                'No hotels found at any relaxation level or fallback destination',
+            );
+            // Slice 2 — flag the request so staff sees the orange badge & banner.
+            // Idempotent: only write when status is actually changing.
+            if ((request as any).status !== BookingRequestStatus.needs_manual_handling) {
+                await requestRepository.updateStatus(
+                    requestId,
+                    BookingRequestStatus.needs_manual_handling,
+                );
+            }
+            try {
+                await requestRepository.updateSearchPhase(requestId, 'exhausted');
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+            }
+            try {
+                await requestRepository.setSearchPaginationCursor(requestId, null);
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
+            }
+            broadcast(requestId, 'searchExhausted', {
+                requestId,
+                finalLevel: relaxResult.appliedLevel,
+                reason: 'no_candidates',
+            });
             return {
                 requestId,
                 totalCandidates: 0,
                 jobsQueued: 0,
-                message: 'No candidate hotels found for this destination and star rating.',
+                message: 'No hotels available for this request — please submit a manual request.',
                 sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
                 statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+                relaxation: null,
+                destinationFallback: null,
+                manualRequestOnly: true,
             };
         }
 
         // Clean up old probe jobs from previous searches for this request
         await hotelProbeJobRepository.deleteBySearchRequest(requestId);
 
+        // Reset search phase to 'in_progress' for the polling FE's terminal
+        // detection. Best-effort — a missed phase update should not abort the
+        // search itself, so we swallow + log any error here.
+        try {
+            await requestRepository.updateSearchPhase(requestId, 'in_progress');
+        } catch (err: any) {
+            logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(in_progress) failed — search continues');
+        }
+        // Clear any stale pagination cursor from a previous search on this
+        // request — a fresh search means a fresh cursor, persisted later
+        // by the watcher.
+        try {
+            await requestRepository.setSearchPaginationCursor(requestId, null);
+        } catch (err: any) {
+            logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) failed — search continues');
+        }
+
         // Dispatch one HotelProbeJob per hotel to RabbitMQ
         const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
         const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
         let jobsQueued = 0;
+
+        // If the relaxation pipeline reached level >= meal_dropped, drop the
+        // mealType filter at probe time too (otherwise we'd lose hotels that
+        // only have non-matching meal options).
+        const RELAXED_PAST_MEAL: ReadonlySet<RelaxationLevel> = new Set<RelaxationLevel>([
+            'meal_dropped',
+            'location_dropped',
+            'facilities_dropped',
+        ]);
+        const probeMealType = RELAXED_PAST_MEAL.has(relaxResult.appliedLevel)
+            ? undefined
+            : params.mealType;
 
         for (const dbHotel of dbHotels) {
             const jobId = randomUUID();
@@ -847,16 +1508,67 @@ export class HotelSearchService {
                 currencyCode,
                 nationalityCode,
                 waitSeconds,
-                mealType: params.mealType,
+                mealType: probeMealType,
                 markupPercent,
                 expandedRooms,
                 dominantRoomType,
                 roomTypeTargets,
+                lang: params.lang,
             });
             jobsQueued++;
         }
 
-        logger.info({ requestId, totalCandidates: dbHotels.length, jobsQueued }, 'Hotel probe jobs queued');
+        logger.info(
+            {
+                requestId,
+                totalCandidates: dbHotels.length,
+                jobsQueued,
+                appliedLevel: relaxResult.appliedLevel,
+                usedDestinationId: relaxResult.usedDestinationId,
+            },
+            'Hotel probe jobs queued',
+        );
+
+        // Slice 2 — auto-clear the manual-handling flag if a previous search
+        // failed but this re-search (likely after staff edited dates / destination)
+        // succeeded in finding candidates. Brings the request back to `pending`
+        // so the orange badge / banner go away on the next page load.
+        if ((request as any).status === BookingRequestStatus.needs_manual_handling) {
+            await requestRepository.updateStatus(requestId, BookingRequestStatus.pending);
+        }
+
+        // Pre-compute pagination context once and reuse for both the watcher
+        // (so it can iterate additional batches at this destination/level
+        // BEFORE advancing the relaxation ladder) and the response payload.
+        const totalCandidatesAtLevel = await hotelSearchRepository.countHotelsByDestination(
+            relaxResult.usedDestinationId,
+            relaxResult.appliedStars,
+        );
+        const initialPaginationContext = {
+            usedDestinationId: relaxResult.usedDestinationId,
+            starRatings: relaxResult.appliedStars,
+            totalCandidates: totalCandidatesAtLevel,
+            nextOffset: dbHotels.length,
+        };
+
+        // Spawn the post-probe relaxation watcher (fire and forget). Skipped
+        // when this call is itself a recursive re-trigger from the watcher
+        // (otherwise we'd nest watchers infinitely).
+        if (!internalOpts?.suppressWatcher) {
+            setImmediate(() => {
+                this.runPostProbeRelaxation(
+                    requestId,
+                    params,
+                    relaxResult.appliedLevel,
+                    initialPaginationContext,
+                ).catch((err) => {
+                    logger.error(
+                        { err: err?.message, requestId },
+                        'Post-probe relaxation watcher crashed',
+                    );
+                });
+            });
+        }
 
         return {
             requestId,
@@ -865,6 +1577,231 @@ export class HotelSearchService {
             message: `${jobsQueued} hotel probe jobs queued. Subscribe to SSE for real-time updates.`,
             sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
             statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+            relaxation: relaxationBanner
+                ? { level: relaxResult.appliedLevel, bannerMessage: relaxationBanner }
+                : null,
+            destinationFallback: destinationFallbackInfo,
+            manualRequestOnly: false,
+            // The "Show Alternatives" button is now FE-driven: shown when the
+            // user has 1-4 successful hotels visible. Backend no longer guesses
+            // because probe success counts aren't known at search time.
+            hasAlternativesAvailable: undefined,
+            paginationContext: initialPaginationContext,
+        };
+    }
+
+    /**
+     * "Show alternatives" — user-triggered relaxed-criteria search.
+     *
+     * Triggered when the main search returned 1-4 successful hotels and the
+     * user clicks the "Show alternatives" button on the FE. Walks the
+     * RELAXATION_LADDER starting one level AFTER what the main search used, plus
+     * the destination fallback chain (parent → country → nearby). Excludes
+     * hotelCodes already returned by the main search so alternatives never
+     * duplicate main results.
+     *
+     * Each alternative probe job is tagged with `searchKind: 'alternative'` and
+     * an `alternativeReason` label so the FE can render them in a separate
+     * "Similar alternatives" section with a contextual badge.
+     */
+    async searchAlternativesForRequest(
+        requestId: string,
+        params: HotelSearchParams = {},
+        appliedLevelFromMain?: RelaxationLevel,
+    ): Promise<HotelSearchQueueResponse> {
+        // 1. Load and validate the request — same gate as searchForRequest.
+        const request = await requestRepository.findById(requestId);
+        if (!request) {
+            throw { status: 404, message: 'Booking request not found', code: 'NOT_FOUND' };
+        }
+        const totalRooms = countTotalRooms(request.rooms);
+        if (totalRooms === 0) {
+            throw { status: 400, message: 'Booking request has no rooms specified', code: 'INVALID_REQUEST' };
+        }
+
+        const nights = request.nights;
+        const destinationId = request.destinationId;
+        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
+        const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
+        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
+        const markupPercent = 18;
+
+        const checkinDate = request.checkinDate instanceof Date
+            ? request.checkinDate.toISOString().split('T')[0]
+            : String(request.checkinDate);
+
+        const dominantRoomType = getDominantRoomType((request as any).rooms);
+        const expandedRooms = expandRequestRooms((request as any).rooms);
+
+        // 2. Find which hotelCodes are already in the main results — exclude them.
+        const existingJobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+        const excludedHotelCodes = new Set(
+            existingJobs
+                .filter((j: any) => (j.searchKind ?? 'main') === 'main')
+                .map((j: any) => j.hotelCode),
+        );
+
+        // 3. Determine where on the ladder to start. If the main search ran at
+        //    `exact`, alternatives start at `star_pm1`. If main is unknown, start at 0.
+        let startIndex = 0;
+        if (appliedLevelFromMain) {
+            const mainIndex = RELAXATION_LADDER.findIndex((l) => l.level === appliedLevelFromMain);
+            if (mainIndex >= 0) startIndex = mainIndex + 1;
+        }
+
+        // 4. Walk levels for the ORIGINAL destination, then the FALLBACK chain
+        //    (parent / country / nearby). For each candidate, remember the
+        //    relaxation level + whether the destination is a fallback so we
+        //    can build per-hotel reason badges.
+        type Candidate = {
+            hotel: Awaited<ReturnType<typeof hotelSearchRepository.getHotelCodesByDestination>>[number];
+            level: RelaxationLevel;
+            fromFallbackDestination: boolean;
+        };
+        const found = new Map<string, Candidate>();
+
+        const altGroupType = ((request as any).groupType as string | null | undefined) ?? null;
+        const altPrioritiseYouthFriendly = altGroupType === 'youth' || altGroupType === 'school';
+        const collectAtDestination = async (
+            destId: number,
+            isFallback: boolean,
+            fromIndex: number,
+        ) => {
+            for (let i = fromIndex; i < RELAXATION_LADDER.length; i++) {
+                const config = RELAXATION_LADDER[i]!;
+                const stars = buildStarList(requestedStarRating, config.starWindow);
+                let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
+                    destId,
+                    stars,
+                    undefined,
+                    undefined,
+                    { prioritiseYouthFriendly: altPrioritiseYouthFriendly },
+                );
+
+                if (config.keepFacilities && params.facilityIds && params.facilityIds.length > 0) {
+                    const allCodes = dbHotels.map((h) => h.hotelCode);
+                    const matchingCodes = await hotelSearchRepository.filterHotelCodesByFacilities(
+                        allCodes,
+                        params.facilityIds,
+                    );
+                    const matchingSet = new Set(matchingCodes);
+                    dbHotels = dbHotels.filter((h) => matchingSet.has(h.hotelCode));
+                }
+
+                for (const h of dbHotels) {
+                    if (excludedHotelCodes.has(h.hotelCode)) continue;
+                    if (found.has(h.hotelCode)) continue; // first level wins
+                    found.set(h.hotelCode, {
+                        hotel: h,
+                        level: config.level,
+                        fromFallbackDestination: isFallback,
+                    });
+                }
+            }
+        };
+
+        // Original destination — start at the level after main's applied level.
+        await collectAtDestination(destinationId, false, startIndex);
+
+        // Fallback destinations — full ladder from level 0.
+        const ancestry = await hotelSearchRepository.getDestinationAncestry(destinationId);
+        const nearby = await hotelSearchRepository.getNearbyDestinations(destinationId, 5);
+        for (const destId of [...ancestry, ...nearby]) {
+            await collectAtDestination(destId, true, 0);
+        }
+
+        if (found.size === 0) {
+            logger.info(
+                { requestId, destinationId, excludedCount: excludedHotelCodes.size },
+                'No alternatives found',
+            );
+            return {
+                requestId,
+                totalCandidates: 0,
+                jobsQueued: 0,
+                message: 'No alternative hotels found for this request.',
+                sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+                statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+                relaxation: null,
+                destinationFallback: null,
+                manualRequestOnly: false,
+                hasAlternativesAvailable: false,
+            };
+        }
+
+        // 5. Queue probe jobs for each alternative candidate. Use mealType=undefined
+        //    so the probe filter is permissive — alternatives shouldn't be excluded
+        //    by the original meal-type criterion (that's part of being alternatives).
+        const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
+        const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
+        let jobsQueued = 0;
+
+        for (const candidate of found.values()) {
+            const reason = describeAlternativeReason(candidate.level, candidate.fromFallbackDestination);
+            const jobId = randomUUID();
+            await hotelProbeJobRepository.create({
+                id: jobId,
+                searchRequestId: requestId,
+                hotelCode: candidate.hotel.hotelCode,
+                requestedRooms: totalRooms,
+                probeLimit,
+                searchKind: 'alternative',
+                alternativeReason: reason,
+            });
+            await publishHotelProbeJob({
+                jobId,
+                searchRequestId: requestId,
+                hotelCode: candidate.hotel.hotelCode,
+                checkinDate,
+                nights,
+                requestedRooms: totalRooms,
+                probeLimit,
+                currencyCode,
+                nationalityCode,
+                waitSeconds,
+                // Alternatives intentionally drop the user's original mealType so
+                // we widen as much as possible at the probe stage too.
+                mealType: undefined,
+                markupPercent,
+                expandedRooms,
+                dominantRoomType,
+                roomTypeTargets,
+                searchKind: 'alternative',
+                alternativeReason: reason,
+                lang: params.lang,
+            });
+            jobsQueued++;
+        }
+
+        await logAuditEvent({
+            action: 'search_alternatives_requested',
+            entity: 'booking_request',
+            entityId: requestId,
+            details: {
+                appliedLevelFromMain: appliedLevelFromMain ?? null,
+                startIndex,
+                excluded: excludedHotelCodes.size,
+                alternativesQueued: jobsQueued,
+            },
+        });
+
+        logger.info(
+            { requestId, alternativesQueued: jobsQueued, excluded: excludedHotelCodes.size },
+            'Alternative hotel probe jobs queued',
+        );
+
+        return {
+            requestId,
+            totalCandidates: jobsQueued,
+            jobsQueued,
+            message: `${jobsQueued} alternative hotel probe jobs queued.`,
+            sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+            statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+            relaxation: null,
+            destinationFallback: null,
+            manualRequestOnly: false,
+            hasAlternativesAvailable: false,
         };
     }
 
@@ -1050,37 +1987,95 @@ export class HotelSearchService {
         const expandedRooms = expandRequestRooms((request as any).rooms);
 
         const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
-        const primaryStars = requestedStarRating ? [requestedStarRating] : [];
-        const altStars = includeAlternativeStars && requestedStarRating
-            ? [requestedStarRating - 1, requestedStarRating + 1].filter((s) => s >= 1 && s <= 5)
-            : [];
-        const allSearchStars = [...new Set([...primaryStars, ...altStars])];
+        void includeAlternativeStars; // superseded by the explicit relaxation ladder
 
-        const dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
-            request.destinationId,
-            allSearchStars.length > 0 ? allSearchStars : [],
-        );
+        // ── "Never say no" candidate selection (auto-offer flow) ──────────
+        const autoGroupType = ((request as any).groupType as string | null | undefined) ?? null;
+        const autoPrioritiseYouthFriendly = autoGroupType === 'youth' || autoGroupType === 'school';
+        const relaxResult = await this.findCandidatesWithRelaxation({
+            destinationId: request.destinationId,
+            requestedStarRating,
+            facilityIds: params.facilityIds,
+            prioritiseYouthFriendly: autoPrioritiseYouthFriendly,
+        });
+        const dbHotels = relaxResult.candidates;
+
+        const relaxationBanner = describeRelaxation(relaxResult.appliedLevel);
+        const usedDifferentDestination =
+            relaxResult.usedDestinationId !== request.destinationId;
+        let destinationFallbackInfo: HotelSearchQueueResponse['destinationFallback'] = null;
+        if (usedDifferentDestination && dbHotels.length > 0) {
+            const [origName, usedName] = await Promise.all([
+                hotelSearchRepository.getDestinationName(request.destinationId),
+                hotelSearchRepository.getDestinationName(relaxResult.usedDestinationId),
+            ]);
+            destinationFallbackInfo = {
+                originalDestinationId: request.destinationId,
+                originalDestinationName: origName ?? (request.destinationName ?? ''),
+                usedDestinationId: relaxResult.usedDestinationId,
+                usedDestinationName: usedName ?? '',
+                bannerMessage: describeDestinationFallback(
+                    dbHotels.length,
+                    origName ?? (request.destinationName ?? 'the requested area'),
+                    usedName ?? 'a wider area',
+                ),
+            };
+        }
+
+        if (
+            relaxResult.appliedLevel !== 'exact' &&
+            relaxResult.appliedLevel !== 'star_pm1'
+        ) {
+            await logAuditEvent({
+                action: 'search_relaxation_applied',
+                entity: 'booking_request',
+                entityId: requestId,
+                details: {
+                    appliedLevel: relaxResult.appliedLevel,
+                    fallbackDestinationId: usedDifferentDestination
+                        ? relaxResult.usedDestinationId
+                        : null,
+                    candidateCount: dbHotels.length,
+                    manualRequestOnly: relaxResult.manualRequestOnly,
+                    flow: 'auto-offer',
+                },
+            });
+        }
 
         if (dbHotels.length === 0) {
-            logger.warn({ requestId, destinationId: request.destinationId }, 'Auto-offer: no hotels in DB');
+            logger.warn(
+                { requestId, destinationId: request.destinationId },
+                'Auto-offer: no hotels at any relaxation level or fallback destination',
+            );
+            try {
+                await requestRepository.updateSearchPhase(requestId, 'exhausted');
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
+            }
             return {
                 requestId,
                 totalCandidates: 0,
                 jobsQueued: 0,
-                message: 'No candidate hotels found for this destination and star rating.',
+                message: 'No hotels available for this request — please submit a manual request.',
                 sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
                 statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+                relaxation: null,
+                destinationFallback: null,
+                manualRequestOnly: true,
             };
         }
 
-        // Primary stars first, then alternatives
+        // Sort: primary star matches first, then alternatives.
+        // After relaxation, "primary" is whichever stars match the requested rating
+        // exactly; if the requested star rating was dropped, ordering by current
+        // DB order is fine.
         const primaryHotelCodes = new Set(
-            primaryStars.length === 0
+            requestedStarRating == null
                 ? dbHotels.map((h) => h.hotelCode)
                 : dbHotels
                       .filter((h) => {
                           const s = h.starRating ? Number(h.starRating) : null;
-                          return s !== null && primaryStars.some((ps) => Math.abs(ps - s) < 0.5);
+                          return s !== null && Math.abs(requestedStarRating - s) < 0.5;
                       })
                       .map((h) => h.hotelCode),
         );
@@ -1092,11 +2087,190 @@ export class HotelSearchService {
         // Clean up old probe jobs from previous searches for this request
         await hotelProbeJobRepository.deleteBySearchRequest(requestId);
 
+        // Reset search phase to 'in_progress' for the polling FE's terminal
+        // detection. Best-effort.
+        try {
+            await requestRepository.updateSearchPhase(requestId, 'in_progress');
+        } catch (err: any) {
+            logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(in_progress) failed — auto-offer continues');
+        }
+
         const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
         const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
         let jobsQueued = 0;
 
+        // Drop probe-time mealType filter when relaxation reached meal_dropped+
+        const RELAXED_PAST_MEAL_AUTO: ReadonlySet<RelaxationLevel> = new Set<RelaxationLevel>([
+            'meal_dropped',
+            'location_dropped',
+            'facilities_dropped',
+        ]);
+        const probeMealType = RELAXED_PAST_MEAL_AUTO.has(relaxResult.appliedLevel)
+            ? undefined
+            : params.mealType;
+
         for (const dbHotel of sortedHotels) {
+            const jobId = randomUUID();
+            await hotelProbeJobRepository.create({
+                id: jobId,
+                searchRequestId: requestId,
+                hotelCode: dbHotel.hotelCode,
+                requestedRooms: totalRooms,
+                probeLimit,
+            });
+            await publishHotelProbeJob({
+                jobId,
+                searchRequestId: requestId,
+                hotelCode: dbHotel.hotelCode,
+                checkinDate,
+                nights: request.nights,
+                requestedRooms: totalRooms,
+                probeLimit,
+                currencyCode,
+                nationalityCode,
+                waitSeconds,
+                mealType: probeMealType,
+                markupPercent,
+                expandedRooms,
+                dominantRoomType,
+                roomTypeTargets,
+            });
+            jobsQueued++;
+        }
+
+        // Pagination context — total candidates at this relaxation level so the
+        // orchestrator knows when the destination is exhausted. The orchestrator
+        // (offerGeneration.service.ts) will call enqueueAdditionalCandidates()
+        // with this context to chain more batches until TARGET_VIABLE_HOTELS is
+        // reached or the destination is exhausted.
+        const totalCandidatesAtLevel = await hotelSearchRepository.countHotelsByDestination(
+            relaxResult.usedDestinationId,
+            relaxResult.appliedStars,
+        );
+
+        logger.info(
+            {
+                requestId,
+                firstBatchQueued: jobsQueued,
+                totalCandidatesAtLevel,
+                appliedLevel: relaxResult.appliedLevel,
+                usedDestinationId: relaxResult.usedDestinationId,
+                appliedStars: relaxResult.appliedStars,
+            },
+            'Auto-offer first batch queued — pagination context recorded',
+        );
+
+        return {
+            requestId,
+            totalCandidates: dbHotels.length,
+            jobsQueued,
+            message: `${jobsQueued} hotel probe jobs queued for auto-offer generation.`,
+            sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
+            statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
+            relaxation: relaxationBanner
+                ? { level: relaxResult.appliedLevel, bannerMessage: relaxationBanner }
+                : null,
+            destinationFallback: destinationFallbackInfo,
+            manualRequestOnly: false,
+            paginationContext: {
+                usedDestinationId: relaxResult.usedDestinationId,
+                starRatings: relaxResult.appliedStars,
+                totalCandidates: totalCandidatesAtLevel,
+                nextOffset: dbHotels.length,
+            },
+        };
+    }
+
+    /**
+     * Queue the NEXT batch of probe jobs for an in-progress search.
+     *
+     * Used by the auto-offer orchestrator to chain additional batches when the
+     * first 200 hotels don't yield enough viable results (target N = 50). Does
+     * NOT delete existing jobs — strictly appends.
+     *
+     * `paginationContext` comes from `generateAutoOffer()`'s return value. The
+     * orchestrator passes it back here and advances `nextOffset` each round.
+     */
+    async enqueueAdditionalCandidates(
+        requestId: string,
+        paginationContext: NonNullable<HotelSearchQueueResponse['paginationContext']>,
+        params: { mealType?: string; markupPercent?: number; currencyCode?: string; nationalityCode?: string; waitSeconds?: number } = {},
+        options: { bypassCeiling?: boolean } = {},
+    ): Promise<{
+        decision: 'queued' | 'destination_exhausted' | 'max_batches_reached';
+        queuedCount: number;
+        queuedHotelCodes: string[];
+        nextOffset: number;
+    }> {
+        // Hard ceiling — never exceed SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES
+        // per relaxation level. The "Search More" feature explicitly opts out
+        // via `bypassCeiling: true` because it's user-driven (one click = one
+        // batch) and the user is in control of how many batches to probe.
+        // The auto-offer flow leaves the ceiling in place.
+        if (!options.bypassCeiling && paginationContext.nextOffset >= SEARCH_BATCH_SIZE * MAX_SEARCH_BATCHES) {
+            return {
+                decision: 'max_batches_reached',
+                queuedCount: 0,
+                queuedHotelCodes: [],
+                nextOffset: paginationContext.nextOffset,
+            };
+        }
+        // Whole destination already exhausted at this level.
+        if (paginationContext.nextOffset >= paginationContext.totalCandidates) {
+            return {
+                decision: 'destination_exhausted',
+                queuedCount: 0,
+                queuedHotelCodes: [],
+                nextOffset: paginationContext.nextOffset,
+            };
+        }
+
+        const request = await requestRepository.findById(requestId);
+        if (!request) {
+            throw { status: 404, message: 'Booking request not found', code: 'NOT_FOUND' };
+        }
+
+        const totalRooms = countTotalRooms(request.rooms);
+        const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
+        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
+        const markupPercent = params.markupPercent ?? 18;
+        const checkinDate = request.checkinDate instanceof Date
+            ? request.checkinDate.toISOString().split('T')[0]
+            : String(request.checkinDate);
+        const dominantRoomType = getDominantRoomType((request as any).rooms);
+        const expandedRooms = expandRequestRooms((request as any).rooms);
+        const roomTypeTargets = buildRoomTypeTargets((request as any).rooms);
+        const probeLimit = roomTypeTargets.reduce((s, t) => s + t.probeLimit, 0) || totalRooms * PROBE_MULTIPLIER;
+
+        // Fetch the next page of candidates at the same destination + star filter as the first batch.
+        // Pass through the same youth-friendly prioritisation flag the first batch used so subsequent
+        // batches keep the same ordering and don't skip youth-friendly inventory.
+        const batchGroupType = ((request as any).groupType as string | null | undefined) ?? null;
+        const batchPrioritiseYouthFriendly = batchGroupType === 'youth' || batchGroupType === 'school';
+        const batch = await hotelSearchRepository.getHotelCodesByDestination(
+            paginationContext.usedDestinationId,
+            paginationContext.starRatings,
+            SEARCH_BATCH_SIZE,
+            paginationContext.nextOffset,
+            { prioritiseYouthFriendly: batchPrioritiseYouthFriendly },
+        );
+        if (batch.length === 0) {
+            return {
+                decision: 'destination_exhausted',
+                queuedCount: 0,
+                queuedHotelCodes: [],
+                nextOffset: paginationContext.nextOffset,
+            };
+        }
+
+        // Defensive: skip any hotel codes already probed for this request (in case
+        // the destination index shifted between paginated reads).
+        const existingJobs = await hotelProbeJobRepository.findBySearchRequest(requestId);
+        const alreadyProbed = new Set(existingJobs.map((j) => j.hotelCode));
+        const freshHotels = batch.filter((h) => !alreadyProbed.has(h.hotelCode));
+
+        for (const dbHotel of freshHotels) {
             const jobId = randomUUID();
             await hotelProbeJobRepository.create({
                 id: jobId,
@@ -1122,16 +2296,155 @@ export class HotelSearchService {
                 dominantRoomType,
                 roomTypeTargets,
             });
-            jobsQueued++;
         }
 
-        logger.info({ requestId, totalCandidates: dbHotels.length, jobsQueued }, 'Auto-offer probe jobs queued');
+        const nextOffset = paginationContext.nextOffset + batch.length;
+        logger.info(
+            {
+                requestId,
+                queued: freshHotels.length,
+                skippedDuplicates: batch.length - freshHotels.length,
+                offset: paginationContext.nextOffset,
+                nextOffset,
+                totalCandidates: paginationContext.totalCandidates,
+            },
+            'Search pagination: additional batch queued',
+        );
 
         return {
+            decision: 'queued',
+            queuedCount: freshHotels.length,
+            queuedHotelCodes: freshHotels.map((h) => h.hotelCode),
+            nextOffset,
+        };
+    }
+
+    /**
+     * User-triggered "Search More" — queue ONE additional 200-hotel batch at
+     * the current destination/star level, picking up exactly where the
+     * post-probe watcher left off. Reads the persisted cursor on the
+     * BookingRequest (written by the watcher just before searchSettled).
+     *
+     * Differences from the watcher's internal pagination loop:
+     *   - Skips the MAX_SEARCH_BATCHES ceiling (`bypassCeiling: true`) — the
+     *     user is in control of when to stop clicking.
+     *   - Does NOT advance the relaxation ladder. If the destination at the
+     *     current level is fully drained, we return `destination_exhausted`
+     *     and clear the cursor so the FE can hide the button.
+     *   - Spawns a minimal mini-watcher that waits for the new probes to
+     *     settle, advances the cursor's `nextOffset`, flips phase back to
+     *     'settled', and re-broadcasts `searchSettled`.
+     *
+     * Decisions returned to the caller:
+     *   - 'queued'                : the next batch is queued + mini-watcher running.
+     *   - 'destination_exhausted' : nothing left to probe at this level; cursor cleared.
+     *   - 'in_progress'           : another Search More / fresh search is already running.
+     *   - 'no_cursor'             : no cursor is persisted yet (pre-feature row, or search exhausted).
+     *   - 'exhausted'             : the request's search ended in 'exhausted' — no Search More.
+     */
+    async searchMoreForRequest(
+        requestId: string,
+        params: { mealType?: string; markupPercent?: number; currencyCode?: string; nationalityCode?: string; waitSeconds?: number } = {},
+    ): Promise<{
+        decision: 'queued' | 'destination_exhausted' | 'in_progress' | 'no_cursor' | 'exhausted';
+        message?: string;
+        queuedCount?: number;
+        nextOffset?: number;
+        sseEndpoint?: string;
+        statusEndpoint?: string;
+    }> {
+        const phase = await requestRepository.getSearchPhase(requestId);
+        if (phase === 'exhausted') {
+            return { decision: 'exhausted', message: 'Destination already fully exhausted.' };
+        }
+        if (phase === 'in_progress') {
+            return { decision: 'in_progress', message: 'A search is already in progress for this request.' };
+        }
+
+        const cursor = await requestRepository.getSearchPaginationCursor(requestId);
+        if (!cursor) {
+            return { decision: 'no_cursor', message: 'Search More not available — run a fresh search first.' };
+        }
+
+        // Flip phase to in_progress BEFORE queueing so a racing second click
+        // sees the in_progress phase and bails out cleanly.
+        try {
+            await requestRepository.updateSearchPhase(requestId, 'in_progress');
+        } catch (err: any) {
+            logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(in_progress) in searchMore failed — continuing');
+        }
+
+        const result = await this.enqueueAdditionalCandidates(
             requestId,
-            totalCandidates: dbHotels.length,
-            jobsQueued,
-            message: `${jobsQueued} hotel probe jobs queued for auto-offer generation.`,
+            cursor,
+            params,
+            { bypassCeiling: true },
+        );
+
+        if (result.decision !== 'queued' || result.queuedCount === 0) {
+            // Destination fully drained at this level — clear cursor, flip
+            // phase back, and notify the FE so the button hides.
+            try {
+                await requestRepository.setSearchPaginationCursor(requestId, null);
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) in searchMore failed');
+            }
+            try {
+                await requestRepository.updateSearchPhase(requestId, 'settled');
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) in searchMore failed');
+            }
+            const successCount = await hotelProbeJobRepository.countViable(requestId);
+            broadcast(requestId, 'searchSettled', {
+                requestId,
+                finalLevel: 'searchMoreExhausted' as any,
+                successCount,
+                totalCount: cursor.totalCandidates,
+            });
+            return {
+                decision: 'destination_exhausted',
+                message: 'No more hotels available at this level.',
+                queuedCount: 0,
+                nextOffset: cursor.nextOffset,
+            };
+        }
+
+        // Fire-and-forget mini-watcher. Waits for the new batch to settle,
+        // advances cursor, flips phase back to 'settled', re-broadcasts.
+        const newNextOffset = result.nextOffset;
+        setImmediate(() => {
+            this.waitForProbeJobsToTerminate(requestId)
+                .then(async (probeResult) => {
+                    try {
+                        await requestRepository.setSearchPaginationCursor(requestId, {
+                            ...cursor,
+                            nextOffset: newNextOffset,
+                        });
+                    } catch (err: any) {
+                        logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(advance) in searchMore failed');
+                    }
+                    try {
+                        await requestRepository.updateSearchPhase(requestId, 'settled');
+                    } catch (err: any) {
+                        logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(settled) in searchMore mini-watcher failed');
+                    }
+                    const successCount = await hotelProbeJobRepository.countViable(requestId);
+                    broadcast(requestId, 'searchSettled', {
+                        requestId,
+                        finalLevel: 'searchMore' as any,
+                        successCount,
+                        totalCount: probeResult.totalCount,
+                    });
+                })
+                .catch((err) => {
+                    logger.error({ err: err?.message, requestId }, 'Search More mini-watcher crashed');
+                });
+        });
+
+        return {
+            decision: 'queued',
+            queuedCount: result.queuedCount,
+            nextOffset: newNextOffset,
             sseEndpoint: `/api/v1/requests/${requestId}/hotel-search/events`,
             statusEndpoint: `/api/v1/requests/${requestId}/hotel-search/status`,
         };
@@ -1156,6 +2469,100 @@ export class HotelSearchService {
         else if (rounded % 5 === 0) psychPrice = rounded - 1; // €195 → €194
 
         return { buyingPrice, sellPrice: psychPrice, markupPercent };
+    }
+
+    /**
+     * Startup sweeper for orphaned searches.
+     *
+     * A search can get stuck in `search_phase = 'in_progress'` if the in-memory
+     * watcher dies (server restart, silent crash, etc.) and leaves the row
+     * never transitioning to a terminal phase. Without a sweeper, the polling
+     * frontend waits forever and the user sees a stuck loading indicator.
+     *
+     * On every server start, this scans for `in_progress` requests older than
+     * `staleAfterMinutes` and resolves them to the correct terminal phase
+     * based on their current probe-job state:
+     *   - all jobs terminal AND viable > 0   → 'settled' (show what we have)
+     *   - all jobs terminal AND viable === 0 → 'exhausted' (mark needs_manual_handling)
+     *   - some jobs pending                  → skip (worker probably still processing)
+     *
+     * Phase 1 scope: no automatic pagination continuation. If a search settled
+     * at 12 viable but the user wants 50, they re-trigger the search manually
+     * — same UX as today's "show alternatives" flow. Auto-resume is a separate
+     * ticket because it requires persisting the pagination context.
+     */
+    async resumeOrphanedSearches(staleAfterMinutes = 5): Promise<{
+        scanned: number;
+        settled: number;
+        exhausted: number;
+        skipped: number;
+    }> {
+        const stalled = await requestRepository.findStalledInProgressSearches(staleAfterMinutes);
+        const counters = { scanned: stalled.length, settled: 0, exhausted: 0, skipped: 0 };
+
+        if (stalled.length === 0) {
+            logger.info('Startup sweeper: no stalled in_progress searches found');
+            return counters;
+        }
+
+        logger.warn({ count: stalled.length }, 'Startup sweeper: found stalled in_progress searches — resolving');
+
+        const TERMINAL = new Set(['COMPLETED', 'SKIPPED_INSUFFICIENT', 'FAILED']);
+
+        for (const req of stalled) {
+            try {
+                const jobs = await hotelProbeJobRepository.findBySearchRequest(req.id);
+                const allTerminal = jobs.length === 0 || jobs.every((j: any) => TERMINAL.has(j.status));
+
+                if (!allTerminal) {
+                    // Worker probably still processing. Leave it alone — if the
+                    // worker is genuinely dead, requeueStaleJobs will pick the
+                    // pending ones back up on the next probe cycle.
+                    counters.skipped++;
+                    logger.info(
+                        { requestId: req.id, refNum: req.referenceNumber, jobs: jobs.length },
+                        'Startup sweeper: search has pending jobs — skipping',
+                    );
+                    continue;
+                }
+
+                const viableCount = jobs.filter((j: any) => j.status === 'COMPLETED').length;
+
+                if (viableCount > 0) {
+                    // Surface what we found — the user can re-trigger if they want more.
+                    await requestRepository.updateSearchPhase(req.id, 'settled');
+                    counters.settled++;
+                    logger.info(
+                        { requestId: req.id, refNum: req.referenceNumber, viableCount, jobsProbed: jobs.length },
+                        'Startup sweeper: resolved to settled (had viable hotels)',
+                    );
+                } else {
+                    // Nothing usable — flag for manual handling, same path the
+                    // watcher would have taken on its own.
+                    await requestRepository.updateSearchPhase(req.id, 'exhausted');
+                    if ((req as any).status !== BookingRequestStatus.needs_manual_handling) {
+                        await requestRepository.updateStatus(
+                            req.id,
+                            BookingRequestStatus.needs_manual_handling,
+                        );
+                    }
+                    counters.exhausted++;
+                    logger.info(
+                        { requestId: req.id, refNum: req.referenceNumber, jobsProbed: jobs.length },
+                        'Startup sweeper: resolved to exhausted (no viable hotels)',
+                    );
+                }
+            } catch (err: any) {
+                logger.error(
+                    { err: err?.message, requestId: req.id, refNum: req.referenceNumber },
+                    'Startup sweeper: failed to resolve a stalled search — leaving phase unchanged',
+                );
+                // Best effort — one bad row should not abort the whole sweep.
+            }
+        }
+
+        logger.info(counters, 'Startup sweeper: finished');
+        return counters;
     }
 }
 

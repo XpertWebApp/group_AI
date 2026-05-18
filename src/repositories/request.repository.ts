@@ -28,6 +28,7 @@ const FULL_SELECT = {
     budget: true,
     groupType: true,
     groupSize: true,
+    averageAge: true,
     currencyCode: true,
     nationalityCode: true,
     // Step 2 – Room & Accommodations
@@ -42,6 +43,7 @@ const FULL_SELECT = {
     contactName: true,
     contactEmail: true,
     contactPhone: true,
+    contactPhoneCountryCode: true,
     guestListFileKey: true,
     customerNotes: true,
     // Step 4 – Policies
@@ -50,6 +52,8 @@ const FULL_SELECT = {
     // System
     source: true,
     status: true,
+    searchPhase: true,
+    searchPaginationCursor: true,
     processed: true,
     processedAt: true,
     createdAt: true,
@@ -69,9 +73,14 @@ const LIST_SELECT = {
     checkoutDate: true,
     nights: true,
     groupSize: true,
+    groupType: true,
+    averageAge: true,
     rooms: true,
     status: true,
     createdAt: true,
+    assignedUser: {
+        select: { id: true, firstName: true, lastName: true, email: true },
+    },
     proposals: {
         select: {
             id: true,
@@ -209,6 +218,152 @@ export class RequestRepository {
             data: { status },
             select: { id: true, referenceNumber: true, status: true },
         });
+    }
+
+    /**
+     * Update the search-phase signal read by the polling frontend.
+     * Values: 'in_progress' (search active), 'settled' (search done with
+     * results), 'exhausted' (search done with zero viable hotels — request
+     * flagged for manual handling). Best-effort: never throws, errors logged
+     * elsewhere — a missed phase update should not abort the search itself.
+     */
+    async updateSearchPhase(id: string, phase: 'in_progress' | 'settled' | 'exhausted') {
+        return prisma.bookingRequest.update({
+            where: { id },
+            data: { searchPhase: phase },
+            select: { id: true, searchPhase: true },
+        });
+    }
+
+    /**
+     * Lightweight read for the polling /hotel-search/status endpoint.
+     * Avoids the FULL_SELECT findById join cost (proposals + hotels + services + attachments)
+     * on a hot path that's hit every 5 seconds while a search is in flight.
+     */
+    async getSearchPhase(id: string): Promise<'in_progress' | 'settled' | 'exhausted' | null> {
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id },
+            select: { searchPhase: true },
+        });
+        return (row?.searchPhase as 'in_progress' | 'settled' | 'exhausted' | null | undefined) ?? null;
+    }
+
+    /**
+     * Read the persisted pagination cursor. NULL when no search has settled
+     * yet, the search ended in 'exhausted' (cursor explicitly cleared), or
+     * the request pre-dates the Search More feature.
+     *
+     * Shape: { usedDestinationId, starRatings, totalCandidates, nextOffset }.
+     */
+    async getSearchPaginationCursor(id: string): Promise<{
+        usedDestinationId: number;
+        starRatings: number[];
+        totalCandidates: number;
+        nextOffset: number;
+    } | null> {
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id },
+            select: { searchPaginationCursor: true },
+        });
+        const v = row?.searchPaginationCursor as any;
+        if (!v || typeof v !== 'object') return null;
+        // Defensive: validate the four fields we depend on. A malformed row
+        // (manual DB edit, schema drift) yields null instead of crashing.
+        if (
+            typeof v.usedDestinationId !== 'number' ||
+            !Array.isArray(v.starRatings) ||
+            typeof v.totalCandidates !== 'number' ||
+            typeof v.nextOffset !== 'number'
+        ) {
+            return null;
+        }
+        return {
+            usedDestinationId: v.usedDestinationId,
+            starRatings: v.starRatings,
+            totalCandidates: v.totalCandidates,
+            nextOffset: v.nextOffset,
+        };
+    }
+
+    /**
+     * Persist (or clear) the pagination cursor on the BookingRequest.
+     * Called by the post-probe watcher just before broadcasting
+     * searchSettled, and again by the Search More mini-watcher to advance
+     * `nextOffset` after each user-triggered batch. Pass `null` to clear
+     * (used when the destination has been fully drained).
+     */
+    async setSearchPaginationCursor(
+        id: string,
+        cursor: {
+            usedDestinationId: number;
+            starRatings: number[];
+            totalCandidates: number;
+            nextOffset: number;
+        } | null,
+    ) {
+        return prisma.bookingRequest.update({
+            where: { id },
+            data: { searchPaginationCursor: cursor === null ? Prisma.JsonNull : (cursor as any) },
+            select: { id: true },
+        });
+    }
+
+    /**
+     * Find booking requests whose search has been "in_progress" longer than `staleAfterMinutes`.
+     * Used by the startup sweeper to recover stalled searches whose watcher died
+     * (server restart, silent crash, etc.) and left the phase column stuck.
+     * Returns only the columns the sweeper needs — avoids the heavy FULL_SELECT.
+     */
+    async findStalledInProgressSearches(staleAfterMinutes = 5) {
+        const cutoff = new Date(Date.now() - staleAfterMinutes * 60 * 1000);
+        return prisma.bookingRequest.findMany({
+            where: {
+                searchPhase: 'in_progress',
+                updatedAt: { lt: cutoff },
+            },
+            select: {
+                id: true,
+                referenceNumber: true,
+                destinationId: true,
+                destinationName: true,
+                starRating: true,
+                status: true,
+                updatedAt: true,
+            },
+        });
+    }
+
+    /**
+     * Atomically claim ownership if the request is currently unassigned.
+     * Uses a conditional UPDATE so concurrent callers race at the DB level —
+     * exactly one winner, losers see `claimed: false` with the current ownerId.
+     */
+    async claimOwnershipIfUnassigned(
+        requestId: string,
+        userId: string,
+    ): Promise<{ claimed: boolean; ownerId: string | null }> {
+        const result = await prisma.bookingRequest.updateMany({
+            where: { id: requestId, assignedUserId: null },
+            data: { assignedUserId: userId },
+        });
+        if (result.count === 1) return { claimed: true, ownerId: userId };
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id: requestId },
+            select: { assignedUserId: true },
+        });
+        return { claimed: false, ownerId: row?.assignedUserId ?? null };
+    }
+
+    async findOwner(requestId: string) {
+        const row = await prisma.bookingRequest.findUnique({
+            where: { id: requestId },
+            select: {
+                assignedUser: {
+                    select: { id: true, firstName: true, lastName: true, email: true },
+                },
+            },
+        });
+        return row?.assignedUser ?? null;
     }
 
     // ── Dashboard aggregates ─────────────────────────────────────────────────

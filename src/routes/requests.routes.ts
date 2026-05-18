@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import requestsController from '../controllers/requests.controller';
 import hotelSearchController from '../controllers/hotelSearch.controller';
+import attachmentsController, { upload } from '../controllers/attachments.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
@@ -52,6 +53,10 @@ router.patch(
     requestsController.update,
 );
 
+// Explicit self-claim from the dashboard. No auto-claim middleware — the
+// controller handles the claim + conflict response itself.
+router.post('/:id/actions/claim', authMiddleware, requestsController.claim);
+
 // ── Hotel Search Flow (Create Request → Search → Option Details) ───────────
 
 /**
@@ -66,6 +71,31 @@ router.post(
     searchLimiter,
     validate(WbeHotelSearchSchema, 'body'),
     hotelSearchController.search,
+);
+
+/**
+ * POST /requests/:id/hotel-search/alternatives
+ * User-triggered relaxed-criteria search ("Show alternatives" button).
+ * Returns hotels at wider star/meal/location/facility criteria, excluding
+ * those already in the main results.
+ */
+router.post(
+    '/:id/hotel-search/alternatives',
+    authMiddleware,
+    searchLimiter,
+    hotelSearchController.searchAlternatives,
+);
+
+/**
+ * POST /requests/:id/hotel-search/more
+ * User-triggered "Search More" — queues the next 200-hotel batch at the
+ * same destination/star level the previous search settled at.
+ */
+router.post(
+    '/:id/hotel-search/more',
+    authMiddleware,
+    searchLimiter,
+    hotelSearchController.searchMore,
 );
 
 /**
@@ -110,6 +140,23 @@ router.post(
     authMiddleware,
     validate(PriceCalculationSchema, 'body'),
     hotelSearchController.calculatePrice,
+);
+
+// ── Guest List / Attachments ──────────────────────────────────────────────
+
+router.post(
+    '/:id/attachments',
+    authMiddleware,
+    upload.array('files', 5),
+    attachmentsController.upload,
+);
+
+router.get('/:id/attachments', authMiddleware, attachmentsController.list);
+
+router.delete(
+    '/:id/attachments/:attachmentId',
+    authMiddleware,
+    attachmentsController.delete,
 );
 
 // ── Create Proposal on a Request ───────────────────────────────────────────

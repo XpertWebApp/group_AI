@@ -92,6 +92,24 @@ export class ProposalsController {
         }
     }
 
+    async toggleHotelIncluded(req: Request, res: Response, next: NextFunction) {
+        try {
+            const body = (req as any).validated?.body ?? req.body;
+            const userId = (req as any).user?.id;
+            const ip = req.ip;
+            const result = await proposalsService.toggleHotelIncluded(
+                req.params['id'] as string,
+                req.params['hotelId'] as string,
+                body.includedInTotal,
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Hotel inclusion updated');
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async addService(req: Request, res: Response, next: NextFunction) {
         try {
             const body = (req as any).validated?.body ?? req.body;
@@ -183,11 +201,31 @@ export class ProposalsController {
             if (!userId) return sendResponse(res, 401, null, 'Unauthorized', 'UNAUTHORIZED');
             const ip = req.ip;
             const result = await proposalsService.sendProposal(req.params['id'] as string, body, userId, ip);
+
             return sendResponse(res, 200, result, 'Proposal sent');
         } catch (error: any) {
             if (error.code === 'PROPOSAL_LOCKED') {
                 return res.status(409).json({
                     error: { code: error.code, message: error.message, owner: error.owner },
+                });
+            }
+            // Email send failures from sendProposal — these now carry a structured `failure` object
+            // with a specific code (NOT_CONNECTED, GMAIL_FORBIDDEN, etc.) and a per-failure HTTP status.
+            if (error.code === 'EMAIL_SEND_FAILED' && error.failure) {
+                return res.status(error.status ?? 502).json({
+                    success: false,
+                    data: error.data,           // backward-compat: { sent, emailSent, emailError, emailErrorCode, proposal }
+                    message: error.message,
+                    error: 'EMAIL_SEND_FAILED',
+                    failure: error.failure,     // NEW: { code, message, retryable, userActionRequired, method }
+                });
+            }
+            if (error.code === 'NO_RECIPIENT_EMAIL' || error.code === 'PDF_GENERATION_FAILED') {
+                return res.status(error.status ?? 400).json({
+                    success: false,
+                    data: null,
+                    message: error.message,
+                    error: error.code,
                 });
             }
             next(error);
@@ -212,6 +250,30 @@ export class ProposalsController {
     async downloadPdf(req: Request, res: Response, next: NextFunction) {
         try {
             const { pdfBuffer, filename } = await proposalsService.downloadPdf(req.params['id'] as string);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.send(pdfBuffer);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /** GET /:id/offers — list offer history for a proposal */
+    async listOffers(req: Request, res: Response, next: NextFunction) {
+        try {
+            const offers = await proposalsService.listOffers(req.params['id'] as string);
+            return sendResponse(res, 200, { offers, count: offers.length }, 'Offer history retrieved');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /** GET /:id/offers/:offerId/pdf — download the PDF for a specific offer */
+    async downloadOfferPdf(req: Request, res: Response, next: NextFunction) {
+        try {
+            const proposalId = req.params['id'] as string;
+            const offerId = req.params['offerId'] as string;
+            const { pdfBuffer, filename } = await proposalsService.downloadOfferPdf(proposalId, offerId);
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             return res.send(pdfBuffer);
@@ -255,7 +317,11 @@ export class ProposalsController {
             );
             return sendResponse(res, 200, result, 'Proposal declined');
         } catch (error: any) {
-            if (error.code === 'PROPOSAL_NOT_APPROVABLE' || error.code === 'REJECTION_REASON_REQUIRED') {
+            if (
+                error.code === 'PROPOSAL_NOT_APPROVABLE' ||
+                error.code === 'PROPOSAL_NOT_DECLINABLE' ||
+                error.code === 'REJECTION_REASON_REQUIRED'
+            ) {
                 return res.status(error.status ?? 409).json({ error: { code: error.code, message: error.message } });
             }
             next(error);

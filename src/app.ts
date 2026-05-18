@@ -22,8 +22,12 @@ app.use(
   })
 );
 
-// Body Parser Middlewares
-app.use(express.json());
+// Body Parser Middlewares.
+// Capture raw body so HMAC signature verification (e.g. WordPress webhook)
+// can hash the exact bytes the client sent.
+app.use(express.json({
+    verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Other Middlewares

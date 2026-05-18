@@ -1,7 +1,22 @@
 import requestRepository from '../repositories/request.repository';
+import notificationService from './notification.service';
+import { parseGroupType } from './webhook.service';
 import { logAuditEvent } from '../utils/audit';
+import logger from '../utils/logger';
 import { BookingRequestStatus } from '@prisma/client';
 import type { ListRequestsOptions } from '../repositories/request.repository';
+
+/**
+ * Comma-separated list of BookingRequestStatus transitions that fire a status-change
+ * email to staff. Read once at module load. Adding/removing a transition is a config
+ * change in `.env` (`NOTIFY_STATUS_TRANSITIONS=sent,completed,cancelled`) — no code change.
+ */
+const NOTIFY_STATUS_TRANSITIONS = new Set(
+    (process.env.NOTIFY_STATUS_TRANSITIONS ?? 'sent,completed,cancelled')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+);
 
 /** Derive nights (integer days) from ISO date strings. */
 function calcNights(checkin: string, checkout: string): number {
@@ -70,8 +85,9 @@ export class RequestService {
             starRating: data.starRating ?? null,
             budgetRange: data.budgetRange ?? null,
             budget: data.budget ?? null,
-            groupType: data.groupType ?? null,
+            groupType: parseGroupType(data.groupType),
             groupSize: data.groupSize ?? null,
+            averageAge: data.averageAge ?? null,
             currencyCode: data.currencyCode ?? 'EUR',
             nationalityCode: data.nationalityCode ?? null,
 
@@ -88,6 +104,7 @@ export class RequestService {
             contactName,
             contactEmail: data.contactEmail,
             contactPhone: data.contactPhone,
+            contactPhoneCountryCode: data.contactPhoneCountryCode ?? null,
             guestListFileKey: data.guestListFileKey ?? null,
             customerNotes: data.customerNotes ?? null,
 
@@ -95,8 +112,10 @@ export class RequestService {
             termsAndConditions: data.termsAndConditions ?? null,
             cancellationConditions: data.cancellationConditions ?? null,
 
-            // Assign to the logged-in user (for Gmail sending)
-            assignedUserId: userId ?? null,
+            // Ownership starts unassigned — creating a request is not an owning action.
+            // Ownership is claimed on the first add/remove hotel, add/remove service,
+            // send, or decline (see proposals.service.ts::claimForRequest).
+            assignedUserId: null,
 
             status: (data.status as BookingRequestStatus) ?? BookingRequestStatus.pending,
         };
@@ -116,6 +135,41 @@ export class RequestService {
             ipAddress: ip,
         });
 
+        // Fire portal notifications (staff alert + customer confirmation). Fire-and-forget —
+        // never block the create response on email delivery; notification.service handles
+        // retry + dead-letter internally.
+        const refNum = (request as any).referenceNumber;
+        const reqId = (request as any).id;
+        const displayName = contactName ?? data.companyName ?? 'Customer';
+        const destName = data.destinationName ?? 'Unknown destination';
+        const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+
+        if (staffEmail) {
+            void notificationService
+                .notifyNewRequestStaff({
+                    requestId: reqId,
+                    referenceNumber: refNum,
+                    contactName: displayName,
+                    destinationName: destName,
+                    source: 'portal',
+                    staffEmail,
+                    groupType: (request as any).groupType ?? data.groupType ?? null,
+                    averageAge: (request as any).averageAge ?? data.averageAge ?? null,
+                })
+                .catch((err) => logger.warn({ err: err.message, reqId }, 'notifyNewRequestStaff failed'));
+        }
+        if (data.contactEmail) {
+            void notificationService
+                .notifyNewRequestContact({
+                    requestId: reqId,
+                    referenceNumber: refNum,
+                    contactEmail: data.contactEmail,
+                    contactName: displayName,
+                    destinationName: destName,
+                })
+                .catch((err) => logger.warn({ err: err.message, reqId }, 'notifyNewRequestContact failed'));
+        }
+
         return request;
     }
 
@@ -130,9 +184,14 @@ export class RequestService {
         // Step 1 – Trip Details
         for (const f of [
             'destinationId', 'destinationName', 'starRating', 'budgetRange',
-            'budget', 'groupType', 'groupSize', 'currencyCode', 'nationalityCode',
+            'budget', 'groupType', 'groupSize', 'averageAge', 'currencyCode', 'nationalityCode',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];
+        }
+
+        // Normalise groupType to canonical code (German labels, casing variants, etc. → internal code)
+        if (updateData.groupType !== undefined) {
+            updateData.groupType = parseGroupType(updateData.groupType);
         }
 
         // Dates — recalculate nights if either date changes
@@ -157,7 +216,8 @@ export class RequestService {
         // Step 3 – Customer Details
         for (const f of [
             'companyName', 'firstName', 'lastName',
-            'contactEmail', 'contactPhone', 'guestListFileKey', 'customerNotes',
+            'contactEmail', 'contactPhone', 'contactPhoneCountryCode',
+            'guestListFileKey', 'customerNotes',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];
         }
@@ -195,7 +255,70 @@ export class RequestService {
     }
 
     async updateRequestStatus(id: string, status: string) {
-        return requestRepository.updateStatus(id, status as BookingRequestStatus);
+        // Capture previous status BEFORE the update so we can decide whether to email
+        // and what to put in the "from" field. A missing previous-status row means the
+        // request doesn't exist; let the update call surface the failure.
+        const before = await requestRepository.findById(id).catch(() => null);
+        const fromStatus = (before as any)?.status as string | undefined;
+
+        const updated = await requestRepository.updateStatus(id, status as BookingRequestStatus);
+
+        // Fire status-change email if the new state is in the configured trigger list
+        // and we actually transitioned (not a no-op write).
+        if (NOTIFY_STATUS_TRANSITIONS.has(status) && fromStatus && fromStatus !== status) {
+            const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+            if (staffEmail) {
+                const full = (before as any) ?? {};
+                const refNum = full.referenceNumber ?? 0;
+                const displayName = full.contactName ?? full.companyName ?? full.firstName ?? 'Customer';
+                const destName = full.destinationName ?? 'Unknown destination';
+                void notificationService
+                    .notifyStatusChange({
+                        requestId: id,
+                        referenceNumber: refNum,
+                        contactName: displayName,
+                        destinationName: destName,
+                        fromStatus,
+                        toStatus: status,
+                        staffEmail,
+                    })
+                    .catch((err) => logger.warn({ err: err.message, id }, 'notifyStatusChange failed'));
+            }
+        }
+
+        return updated;
+    }
+
+    /**
+     * Claim ownership of a booking request if currently unassigned.
+     * Idempotent: no-op if already claimed. Audit-logs only on the winning claim.
+     * Never throws — callers can fire-and-forget (e.g. from middleware).
+     *
+     * @param trigger 'auto' for first-action middleware, 'explicit' for /claim endpoint
+     */
+    async claimOwnershipIfUnassigned(
+        requestId: string,
+        userId: string,
+        ip?: string,
+        trigger: 'auto' | 'explicit' = 'auto',
+    ): Promise<{ claimed: boolean; ownerId: string | null }> {
+        if (!requestId || !userId) return { claimed: false, ownerId: null };
+        try {
+            const result = await requestRepository.claimOwnershipIfUnassigned(requestId, userId);
+            if (result.claimed) {
+                await logAuditEvent({
+                    userId,
+                    action: 'claim_ownership',
+                    entity: 'booking_request',
+                    entityId: requestId,
+                    details: { trigger },
+                    ipAddress: ip,
+                });
+            }
+            return result;
+        } catch {
+            return { claimed: false, ownerId: null };
+        }
     }
 }
 

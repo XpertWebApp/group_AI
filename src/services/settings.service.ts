@@ -71,11 +71,19 @@ export class SettingsService {
         assignedPerson: string;
         emailAddress: string;
         phoneNumber: string;
+        phoneCountryCode?: string | null;
         website: string;
         taxId: string;
         address: string;
     }) {
-        await settingsRepository.upsertMany(SettingCategory.company, data);
+        // Filter out undefined values — settingsRepository expects Record<string, string>
+        const cleaned: Record<string, string> = {};
+        for (const [key, value] of Object.entries(data)) {
+            if (value !== undefined && value !== null) {
+                cleaned[key] = String(value);
+            }
+        }
+        await settingsRepository.upsertMany(SettingCategory.company, cleaned);
         return this.getCompanyDetails();
     }
 
