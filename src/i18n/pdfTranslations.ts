@@ -62,6 +62,14 @@ export interface PdfTranslations {
     paymentPrefix: string;
     paymentUntil: string;
 
+    // Brand header / footer
+    /** H1 on the hero band of page 1 — "GROUP OFFER" / "GRUPPENANGEBOT". */
+    offerTitle: string;
+    /** Footer page-of indicator. Use `{n}` and `{total}` placeholders. */
+    pageOf: string;
+    /** Footer confidentiality label. */
+    confidential: string;
+
     // Meal plans
     mealBreakfast: string;
     mealHalfBoard: string;
@@ -125,6 +133,11 @@ const en: PdfTranslations = {
     paymentPrefix: 'Please pay',
     paymentUntil: 'until',
 
+    // Brand header / footer
+    offerTitle: 'GROUP OFFER',
+    pageOf: 'Page {n} of {total}',
+    confidential: 'Confidential',
+
     // Meal plans
     mealBreakfast: 'Breakfast',
     mealHalfBoard: 'Half Board',
@@ -187,6 +200,11 @@ const de: PdfTranslations = {
     // Terms payment callout
     paymentPrefix: 'Bitte zahlen Sie',
     paymentUntil: 'bis zum',
+
+    // Brand header / footer
+    offerTitle: 'GRUPPENANGEBOT',
+    pageOf: 'Seite {n} von {total}',
+    confidential: 'Vertraulich',
 
     // Meal plans
     mealBreakfast: 'Frühstück',

@@ -1,9 +1,17 @@
 /**
- * PDF Generation Service — Figma-Matched Quotation PDF
+ * PDF Generation Service — SETT Hub Group Offer PDF
  *
- * Generates professional offer PDFs matching the SETT Figma design exactly.
- * Uses Montserrat font, navy/grey color scheme, rounded bordered cards.
- * Agent-visible only: hotel details, unified price, terms, disclaimer.
+ * Implements the full SETT Hub Brand Guidelines v2 (§6 "Document Templates").
+ * Visual identity:
+ *   - Page 1: navy hero band with the Group Offer logo + "GROUP OFFER #ref"
+ *   - Pages 2+: compact navy running header with the same logo + offer no.
+ *   - Section headings in navy uppercase (never plain black)
+ *   - Table header rows filled navy, white column titles
+ *   - Hotel/service total amounts rendered in SETT green
+ *   - Final TOTAL bar: full-width navy band with green amount
+ *   - Payment-due callout: navy bg + white text + 3pt green left border
+ *   - Mandatory green bottom bar on every page (§8.2 — "the visual anchor")
+ * Agent-visible content only: hotel details, unified price, terms.
  * Does NOT contain: supplier names, split, buying price, markup.
  */
 
@@ -13,17 +21,26 @@ import fs from 'fs';
 import logger from '../utils/logger';
 import { PdfLanguage, PdfTranslations, getPdfTranslations } from '../i18n/pdfTranslations';
 
-// ─── Brand Colors (from Figma specs) ─────────────────────────────────────────
+// ─── SETT Brand Palette (Brand Guidelines v2, §2) ────────────────────────────
 
-const NAVY = '#071C42';
-const GREY_68 = '#686868';
-const GREY_4A = '#4A4A4A';
-const DARK_1D = '#1D1D1D';
-const SEPARATOR = '#68686866'; // 40% opacity grey — rendered as solid light grey
-const SEPARATOR_SOLID = '#C8C8C8'; // Approximate visual for 40% #686868
-const WHITE = '#FFFFFF';
-const TOTAL_BG = '#E8EBF0'; // Approximation for #071C421A (navy 10%)
-const PINK_BG = '#FFEAEB';
+const SETT_GREEN       = '#AAC737'; // primary accent — CTAs, highlights, totals
+const SETT_NAVY        = '#071C42'; // primary dark bg, headers, hero, text-on-light
+const SETT_GREY        = '#686868'; // body text, secondary labels, borders
+const SETT_WHITE       = '#FFFFFF'; // text on dark bg
+const SETT_GREEN_DARK  = '#7A9420'; // depth accents
+const SETT_GREEN_LIGHT = '#C8E050'; // gradient highlights, decorative lines
+const SETT_BG_LIGHT    = '#F8F9FA'; // alternating table row bg (§5.2)
+const SETT_BORDER      = '#E0E0E0'; // 1px borders (§5.2)
+
+// Legacy aliases kept ONLY for diff-friendly internal references in the
+// remaining code paths — they all resolve to the brand palette so there
+// is no chance of a forbidden colour leaking back in (forbidden: red,
+// orange, purple — §2 of guidelines).
+const NAVY = SETT_NAVY;
+const GREY_68 = SETT_GREY;
+const DARK_1D = SETT_NAVY;  // body emphasis is navy, never near-black
+const SEPARATOR_SOLID = SETT_BORDER;
+const WHITE = SETT_WHITE;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -222,8 +239,10 @@ const ML = 20; // margin left (per Figma: left: 20px)
 const MR = 20;
 const PAGE_W = 595.28; // A4
 const CW = PAGE_W - ML - MR; // ~555 (Figma uses 710 at 96dpi ≈ 555pt at 72dpi)
-const MAX_Y = 780;
-const FOOTER_Y = 810;
+// Top of the green bottom bar / legal text — body content stop line.
+// Aligned with PDFDocument's `bottom: 40` margin so both manual ensureSpace
+// and PDFKit's own auto-pagination agree on where pages break.
+const MAX_Y = 800;
 
 // Column positions (3 column layout: left, center, right)
 const COL1 = ML;
@@ -272,7 +291,10 @@ function registerFonts(doc: PDFKit.PDFDocument): void {
 function ensureSpace(doc: PDFKit.PDFDocument, needed: number): void {
     if (doc.y + needed > MAX_Y) {
         doc.addPage();
-        doc.y = 30;
+        // Leave room for the compact running header that the final pass
+        // paints at the top of pages 2+ (36pt strip + 1pt green underline
+        // + a comfortable 18pt breathing gap = 55pt).
+        doc.y = 55;
     }
 }
 
@@ -287,10 +309,135 @@ function separatorLine(doc: PDFKit.PDFDocument, y?: number): void {
 }
 
 function sectionHeading(doc: PDFKit.PDFDocument, title: string): void {
-    ensureSpace(doc, 45);
-    doc.fontSize(12).font(fontSemi).fillColor(NAVY)
-        .text(title.toUpperCase(), ML, doc.y, { lineBreak: false });
-    doc.y += 18; // space below heading before content
+    // §3 of brand guidelines: section title H2 is 22-28px navy uppercase. We
+    // use 13pt + a 2pt green underline that hugs the text width so each
+    // heading reads as a branded marker, not "plain black bold".
+    ensureSpace(doc, 50);
+    const y = doc.y;
+    const upper = title.toUpperCase();
+    doc.fontSize(13).font(fontBold).fillColor(SETT_NAVY);
+    doc.text(upper, ML, y, { lineBreak: false, characterSpacing: 0.6 });
+    const headingWidth = doc.widthOfString(upper, { characterSpacing: 0.6 });
+    // Green underline accent — sits a couple of pixels below the baseline.
+    doc.rect(ML, y + 18, Math.min(headingWidth, 80), 2)
+        .fillColor(SETT_GREEN)
+        .fill();
+    doc.y = y + 26;
+}
+
+// ─── SETT brand-specific drawing helpers ─────────────────────────────────────
+
+/**
+ * Page 1 hero band — full-width navy panel containing the Group Offer logo
+ * and the localised "GROUP OFFER #ref" title (white text + green ref). Returns
+ * the y-coordinate immediately below the band so the caller can resume layout.
+ */
+function drawHeroBand(
+    doc: PDFKit.PDFDocument,
+    refNumber: number,
+    t: PdfTranslations,
+    logoPath: string | null,
+): number {
+    const bandH = 72;
+    // Navy band edge-to-edge.
+    doc.rect(0, 0, PAGE_W, bandH).fillColor(SETT_NAVY).fill();
+    // Thin green accent strip directly below the band — §6.1.2.
+    doc.rect(0, bandH, PAGE_W, 3).fillColor(SETT_GREEN).fill();
+
+    // Logo: 200pt wide, vertically centred in the 72pt band.
+    if (logoPath) {
+        // group-offer-header.png is 1875×625 (3:1). At 200pt wide that's ~67pt
+        // tall — fits the band with ~2.5pt inset top/bottom.
+        try {
+            doc.image(logoPath, ML, (bandH - 67) / 2, { width: 200 });
+        } catch {
+            // Image decode failure — fall back to plain text wordmark.
+            doc.fontSize(20).font(fontBold).fillColor(SETT_GREEN)
+                .text('SETT', ML, 24, { lineBreak: false });
+        }
+    } else {
+        doc.fontSize(20).font(fontBold).fillColor(SETT_GREEN)
+            .text('SETT', ML, 24, { lineBreak: false });
+    }
+
+    // Right-aligned title block (H1).
+    const rightX = ML + CW - 200;
+    doc.fontSize(20).font(fontBold).fillColor(SETT_WHITE)
+        .text((t.offerTitle || 'GROUP OFFER'), rightX, 18, {
+            width: 200, align: 'right', lineBreak: false, characterSpacing: 1,
+        });
+    doc.fontSize(14).font(fontSemi).fillColor(SETT_GREEN)
+        .text(`#${refNumber}`, rightX, 44, {
+            width: 200, align: 'right', lineBreak: false,
+        });
+
+    return bandH + 3; // band + accent strip
+}
+
+/**
+ * Compact running header for pages 2+ — small Group Offer logo on the left
+ * and the offer reference on the right, with a 1pt green underline. Returns
+ * the y-coordinate immediately below the header.
+ */
+function drawRunningHeader(
+    doc: PDFKit.PDFDocument,
+    refNumber: number,
+    pageNo: number,
+    logoPath: string | null,
+): number {
+    const headerH = 36;
+    // Subtle navy strip — same hue as the hero but only 36pt tall.
+    doc.rect(0, 0, PAGE_W, headerH).fillColor(SETT_NAVY).fill();
+    // 1pt green underline.
+    doc.rect(0, headerH, PAGE_W, 1).fillColor(SETT_GREEN).fill();
+
+    if (logoPath) {
+        try {
+            doc.image(logoPath, ML, 6, { width: 80 });
+        } catch {
+            doc.fontSize(12).font(fontBold).fillColor(SETT_GREEN)
+                .text('SETT', ML, 12, { lineBreak: false });
+        }
+    } else {
+        doc.fontSize(12).font(fontBold).fillColor(SETT_GREEN)
+            .text('SETT', ML, 12, { lineBreak: false });
+    }
+
+    doc.fontSize(10).font(fontSemi).fillColor(SETT_WHITE)
+        .text(`#${refNumber} · p. ${pageNo}`, ML + CW - 160, 13, {
+            width: 160, align: 'right', lineBreak: false,
+        });
+
+    return headerH + 1;
+}
+
+/**
+ * Mandatory green bottom bar (§8.2 — "the visual anchor of the SETT brand").
+ * Painted at the very bottom of every page in the final two-pass loop.
+ * Also stamps the legal line + page-of indicator just above the bar.
+ */
+function drawGreenBottomBar(
+    doc: PDFKit.PDFDocument,
+    companyName: string,
+    pageNo: number,
+    totalPages: number,
+    t: PdfTranslations,
+): void {
+    const PAGE_H = 842; // A4
+    const barH = 4;
+    const barY = PAGE_H - barH - 6; // 6pt margin from the very edge
+    doc.rect(0, barY, PAGE_W, barH).fillColor(SETT_GREEN).fill();
+
+    // Legal text above the bar.
+    const footerY = barY - 14;
+    const left = `${companyName || 'S-E-T-T Worldwide Reservation FZE'}  |  ${t.confidential || 'Confidential'}`;
+    const pageOf = (t.pageOf || 'Page {n} of {total}')
+        .replace('{n}', String(pageNo))
+        .replace('{total}', String(totalPages));
+    doc.fontSize(8).font(fontReg).fillColor(SETT_GREY)
+        .text(left, ML, footerY, { width: CW * 0.7, lineBreak: false });
+    doc.fontSize(8).font(fontReg).fillColor(SETT_GREY)
+        .text(pageOf, ML + CW - 160, footerY, { width: 160, align: 'right', lineBreak: false });
 }
 
 function fieldLabel(doc: PDFKit.PDFDocument, label: string, x: number, y: number): void {
@@ -329,9 +476,23 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
         try {
             const doc = new PDFDocument({
                 size: 'A4',
-                margins: { top: 20, bottom: 20, left: ML, right: MR },
+                // Margins set to ZERO so PDFKit never auto-paginates on its
+                // own. We drive pagination manually via ensureSpace() and
+                // explicit doc.addPage() so doc.y can never get into the
+                // pathological "past the bottom margin" state that causes
+                // PDFKit's LineWrapper to recursively add blank pages.
+                margins: { top: 0, bottom: 0, left: ML, right: MR },
                 bufferPages: true,
             });
+            // After every page break (manual or otherwise), reset the cursor
+            // to the top of the new page's content area — 55pt down to leave
+            // room for the running header that gets painted in the final pass.
+            doc.on('pageAdded', () => {
+                doc.y = 55;
+                doc.x = ML;
+            });
+            // Page 1: hero band owns y=0..75, content resumes below it.
+            doc.y = 20;
             const chunks: Buffer[] = [];
 
             doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -345,26 +506,33 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             const today = formatDate(new Date().toISOString());
 
             // ═══════════════════════════════════════════════════════════════
-            // HEADER — Logo (left) + Tax ID (right)
+            // HEADER — SETT Brand Hero Band (page 1 only)
+            // Per Brand Guidelines v2 §6.1 — every offer document opens with
+            // the Group Offer logo + "GROUP OFFER #ref" hero. Pages 2+ get a
+            // compact running header instead, painted in the two-pass loop
+            // at the very end.
             // ═══════════════════════════════════════════════════════════════
 
-            const logoPath = getAssetPath('SETT_logo.png');
-            if (logoPath) {
-                doc.image(logoPath, ML, 20, { width: 83 }); // ~111px at 96dpi ≈ 83pt
-            } else {
-                doc.fontSize(18).font(fontBold).fillColor('#AAC737')
-                    .text('SETT', ML, 22, { lineBreak: false });
-            }
+            // §4.5: AI-generated group offers MUST use the Group Offer logo
+            // (Group-offer--big-2.png shape). Our on-disk equivalent is
+            // group-offer-header.png. Fall back to the main SETT logo if for
+            // any reason the group-offer file is missing on the server.
+            const logoPath =
+                getAssetPath('group-offer-header.png') ??
+                getAssetPath('sett-logo-no-bg.png');
 
-            // Tax ID on the right
+            const heroBottom = drawHeroBand(doc, data.referenceNumber, t, logoPath);
+            doc.y = heroBottom + 18;
+
+            // Tax ID — moved out of the hero (the hero owns the right side now)
+            // into a small top-right block immediately below the band so it
+            // still appears on page 1 without crowding the brand mark.
             const taxX = ML + CW - 170;
-            doc.fontSize(9).font(fontReg).fillColor(NAVY)
-                .text(t.taxId, taxX, 22, { width: 170, align: 'right', lineBreak: false });
-            doc.fontSize(10.5).font(fontMed).fillColor(NAVY)
-                .text(data.companyTaxId || '-', taxX, 36, { width: 170, align: 'right', lineBreak: false });
-
-            // Separator line below header
-            doc.y = 60;
+            doc.fontSize(9).font(fontSemi).fillColor(SETT_NAVY)
+                .text(t.taxId, taxX, doc.y, { width: 170, align: 'right', lineBreak: false, characterSpacing: 0.5 });
+            doc.fontSize(10.5).font(fontMed).fillColor(SETT_GREY)
+                .text(data.companyTaxId || '-', taxX, doc.y + 13, { width: 170, align: 'right', lineBreak: false });
+            doc.y += 36;
             separatorLine(doc);
 
             // ═══════════════════════════════════════════════════════════════
@@ -447,88 +615,94 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 const hotel = data.hotels[hi];
                 ensureSpace(doc, 150);
 
-                // Hotel header row: icon + name (left), Reference number (right)
+                // Hotel header row: navy bold hotel name on the left, muted
+                // reference badge on the right. Small green left-accent
+                // square per \u00a75.3 ("Accent: 3px left-border in green for
+                // emphasis cards") to brand-mark each hotel entry.
                 const hotelHeaderY = doc.y;
-                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                    .text(`\u2302  ${hotel.hotelName}`, ML, hotelHeaderY, { width: CW * 0.6, lineBreak: false });
+                doc.rect(ML, hotelHeaderY + 2, 3, 16).fillColor(SETT_GREEN).fill();
+                doc.fontSize(12).font(fontBold).fillColor(SETT_NAVY)
+                    .text(hotel.hotelName, ML + 10, hotelHeaderY, { width: CW * 0.6, lineBreak: false });
 
                 const addressParts = [hotel.addressCity, hotel.addressCountry].filter(Boolean);
                 if (addressParts.length) {
-                    doc.font(fontReg).fillColor(GREY_68).fontSize(9)
-                        .text(`   ${addressParts.join(', ')}`, ML, hotelHeaderY + 14, { width: CW * 0.6, lineBreak: false });
+                    doc.font(fontReg).fillColor(SETT_GREY).fontSize(9)
+                        .text(addressParts.join(', '), ML + 10, hotelHeaderY + 16, { width: CW * 0.6, lineBreak: false });
                 }
 
-                doc.fontSize(10.5).font(fontSemi).fillColor(GREY_4A)
-                    .text(`${t.referenceNumber}: #${data.referenceNumber}`, ML, hotelHeaderY, {
+                doc.fontSize(9).font(fontSemi).fillColor(SETT_GREY)
+                    .text(`${t.referenceNumber.toUpperCase()}: #${data.referenceNumber}`, ML, hotelHeaderY + 3, {
                         width: CW,
                         align: 'right',
                         lineBreak: false,
+                        characterSpacing: 0.5,
                     });
 
-                doc.y = hotelHeaderY + 24;
+                doc.y = hotelHeaderY + 28;
 
                 // Calculate card height based on room rows
                 const roomName = hotel.roomType.charAt(0).toUpperCase() + hotel.roomType.slice(1);
                 const cardHeight = 110; // header + 1 room row + separator + subtotal
 
-                // Draw bordered card
+                // Draw bordered card (rounded corners as per §5.3 — 8px radius)
                 const cardY = doc.y;
-                doc.roundedRect(ML, cardY, CW, cardHeight, 10)
-                    .strokeColor(SEPARATOR_SOLID)
-                    .lineWidth(0.5)
+                doc.roundedRect(ML, cardY, CW, cardHeight, 8)
+                    .strokeColor(SETT_BORDER)
+                    .lineWidth(1)
                     .stroke();
 
-                // Table headers inside card
-                const hdrY = cardY + 12;
+                // Navy header strip across the top of the card — per §5.2:
+                // "Header row: Navy background (#071c42), white text".
+                const headerStripH = 26;
+                // Use a small clip so the navy fill doesn't bleed past the
+                // rounded corners.
+                doc.save();
+                doc.roundedRect(ML, cardY, CW, headerStripH + 6, 8).clip();
+                doc.rect(ML, cardY, CW, headerStripH).fillColor(SETT_NAVY).fill();
+                doc.restore();
+
+                const hdrY = cardY + 8;
                 const tCol1 = ML + 13;
                 const tCol2 = ML + 335; // RATE
                 const tCol3 = ML + 395; // QTY
                 const tCol4 = ML + 440; // NIGHTS
                 const tCol5 = ML + CW - 13; // TOTAL (right aligned)
 
-                doc.fontSize(9).font(fontSemi).fillColor(GREY_68);
-                doc.text(t.destinationCol, tCol1, hdrY, { lineBreak: false });
-                doc.text(t.rate, tCol2, hdrY, { lineBreak: false });
-                doc.text(t.qty, tCol3, hdrY, { lineBreak: false });
-                doc.text(t.nights, tCol4, hdrY, { lineBreak: false });
-                doc.text(`${t.total}(${data.currency})`, tCol5 - 70, hdrY, { width: 70, align: 'right', lineBreak: false });
+                doc.fontSize(9).font(fontSemi).fillColor(SETT_WHITE);
+                doc.text(t.destinationCol, tCol1, hdrY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(t.rate, tCol2, hdrY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(t.qty, tCol3, hdrY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(t.nights, tCol4, hdrY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(`${t.total}(${data.currency})`, tCol5 - 80, hdrY, { width: 80, align: 'right', lineBreak: false, characterSpacing: 0.5 });
 
-                // Header separator inside card
-                const hdrLineY = hdrY + 16;
-                doc.moveTo(ML + 13, hdrLineY)
-                    .lineTo(ML + CW - 13, hdrLineY)
-                    .strokeColor(SEPARATOR_SOLID)
-                    .lineWidth(0.5)
-                    .stroke();
-
-                // Room data row
-                const rowY = hdrLineY + 10;
-                doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
+                // Room data row — body text in navy, total in green-bold per §6.1.5.
+                const rowY = cardY + headerStripH + 12;
+                doc.fontSize(10.5).font(fontMed).fillColor(SETT_NAVY)
                     .text(roomName, tCol1, rowY, { width: 310, lineBreak: false });
 
-                doc.fontSize(10.5).font(fontReg).fillColor(GREY_4A);
+                doc.fontSize(10.5).font(fontReg).fillColor(SETT_GREY);
                 doc.text(formatCurrency(hotel.pricePerRoomPerNight, data.currency), tCol2 - 10, rowY, { width: 60, lineBreak: false });
                 doc.text(String(hotel.roomQty), tCol3, rowY, { width: 40, lineBreak: false });
                 doc.text(String(data.nights), tCol4, rowY, { width: 45, lineBreak: false });
 
-                // Total value in navy bold
-                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                    .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 70, rowY, { width: 70, align: 'right', lineBreak: false });
+                // Hotel-level total in green-bold (§6.1.5 — "green amount")
+                doc.fontSize(11).font(fontBold).fillColor(SETT_GREEN)
+                    .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 80, rowY, { width: 80, align: 'right', lineBreak: false });
 
-                // Separator before subtotal
+                // Subtotal divider — light grey 1px line.
                 const subLineY = rowY + 22;
                 doc.moveTo(ML + 13, subLineY)
                     .lineTo(ML + CW - 13, subLineY)
-                    .strokeColor(SEPARATOR_SOLID)
+                    .strokeColor(SETT_BORDER)
                     .lineWidth(0.5)
                     .stroke();
 
-                // Subtotal row (right aligned)
+                // Subtotal row (right aligned) — navy label, green-bold amount.
                 const subY = subLineY + 10;
-                doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
-                    .text(t.subtotal, tCol5 - 150, subY, { width: 80, lineBreak: false });
-                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                    .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 70, subY, { width: 70, align: 'right', lineBreak: false });
+                doc.fontSize(9).font(fontSemi).fillColor(SETT_NAVY)
+                    .text(t.subtotal.toUpperCase(), tCol5 - 160, subY, { width: 80, lineBreak: false, characterSpacing: 0.5 });
+                doc.fontSize(11).font(fontBold).fillColor(SETT_GREEN)
+                    .text(formatCurrency(hotel.totalPrice, data.currency), tCol5 - 80, subY, { width: 80, align: 'right', lineBreak: false });
 
                 doc.y = cardY + cardHeight + 14;
 
@@ -552,49 +726,55 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 const svcCardHeight = 48 + data.services.length * 26 + 35;
                 const svcCardY = doc.y;
 
-                doc.roundedRect(ML, svcCardY, CW, svcCardHeight, 10)
-                    .strokeColor(SEPARATOR_SOLID)
-                    .lineWidth(0.5)
+                doc.roundedRect(ML, svcCardY, CW, svcCardHeight, 8)
+                    .strokeColor(SETT_BORDER)
+                    .lineWidth(1)
                     .stroke();
 
-                // Service table headers
-                const shY = svcCardY + 12;
+                // Navy header strip — same brand treatment as the hotel card.
+                const svcHeaderStripH = 26;
+                doc.save();
+                doc.roundedRect(ML, svcCardY, CW, svcHeaderStripH + 6, 8).clip();
+                doc.rect(ML, svcCardY, CW, svcHeaderStripH).fillColor(SETT_NAVY).fill();
+                doc.restore();
+
+                const shY = svcCardY + 8;
                 const sCol1 = ML + 13;
                 const sCol2 = ML + 335;
                 const sCol3 = ML + 395;
                 const sCol4 = ML + 440;
                 const sCol5 = ML + CW - 13;
 
-                doc.fontSize(9).font(fontSemi).fillColor(NAVY);
-                doc.text(t.destinationCol, sCol1, shY, { lineBreak: false });
-                doc.text(t.rate, sCol2, shY, { lineBreak: false });
-                doc.text(t.qty, sCol3, shY, { lineBreak: false });
-                doc.text(t.nights, sCol4, shY, { lineBreak: false });
-                doc.text(`${t.total}(${data.currency})`, sCol5 - 70, shY, { width: 70, align: 'right', lineBreak: false });
-
-                // Header separator
-                const shLineY = shY + 16;
-                doc.moveTo(ML + 13, shLineY)
-                    .lineTo(ML + CW - 13, shLineY)
-                    .strokeColor(SEPARATOR_SOLID)
-                    .lineWidth(0.5)
-                    .stroke();
+                doc.fontSize(9).font(fontSemi).fillColor(SETT_WHITE);
+                doc.text(t.destinationCol, sCol1, shY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(t.rate, sCol2, shY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(t.qty, sCol3, shY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(t.nights, sCol4, shY, { lineBreak: false, characterSpacing: 0.5 });
+                doc.text(`${t.total}(${data.currency})`, sCol5 - 80, shY, { width: 80, align: 'right', lineBreak: false, characterSpacing: 0.5 });
 
                 // Service rows
-                let sRowY = shLineY + 10;
+                let sRowY = svcCardY + svcHeaderStripH + 12;
                 let svcSubtotal = 0;
 
-                for (const svc of data.services) {
-                    doc.fontSize(10.5).font(fontReg).fillColor(NAVY)
+                for (let si = 0; si < data.services.length; si++) {
+                    const svc = data.services[si];
+
+                    // Alternating row tint per §5.2 — odd rows get a subtle
+                    // grey wash so multi-row tables stay scannable.
+                    if (si % 2 === 1) {
+                        doc.rect(ML + 4, sRowY - 6, CW - 8, 24).fillColor(SETT_BG_LIGHT).fill();
+                    }
+
+                    doc.fontSize(10.5).font(fontMed).fillColor(SETT_NAVY)
                         .text(svc.serviceName, sCol1, sRowY, { width: 310, lineBreak: false });
 
-                    doc.fontSize(10.5).font(fontReg).fillColor(GREY_68);
+                    doc.fontSize(10.5).font(fontReg).fillColor(SETT_GREY);
                     doc.text(formatCurrency(svc.unitPrice, data.currency), sCol2 - 10, sRowY, { width: 60, lineBreak: false });
                     doc.text(String(svc.quantity), sCol3, sRowY, { width: 40, lineBreak: false });
                     doc.text(String(svc.days), sCol4, sRowY, { width: 45, lineBreak: false });
 
-                    doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                        .text(formatCurrency(svc.totalPrice, data.currency), sCol5 - 70, sRowY, { width: 70, align: 'right', lineBreak: false });
+                    doc.fontSize(11).font(fontBold).fillColor(SETT_GREEN)
+                        .text(formatCurrency(svc.totalPrice, data.currency), sCol5 - 80, sRowY, { width: 80, align: 'right', lineBreak: false });
 
                     svcSubtotal += svc.totalPrice;
                     sRowY += 26;
@@ -603,16 +783,16 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                 // Separator before subtotal
                 doc.moveTo(ML + 13, sRowY - 4)
                     .lineTo(ML + CW - 13, sRowY - 4)
-                    .strokeColor(SEPARATOR_SOLID)
+                    .strokeColor(SETT_BORDER)
                     .lineWidth(0.5)
                     .stroke();
 
-                // Subtotal
+                // Subtotal — navy uppercase label + green-bold amount.
                 const sSubY = sRowY + 6;
-                doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
-                    .text(t.subtotal, sCol5 - 150, sSubY, { width: 80, lineBreak: false });
-                doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                    .text(formatCurrency(svcSubtotal, data.currency), sCol5 - 70, sSubY, { width: 70, align: 'right', lineBreak: false });
+                doc.fontSize(9).font(fontSemi).fillColor(SETT_NAVY)
+                    .text(t.subtotal.toUpperCase(), sCol5 - 160, sSubY, { width: 80, lineBreak: false, characterSpacing: 0.5 });
+                doc.fontSize(11).font(fontBold).fillColor(SETT_GREEN)
+                    .text(formatCurrency(svcSubtotal, data.currency), sCol5 - 80, sSubY, { width: 80, align: 'right', lineBreak: false });
 
                 doc.y = svcCardY + svcCardHeight + 12;
                 separatorLine(doc);
@@ -646,22 +826,34 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
             separatorLine(doc);
 
             // ═══════════════════════════════════════════════════════════════
-            // TOTAL BAR (rounded, light navy background)
+            // TOTAL BAR — full-width navy band, white TOTAL label, green amount.
+            // Matches Brand Guidelines v2 §6.1.5: "Total row: Green background
+            // with navy text, or navy bg with white text + green amount."
             // ═══════════════════════════════════════════════════════════════
 
             ensureSpace(doc, 50);
 
+            const totalBarH = 38;
             const totalBarY = doc.y;
-            doc.roundedRect(ML, totalBarY, CW, 35, 10)
-                .fillColor(TOTAL_BG).fill();
+            doc.roundedRect(ML, totalBarY, CW, totalBarH, 8)
+                .fillColor(SETT_NAVY).fill();
 
-            // TOTAL label + value (right aligned within the bar)
-            doc.fontSize(9).font(fontSemi).fillColor(GREY_68)
-                .text(t.totalLabel, ML + CW - 160, totalBarY + 11, { width: 50, lineBreak: false });
-            doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                .text(formatCurrencyWithCode(data.totalPrice, data.currency), ML + CW - 100, totalBarY + 10, { width: 86, align: 'right', lineBreak: false });
+            // White "TOTAL" label.
+            doc.fontSize(10).font(fontBold).fillColor(SETT_WHITE)
+                .text(t.totalLabel.toUpperCase(), ML + 20, totalBarY + 13, {
+                    width: 80, lineBreak: false, characterSpacing: 1,
+                });
 
-            doc.y = totalBarY + 45;
+            // Green-bold amount, right-aligned inside the navy bar.
+            doc.fontSize(14).font(fontBold).fillColor(SETT_GREEN)
+                .text(
+                    formatCurrencyWithCode(data.totalPrice, data.currency),
+                    ML + CW - 220,
+                    totalBarY + 11,
+                    { width: 200, align: 'right', lineBreak: false },
+                );
+
+            doc.y = totalBarY + totalBarH + 12;
             separatorLine(doc);
 
             // ═══════════════════════════════════════════════════════════════
@@ -701,9 +893,14 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                         .text(bullet, ML, doc.y, { width: CW, lineGap: 3 });
                     doc.y += 4;
 
-                    // After 5th bullet, insert payment callout box (pink)
+                    // After the 5th terms bullet, insert the payment-due
+                    // callout. Brand guidelines §2 list red/pink as a
+                    // FORBIDDEN colour — this callout is now navy with white
+                    // text and a 3pt green left-border accent (§5.3 — "Accent:
+                    // 3px left-border in green for emphasis cards").
                     if (ti === 4) {
-                        ensureSpace(doc, 40);
+                        const calloutH = 40;
+                        ensureSpace(doc, calloutH + 8);
                         const payY = doc.y + 4;
 
                         // Find earliest cancellation deadline for payment date
@@ -711,13 +908,20 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
                         const payDate = deadlines.length > 0 ? formatDate(deadlines.sort()[0]) : today;
                         const payText = `${t.paymentPrefix} ${formatCurrencyWithCode(data.totalPrice, data.currency)} ${t.paymentUntil} ${payDate}.`;
 
-                        doc.roundedRect(ML, payY, CW, 35, 10)
-                            .fillColor(PINK_BG).fill();
+                        // Navy filled rounded card.
+                        doc.roundedRect(ML, payY, CW, calloutH, 8)
+                            .fillColor(SETT_NAVY).fill();
 
-                        doc.fontSize(10.5).font(fontSemi).fillColor(NAVY)
-                            .text(payText, ML + 14, payY + 11, { width: CW - 28, lineBreak: false });
+                        // 3pt green left-border accent (inside the rounded
+                        // card so it doesn't poke past the radius).
+                        doc.rect(ML + 1, payY + 6, 3, calloutH - 12)
+                            .fillColor(SETT_GREEN).fill();
 
-                        doc.y = payY + 42;
+                        // White text — slightly indented past the green stripe.
+                        doc.fontSize(11).font(fontSemi).fillColor(SETT_WHITE)
+                            .text(payText, ML + 16, payY + 13, { width: CW - 32, lineBreak: false });
+
+                        doc.y = payY + calloutH + 6;
                     }
                 }
 
@@ -731,28 +935,45 @@ export function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
 
             ensureSpace(doc, 50);
 
-            doc.fontSize(12).font(fontSemi).fillColor(NAVY)
-                .text(t.issuedBy, ML, doc.y, { width: CW, align: 'right' });
-            doc.y += 16;
-            doc.fontSize(10.5).font(fontReg).fillColor(DARK_1D)
+            doc.fontSize(12).font(fontBold).fillColor(SETT_NAVY)
+                .text(t.issuedBy, ML, doc.y, { width: CW, align: 'right', lineBreak: false, characterSpacing: 0.6 });
+            doc.y += 18;
+            doc.fontSize(10.5).font(fontMed).fillColor(SETT_NAVY)
                 .text(data.assignedPerson || data.companyName || '-', ML, doc.y, {
                     width: CW,
                     align: 'right',
+                    lineBreak: false,
                 });
+            doc.y += 14;
 
             // ═══════════════════════════════════════════════════════════════
-            // FOOTER — line only on every page (no doc.text to avoid ghost pages)
+            // FINAL PASS — stamp brand chrome on every page once we know how
+            // many pages there are. §8.2 of the guidelines: the green bottom
+            // bar is the "visual anchor of the SETT brand" and must appear on
+            // every page. Page 1 already has the hero band, so pages 2+ get
+            // the compact running header here.
             // ═══════════════════════════════════════════════════════════════
 
             const range = doc.bufferedPageRange();
-            for (let i = 0; i < range.count; i++) {
+            const totalPages = range.count;
+            for (let i = 0; i < totalPages; i++) {
                 doc.switchToPage(i);
                 doc.save();
-                doc.moveTo(ML, FOOTER_Y)
-                    .lineTo(ML + CW, FOOTER_Y)
-                    .strokeColor(SEPARATOR_SOLID)
-                    .lineWidth(0.5)
-                    .stroke();
+
+                // Compact running header on pages 2+ (skip page 1 — hero owns it).
+                if (i > 0) {
+                    drawRunningHeader(doc, data.referenceNumber, i + 1, logoPath);
+                }
+
+                // Mandatory green bottom bar + legal line + page-of indicator.
+                drawGreenBottomBar(
+                    doc,
+                    data.companyName || 'S-E-T-T Worldwide Reservation FZE',
+                    i + 1,
+                    totalPages,
+                    t,
+                );
+
                 doc.restore();
             }
 
