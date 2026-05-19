@@ -42,8 +42,15 @@ export interface PdfTranslations {
     checkinOut: string;
     guests: string;
 
-    // Hotel table headers
-    destinationCol: string;
+    // Hotel + service table headers
+    /**
+     * First column header. On the Hotel table it labels the room type
+     * (Double, Twin, Standard Double Beds, …). On the Service table it
+     * labels the service name (Airport transfer, Excursion, …). Both
+     * tables reuse the same key for visual consistency — the value
+     * itself reads naturally as "Room Type" / "Zimmertyp".
+     */
+    roomTypeCol: string;
     rate: string;
     qty: string;
     nights: string;
@@ -80,7 +87,13 @@ export interface PdfTranslations {
 
 const en: PdfTranslations = {
     // Header
-    taxId: 'TAX ID',
+    /**
+     * Identifier of the LTD (Canadian) issuing entity — Oliver explicitly
+     * asked for "Ontario Corporation Number" wording instead of the
+     * generic "Tax ID". The value itself (e.g. 1001233897) flows from
+     * settings → companyDetails.taxId → OfferPdfData.companyTaxId.
+     */
+    taxId: 'Ontario Corporation Number',
 
     // Section headings
     contract: 'Contract',
@@ -114,7 +127,7 @@ const en: PdfTranslations = {
     guests: 'Guests',
 
     // Hotel table headers
-    destinationCol: 'DESTINATION',
+    roomTypeCol: 'ROOM TYPE',
     rate: 'RATE',
     qty: 'QTY',
     nights: 'NIGHTS',
@@ -147,8 +160,9 @@ const en: PdfTranslations = {
 };
 
 const de: PdfTranslations = {
-    // Header
-    taxId: 'STEUER-NR.',
+    // Header — same Ontario Corp Number label in both languages: the
+    // identifier is jurisdiction-specific and not translated.
+    taxId: 'Ontario Corporation Number',
 
     // Section headings
     contract: 'Vertrag',
@@ -182,7 +196,7 @@ const de: PdfTranslations = {
     guests: 'Gäste',
 
     // Hotel table headers
-    destinationCol: 'REISEZIEL',
+    roomTypeCol: 'ZIMMERTYP',
     rate: 'PREIS',
     qty: 'ANZ.',
     nights: 'NÄCHTE',

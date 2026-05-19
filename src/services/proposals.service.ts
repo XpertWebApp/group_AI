@@ -962,6 +962,10 @@ export class ProposalService {
                 pricePerRoomPerNight: sell,
                 totalPrice: Number(h.totalPrice ?? 0),
                 cancelDeadline: h.cancelDeadline ? new Date(h.cancelDeadline).toISOString() : null,
+                // Stable per-hotel reference (SETT-{requestRef}-{NNN}) — the
+                // PDF renders this exact string so it matches the dashboard
+                // Offer Preview. Falls back to null for legacy rows.
+                hotelRef: (h as any).hotelRef ?? null,
             };
         });
 
