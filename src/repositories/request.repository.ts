@@ -7,8 +7,19 @@ export interface ListRequestsOptions {
     limit?: number;
     search?: string;
     status?: BookingRequestStatus;
+    /**
+     * Legacy date window — applied to `checkin_date`. Kept for back-compat
+     * with older callers. New code should use `createdFrom`/`createdTo`.
+     */
     dateFrom?: string;
     dateTo?: string;
+    /**
+     * Explicit window on `created_at`. Drives the dashboard's
+     * "This Month / Quarter / Year" filter chip — filtering by when the
+     * request was created, not by trip dates.
+     */
+    createdFrom?: string;
+    createdTo?: string;
     sortBy?: 'createdAt' | 'checkinDate' | 'referenceNumber';
     sortOrder?: 'asc' | 'desc';
 }
@@ -107,6 +118,8 @@ export class RequestRepository {
             status,
             dateFrom,
             dateTo,
+            createdFrom,
+            createdTo,
             sortBy = 'createdAt',
             sortOrder = 'desc',
         } = opts;
@@ -115,10 +128,22 @@ export class RequestRepository {
 
         if (status) where.status = status;
 
+        // Legacy: filter by trip check-in date. Surface is unchanged so
+        // existing callers keep working. New dashboard filter chip
+        // ("This Month / Quarter / Year") uses createdFrom/createdTo
+        // below instead because it's a "when was this request created"
+        // semantic, not a "when does the trip start" one.
         if (dateFrom || dateTo) {
             where.checkinDate = {
                 ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
                 ...(dateTo ? { lte: new Date(dateTo) } : {}),
+            };
+        }
+
+        if (createdFrom || createdTo) {
+            where.createdAt = {
+                ...(createdFrom ? { gte: new Date(createdFrom) } : {}),
+                ...(createdTo ? { lte: new Date(createdTo) } : {}),
             };
         }
 
