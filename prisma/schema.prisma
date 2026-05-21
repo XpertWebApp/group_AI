@@ -458,6 +458,13 @@ model ProposalHotel {
   addressCity          String?   @map("address_city") @db.VarChar(255)
   addressCountry       String?   @map("address_country") @db.VarChar(10)
   hotelRef             String?   @map("hotel_ref") @db.VarChar(32)
+  /// Public SETTHub hotel-detail URL (e.g. https://booking.s-e-t-t.com/Availability/Hotel/Details/<b64>).
+  /// Persisted on add-hotel so the dashboard's Request Summary page can
+  /// render the hotel name as a clickable deep-link into SETTHub. Null
+  /// for rows added before the column existed and for hotels whose
+  /// `masterHotelId` isn't synced yet — the FE renders a plain heading
+  /// in that case.
+  sethubDetailsUrl     String?   @map("sethub_details_url") @db.Text
   optionDetailsId      String?   @map("option_details_id") @db.Uuid
   createdAt            DateTime  @default(now()) @map("created_at")
   deletedAt            DateTime? @map("deleted_at")

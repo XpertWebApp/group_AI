@@ -13,8 +13,13 @@ export class RequestsController {
                 limit: q.limit ? Math.min(Number(q.limit), 100) : 20,
                 search: q.search as string | undefined,
                 status: q.status as any,
+                // Legacy params — kept for back-compat, filter `checkinDate`.
                 dateFrom: q.dateFrom as string | undefined,
                 dateTo: q.dateTo as string | undefined,
+                // New explicit window on `createdAt` (dashboard "This Month/
+                // Quarter/Year" filter chip).
+                createdFrom: q.createdFrom as string | undefined,
+                createdTo: q.createdTo as string | undefined,
                 sortBy: (q.sortBy as any) ?? 'createdAt',
                 sortOrder: (q.sortOrder as any) ?? 'desc',
             });

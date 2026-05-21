@@ -328,10 +328,10 @@ export function buildOfferDeclinedEmail(opts: {
     const dashboardUrl = proposalLink(opts.proposalId);
     return emailLayout({
         type: 'general',
-        preheader: `Offer #${opts.referenceNumber} declined — action required`,
+        preheader: `Offer #${opts.referenceNumber} declined by ${opts.contactName}`,
         body: `
-            ${heading('Offer Declined')}
-            ${alertBox('This offer has been declined by an admin and requires manual attention.', 'warning')}
+            ${heading('Offer Declined by Customer')}
+            ${alertBox('The customer has declined this offer. Review the reason below and follow up to understand or re-pitch.', 'warning')}
             ${detailsTable([
                 { label: 'Reference', value: `<strong style="color:${SETT_NAVY};">#${opts.referenceNumber}</strong>` },
                 { label: 'Client', value: opts.contactName },
@@ -340,7 +340,7 @@ export function buildOfferDeclinedEmail(opts: {
             ${subheading('Rejection Reason')}
             ${paragraph(opts.rejectionReason)}
             ${ctaButton('Review & Revise', dashboardUrl)}
-            ${paragraph('Please create a revised offer in the dashboard.')}
+            ${paragraph('Open the offer in the dashboard to follow up or prepare a revised version.')}
         `,
     });
 }
