@@ -17,6 +17,33 @@ export const RoomsSchema = z.object({
 const dateString = (label: string) =>
     z.string().refine((d) => !isNaN(Date.parse(d)), { message: `Invalid ${label}` });
 
+/**
+ * Single half-step star value (1, 1.5, …, 5.5, 6).
+ * Used both for the legacy single `starRating` field and as the element
+ * type for the new multi-select `starRatings` array.
+ */
+const SingleStarRatingSchema = z
+    .number()
+    .min(1)
+    .max(6)
+    .refine((v) => v * 2 === Math.round(v * 2), {
+        message: 'Star rating must be in 0.5 increments (e.g. 1, 1.5, 2, ... 5.5, 6)',
+    });
+
+/**
+ * Multi-select star categories — one entry per ticked box on the
+ * Create Request form. Validates 1-6 categories, each a valid
+ * half-step value, with no duplicates. An empty array is rejected
+ * (use `undefined` instead to mean "any star").
+ */
+const StarRatingsArraySchema = z
+    .array(SingleStarRatingSchema)
+    .min(1, 'Pick at least one star category')
+    .max(6, 'Cannot select more than 6 star categories')
+    .refine((arr) => new Set(arr).size === arr.length, {
+        message: 'Duplicate star categories are not allowed',
+    });
+
 // ── BookingRequest (4-step Create Request form) ────────────────────────────
 export const CreateBookingRequestSchema = z
     .object({
@@ -27,7 +54,13 @@ export const CreateBookingRequestSchema = z
         checkoutDate: dateString('check-out date').optional(),
         /** nights is derived from checkinDate + checkoutDate, but can be supplied directly */
         nights: z.number().int().min(1).optional(),
-        starRating: z.number().min(1).max(6).refine((v) => v * 2 === Math.round(v * 2), { message: 'Star rating must be in 0.5 increments (e.g. 1, 1.5, 2, ... 5.5, 6)' }).optional(),
+        // Legacy single-value star rating. Wix webhook + older frontend builds
+        // still send this. Kept for back-compat; new multi-select frontends
+        // should send `starRatings` instead. The service layer reads
+        // `starRatings` first and falls back to `[starRating]`.
+        starRating: SingleStarRatingSchema.optional(),
+        /** Multi-select star categories. 1-6 entries, no duplicates. */
+        starRatings: StarRatingsArraySchema.optional(),
         budgetRange: z.string().max(100).optional(),
         budget: z.number().positive().optional(),
         groupType: z.string().max(100).optional(),
@@ -96,7 +129,10 @@ export const UpdateBookingRequestSchema = z.object({
     checkinDate: dateString('check-in date').optional(),
     checkoutDate: dateString('check-out date').optional(),
     nights: z.number().int().min(1).optional(),
-    starRating: z.number().min(1).max(6).refine((v) => v * 2 === Math.round(v * 2), { message: 'Star rating must be in 0.5 increments (e.g. 1, 1.5, 2, ... 5.5, 6)' }).optional(),
+    // Legacy single-value field, kept for back-compat with Wix + older FE.
+    starRating: SingleStarRatingSchema.optional(),
+    /** Multi-select star categories. 1-6 entries, no duplicates. */
+    starRatings: StarRatingsArraySchema.optional(),
     budgetRange: z.string().max(100).optional(),
     budget: z.number().positive().optional(),
     groupType: z.string().max(100).optional(),

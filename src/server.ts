@@ -7,6 +7,7 @@ import { refreshSupplierLimitsCache } from './config/supplierLimits';
 import { startHotelProbeWorker } from './queue/hotelProbe.worker';
 import { closeConnection } from './queue/rabbitmq.client';
 import hotelSearchService from './services/hotelSearch.service';
+import hotelProbeJobRepository from './repositories/hotelProbeJob.repository';
 
 const prisma = new PrismaClient();
 
@@ -46,6 +47,39 @@ const startServer = async () => {
                 logger.error({ msg: 'Orphan-search sweeper (periodic) failed', error: err?.message });
             });
         }, 90_000);
+
+        // Probe-job watchdog — fails individual probes stuck in PROBING /
+        // RUNNING for >2 minutes. Different from the search sweeper above:
+        // that one rescues entire searches whose watcher died; this one
+        // unblocks a search whose 399/400 probes finished but ONE specific
+        // hotel's WBE call hung. Without this, the watcher polls forever
+        // waiting for the stuck probe to reach a terminal state. Fast
+        // cadence (30s) because the search-level recovery depends on it.
+        const PROBE_WATCHDOG_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+        setImmediate(() => {
+            hotelProbeJobRepository
+                .failStaleProbingJobs(PROBE_WATCHDOG_THRESHOLD_MS)
+                .then((count) => {
+                    if (count > 0) {
+                        logger.warn({ count }, 'Probe watchdog (boot): failed stale PROBING jobs');
+                    }
+                })
+                .catch((err) => {
+                    logger.error({ msg: 'Probe watchdog (boot) failed', error: err?.message });
+                });
+        });
+        setInterval(() => {
+            hotelProbeJobRepository
+                .failStaleProbingJobs(PROBE_WATCHDOG_THRESHOLD_MS)
+                .then((count) => {
+                    if (count > 0) {
+                        logger.warn({ count }, 'Probe watchdog: failed stale PROBING jobs');
+                    }
+                })
+                .catch((err) => {
+                    logger.error({ msg: 'Probe watchdog (periodic) failed', error: err?.message });
+                });
+        }, 30_000);
 
         const server = app.listen(config.port, '0.0.0.0', () => {
             logger.info(`Server is running on port ${config.port} in ${config.env} mode`);

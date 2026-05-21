@@ -321,7 +321,12 @@ export class WebhookService {
             checkinDate: checkin,
             checkoutDate: checkout ?? undefined,
             nights,
+            // Wix sends ONE star value. Persist it both on the legacy single
+            // field AND wrapped into the new `starRatings` array so the
+            // search pipeline (which prefers the array) treats it as a
+            // single-entry multi-select.
             starRating: starRating ?? undefined,
+            starRatings: starRating != null ? [starRating] : [],
             budgetRange: data.budget ? String(data.budget) : null,
             groupType: parseGroupType(data.group_type),
             groupSize,

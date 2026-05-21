@@ -57,7 +57,12 @@ interface AccumulationResult {
 function applyAccumulationGate(
     completedJobs: any[],
     roomsNeeded: number,
-    requestedStarRating: number | null,
+    /**
+     * Multi-select star categories the user requested. A hotel counts as
+     * a "primary" star match when its star rating exists in this array.
+     * Empty array means no preference — no star tier applied to the sort.
+     */
+    requestedStarRatings: number[],
     groupType: string | null = null,
 ): AccumulationResult {
     const statusOrder: Record<string, number> = { CONFIRMED: 0, LIMITED: 1 };
@@ -68,6 +73,8 @@ function applyAccumulationGate(
     // result set — Oliver's "Athens hotel" precedent: a regular hotel can
     // legitimately serve a school group.
     const promoteYouthFriendly = groupType === 'youth' || groupType === 'school';
+    const hasStarFilter = requestedStarRatings.length > 0;
+    const starSet = new Set(requestedStarRatings);
 
     // Sort: [youth-friendly tier when applicable] → star match → CONFIRMED
     // before LIMITED → most rooms → cheapest price
@@ -82,9 +89,9 @@ function applyAccumulationGate(
             if (aYF !== bYF) return aYF - bYF;
         }
 
-        // Primary: star rating match
-        const aStarMatch = requestedStarRating != null && ra.starRating === requestedStarRating ? 0 : 1;
-        const bStarMatch = requestedStarRating != null && rb.starRating === requestedStarRating ? 0 : 1;
+        // Primary: star rating match (matches ANY of the requested stars)
+        const aStarMatch = hasStarFilter && starSet.has(Number(ra.starRating)) ? 0 : 1;
+        const bStarMatch = hasStarFilter && starSet.has(Number(rb.starRating)) ? 0 : 1;
         if (aStarMatch !== bStarMatch) return aStarMatch - bStarMatch;
 
         // Secondary: CONFIRMED before LIMITED
@@ -106,7 +113,7 @@ function applyAccumulationGate(
     let roomsCommitted = 0;
 
     console.log(`[Step 3.5] Starting accumulation gate: ${sorted.length} completed hotels, roomsNeeded=${roomsNeeded}`);
-    logger.info({ completedCount: sorted.length, roomsNeeded, requestedStarRating, groupType, promoteYouthFriendly }, 'Step 3.5: Starting accumulation gate');
+    logger.info({ completedCount: sorted.length, roomsNeeded, requestedStarRatings, groupType, promoteYouthFriendly }, 'Step 3.5: Starting accumulation gate');
 
     for (const job of sorted) {
         const result = job.resultJson as any;
@@ -190,7 +197,17 @@ export class OfferGenerationService {
         const contactName = (request as any).contactName ?? (request as any).firstName ?? 'Guest';
         const destinationName = (request as any).destinationName ?? 'Unknown destination';
         const roomsNeeded = countTotalRooms((request as any).rooms);
-        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
+        // Read the new multi-select `starRatings` array first; fall back to
+        // wrapping the legacy single `starRating` for back-compat. Empty
+        // array means "any star rating" downstream — both the accumulation
+        // gate and the bonus-alternative detector treat that as "no
+        // preference" and skip their star-aware logic.
+        const rawStars = (request as any).starRatings;
+        const requestedStarRatings: number[] = Array.isArray(rawStars) && rawStars.length > 0
+            ? rawStars.map((v: any) => Number(v)).filter((n: number) => Number.isFinite(n))
+            : (request as any).starRating != null
+                ? [Number((request as any).starRating)]
+                : [];
 
         await requestRepository.updateStatus(requestId, BookingRequestStatus.processing);
 
@@ -295,7 +312,7 @@ export class OfferGenerationService {
             // ── Step 3.5 — Accumulation Gate ──────────────────────────────────
             const requestGroupType = ((request as any).groupType as string | null | undefined) ?? null;
             const { accepted: acceptedHotels, roomsCommitted, targetMet } =
-                applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRating, requestGroupType);
+                applyAccumulationGate(completedJobs, roomsNeeded, requestedStarRatings, requestGroupType);
 
             if (acceptedHotels.length === 0) {
                 try {
@@ -310,13 +327,20 @@ export class OfferGenerationService {
             }
 
             // ── Bonus Alternative Detection ──────────────────────────────────
-            // If a higher-star hotel is at the same or lower price than the
-            // requested star, flag it as a bonus alternative for the agent.
-            if (requestedStarRating) {
-                // Average mid-range price of hotels matching the requested star
+            // If a hotel above the user's HIGHEST requested star comes in at
+            // the same or lower price than what they're paying inside the
+            // requested band, flag it as a bonus alternative for the agent.
+            // With multi-select, "requested" means "any of the ticked stars";
+            // a 4★ hotel is NOT a bonus over 3★ when 4★ was also ticked.
+            if (requestedStarRatings.length > 0) {
+                const maxRequestedStar = Math.max(...requestedStarRatings);
+                const requestedSet = new Set(requestedStarRatings);
+
+                // Average mid-range price of hotels that landed inside the
+                // requested band (any star the user picked).
                 const matchingPrices = acceptedHotels
                     .map((j) => j.resultJson as any)
-                    .filter((r) => r.starRating === requestedStarRating && r.highestMidRangePrice > 0)
+                    .filter((r) => requestedSet.has(Number(r.starRating)) && r.highestMidRangePrice > 0)
                     .map((r) => r.highestMidRangePrice as number);
                 const avgRequestedPrice = matchingPrices.length > 0
                     ? matchingPrices.reduce((s, p) => s + p, 0) / matchingPrices.length
@@ -327,13 +351,21 @@ export class OfferGenerationService {
                     const hotelStar = result.starRating ?? 0;
                     const hotelPrice = result.highestMidRangePrice ?? 0;
 
-                    if (hotelStar > requestedStarRating && hotelPrice > 0 && avgRequestedPrice > 0 && hotelPrice <= avgRequestedPrice) {
+                    // "Bonus" only when the hotel is ABOVE every requested
+                    // star AND the price is no worse than the in-band avg.
+                    if (
+                        hotelStar > maxRequestedStar &&
+                        !requestedSet.has(hotelStar) &&
+                        hotelPrice > 0 &&
+                        avgRequestedPrice > 0 &&
+                        hotelPrice <= avgRequestedPrice
+                    ) {
                         result.bonusAlternative = true;
-                        result.bonusNote = `${hotelStar}-star hotel at ${requestedStarRating}-star price — better hotel, same or lower cost.`;
-                        console.log(`[Bonus] ${result.hotelName}: ${hotelStar}-star at ${hotelPrice}/night vs avg ${requestedStarRating}-star at ${avgRequestedPrice.toFixed(2)}/night — flagged as bonus alternative`);
+                        result.bonusNote = `${hotelStar}-star hotel at ${maxRequestedStar}-star price — better hotel, same or lower cost.`;
+                        console.log(`[Bonus] ${result.hotelName}: ${hotelStar}-star at ${hotelPrice}/night vs avg requested at ${avgRequestedPrice.toFixed(2)}/night — flagged as bonus alternative`);
                         logger.info({
                             hotelCode: result.hotelCode, hotelName: result.hotelName,
-                            hotelStar, hotelPrice, requestedStarRating, avgRequestedPrice,
+                            hotelStar, hotelPrice, requestedStarRatings, avgRequestedPrice,
                         }, 'Bonus alternative detected: higher star at same/lower price');
                     }
                 }

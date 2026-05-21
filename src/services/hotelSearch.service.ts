@@ -23,6 +23,7 @@ import { countTotalRooms, hasNewDoubleBreakdown, normalizeRoomCounts } from '../
 import {
     RELAXATION_LADDER,
     buildStarList,
+    buildExpandingRingLadder,
     describeRelaxation,
     describeDestinationFallback,
     describeAlternativeReason,
@@ -31,6 +32,30 @@ import {
 import { logAuditEvent } from '../utils/audit';
 import { BookingRequestStatus } from '@prisma/client';
 import { broadcast } from './sseManager';
+
+/**
+ * Read the requested star categories from a BookingRequest row.
+ *
+ * Strategy: prefer the new multi-select `starRatings` array. If it's
+ * empty (legacy row, or "any rating" intent), fall back to the legacy
+ * single `starRating` field — wrapping it in a one-element array so
+ * the rest of the pipeline only ever sees `number[]`.
+ *
+ * Returns an empty array when neither is set — `buildStarList` treats
+ * that as "no star filter" at every relaxation level.
+ */
+function resolveRequestedStars(request: any): number[] {
+    const arr = request?.starRatings;
+    if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map((v: any) => Number(v)).filter((n: number) => Number.isFinite(n));
+    }
+    const single = request?.starRating;
+    if (single != null) {
+        const n = Number(single);
+        if (Number.isFinite(n)) return [n];
+    }
+    return [];
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -858,7 +883,13 @@ export class HotelSearchService {
      */
     private async findCandidatesWithRelaxation(opts: {
         destinationId: number;
-        requestedStarRating: number | null;
+        /**
+         * Multi-select star categories from the request (one entry per
+         * ticked box on the form). Empty array means "any rating".
+         * Each entry is widened independently by the relaxation ladder
+         * (±1, ±2, any) and unioned via `buildStarList`.
+         */
+        requestedStarRatings: number[];
         facilityIds?: number[];
         /**
          * For the ORIGINAL destination only, skip ladder levels < this index.
@@ -887,7 +918,7 @@ export class HotelSearchService {
         const tryAtDestination = async (destId: number, fromIndex: number) => {
             for (let i = fromIndex; i < RELAXATION_LADDER.length; i++) {
                 const config = RELAXATION_LADDER[i]!;
-                const stars = buildStarList(opts.requestedStarRating, config.starWindow);
+                const stars = buildStarList(opts.requestedStarRatings, config.starWindow);
                 let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
                     destId,
                     stars,
@@ -1039,7 +1070,33 @@ export class HotelSearchService {
         // searchSettled (don't blow away usable results by widening criteria).
         let currentLevel: RelaxationLevel = startLevel;
         let paginationContext = initialPaginationContext;
-        const MAX_ITERATIONS = RELAXATION_LADDER.length;
+
+        // Load the request's multi-select star categories once.
+        const requestForStars = await requestRepository.findById(requestId);
+        const requestedStarRatings = resolveRequestedStars(requestForStars);
+
+        // Build the expanding ring of star bands to walk after the exact
+        // tier. Per Oliver's brief: the search probes hotels closest to
+        // the requested categor(ies) first, then expands outward in this
+        // priority order (per centre):
+        //   tier 0: requested star                      (exact)
+        //   tier 1: +0.5                                (closest UP)
+        //   tier 2: +1.0                                (one full step UP)
+        //   tier 3: -0.5                                (closest DOWN)
+        //   tier 4: -1.0                                (one full step DOWN)
+        // Capped at ±1 — never widens beyond that. The watcher stops the
+        // moment TARGET_VIABLE_HOTELS is met OR every ring tier has been
+        // probed without reaching target (then it settles with whatever
+        // viable hotels it found).
+        const ringTiers = buildExpandingRingLadder(requestedStarRatings);
+        // The initial search already probed tier 0 (the exact band), so the
+        // watcher starts the outer loop at tier 1 (first widening).
+        let ringIndex = 0;
+        // Outer loop iterations = number of ring tiers. Each iteration is
+        // one "rung climb" (paginate-probe-evaluate at the current tier).
+        // We always need at least 1 iteration so the inner loop runs even
+        // when ringTiers has just the exact tier (no widening needed).
+        const MAX_ITERATIONS = Math.max(1, ringTiers.length);
 
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
             // ── Inner loop: paginate within the CURRENT relaxation level ──
@@ -1084,11 +1141,15 @@ export class HotelSearchService {
                     params,
                 );
 
-                if (nextBatch.decision !== 'queued' || nextBatch.queuedCount === 0) {
-                    // Can't paginate further — destination exhausted at this
-                    // level, or we hit the safety ceiling. Outer loop will
-                    // decide whether to advance the ladder based on
-                    // viableCount (success vs zero).
+                // Terminate the inner loop only when the destination is
+                // genuinely exhausted at this tier or the safety ceiling
+                // is reached. A `queued` decision with `queuedCount === 0`
+                // means all hotels in this batch were duplicates of
+                // previously-probed codes (common after widening to a
+                // wider ring tier — the inner hotels are all already
+                // probed). In that case we KEEP paginating: advance the
+                // offset and try the next batch.
+                if (nextBatch.decision !== 'queued') {
                     paginationStopReason =
                         nextBatch.decision === 'max_batches_reached'
                             ? 'max_batches_reached'
@@ -1105,13 +1166,24 @@ export class HotelSearchService {
                         nextOffset: nextBatch.nextOffset,
                         queuedThisBatch: nextBatch.queuedCount,
                     },
-                    'Post-probe pagination: queued next batch at same level',
+                    nextBatch.queuedCount === 0
+                        ? 'Post-probe pagination: batch had only duplicates, advancing offset'
+                        : 'Post-probe pagination: queued next batch at same level',
                 );
 
                 paginationContext = {
                     ...paginationContext,
                     nextOffset: nextBatch.nextOffset,
                 };
+
+                // If the previous batch queued no new hotels, there's nothing
+                // to wait for — loop straight to the next batch without
+                // calling waitForProbeJobsToTerminate (which would block on
+                // already-terminal jobs but return immediately anyway —
+                // skipping the wait keeps the log noise down).
+                if (nextBatch.queuedCount === 0) {
+                    continue;
+                }
                 probeResult = await this.waitForProbeJobsToTerminate(requestId);
             }
 
@@ -1134,32 +1206,44 @@ export class HotelSearchService {
                 return;
             }
 
-            // If we have viable hotels (target met, OR partial result after
-            // exhausting the level), broadcast searchSettled and exit.
-            if (finalViableCount > 0) {
+            // Settle when:
+            //  (a) target met (≥ TARGET_VIABLE_HOTELS viable hotels), OR
+            //  (b) we have at least one viable hotel AND the expanding-ring
+            //      ladder is exhausted (every star tier within ±1 of every
+            //      requested centre has been probed).
+            //
+            // Otherwise, the watcher climbs the next ring tier. Previous
+            // behaviour was "settle on ANY viable hotel > 0", which made
+            // the search stop at the strict band even when the destination
+            // had many more hotels at adjacent stars. Oliver's directive:
+            // "more options is better, widen aggressively — center first,
+            //  then ±0.5 up, then ±1 up, then ±0.5 down, then ±1 down".
+            const ringHasMoreTiers = ringIndex < ringTiers.length - 1;
+            const targetMet = finalViableCount >= TARGET_VIABLE_HOTELS;
+            const shouldSettle =
+                targetMet ||
+                (finalViableCount > 0 && !ringHasMoreTiers);
+
+            if (shouldSettle) {
                 logger.info(
                     {
                         requestId,
                         level: currentLevel,
+                        ringIndex,
+                        ringTiersTotal: ringTiers.length,
                         viableCount: finalViableCount,
                         target: TARGET_VIABLE_HOTELS,
                         stopReason: paginationStopReason,
                         offsetReached: paginationContext.nextOffset,
+                        targetMet,
                     },
-                    'Post-probe relaxation: probes succeeded — watcher exiting',
+                    'Post-probe relaxation: settling search — target met or ring exhausted',
                 );
-                // Persist the pagination cursor BEFORE flipping phase so a
-                // racing "Search More" click sees a consistent state: cursor
-                // present iff phase === 'settled'. Best-effort; a missed
-                // cursor just means the user has to re-run the search to
-                // unlock Search More — not data loss.
                 try {
                     await requestRepository.setSearchPaginationCursor(requestId, paginationContext);
                 } catch (err: any) {
                     logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(settled) failed');
                 }
-                // Mark phase=settled BEFORE the SSE broadcast so a polling FE
-                // racing the SSE will see the terminal phase on the next poll.
                 try {
                     await requestRepository.updateSearchPhase(requestId, 'settled');
                 } catch (err: any) {
@@ -1174,14 +1258,12 @@ export class HotelSearchService {
                 return;
             }
 
-            // Zero viable hotels at this level after pagination exhausted — advance the relaxation ladder.
-            const currentIndex = RELAXATION_LADDER.findIndex((l) => l.level === currentLevel);
-            const nextIndex = currentIndex + 1;
-            if (currentIndex < 0 || nextIndex >= RELAXATION_LADDER.length) {
-                // Ladder exhausted — flag as needs_manual_handling.
+            // Zero viable + ring fully walked → ladder truly exhausted. This
+            // is the "never say no" dead end — flag for manual handling.
+            if (finalViableCount === 0 && !ringHasMoreTiers) {
                 logger.info(
-                    { requestId, level: currentLevel },
-                    'Post-probe relaxation: ladder exhausted — flagging as needs_manual_handling',
+                    { requestId, level: currentLevel, ringIndex },
+                    'Post-probe relaxation: ring exhausted with zero viable — flagging as needs_manual_handling',
                 );
                 await requestRepository.updateStatus(
                     requestId,
@@ -1204,64 +1286,68 @@ export class HotelSearchService {
                 return;
             }
 
-            const nextLevel = RELAXATION_LADDER[nextIndex]!.level;
-            logger.info(
-                { requestId, fromLevel: currentLevel, toLevel: nextLevel },
-                'Post-probe relaxation: advancing level',
+            // ── Additive ring advance ───────────────────────────────────
+            // Below target AND the ring has more tiers → climb to the next
+            // tier (one step further from the requested centre). The next
+            // tier's star list is the CUMULATIVE union from tier 0 to
+            // tier (ringIndex+1). enqueueAdditionalCandidates de-dups by
+            // hotel_code, so already-probed hotels at narrower bands stay
+            // intact — only NEW hotels at the newly-included stars get
+            // probed. No wasted WBE calls.
+            ringIndex += 1;
+            const nextStarList = ringTiers[ringIndex] ?? [];
+            const nextTotalCandidates = await hotelSearchRepository.countHotelsByDestination(
+                paginationContext.usedDestinationId,
+                nextStarList,
             );
+
+            // Map ring index back to a banner-friendly level for the FE.
+            // ringIndex 1-2 are "up" steps (showing slightly better hotels),
+            // 3-4 are "down" steps. We keep using the existing star_pm1 /
+            // star_pm2 level codes so the existing banner i18n still works.
+            const nextLevel: RelaxationLevel = ringIndex <= 2 ? 'star_pm1' : 'star_pm2';
+            const previousLevel = currentLevel;
+            currentLevel = nextLevel;
+            paginationContext = {
+                usedDestinationId: paginationContext.usedDestinationId,
+                starRatings: nextStarList,
+                totalCandidates: nextTotalCandidates,
+                nextOffset: 0,
+            };
+
             await logAuditEvent({
                 action: 'search_post_probe_relaxation',
                 entity: 'booking_request',
                 entityId: requestId,
-                details: { fromLevel: currentLevel, toLevel: nextLevel, iteration: iter + 1 },
+                details: {
+                    fromLevel: previousLevel,
+                    toLevel: nextLevel,
+                    ringIndex,
+                    newStarList: nextStarList,
+                    iteration: iter + 1,
+                },
             });
 
-            // Notify the FE so it can update banners / loading copy.
             broadcast(requestId, 'searchRelaxed', {
                 requestId,
-                fromLevel: currentLevel,
+                fromLevel: previousLevel,
                 toLevel: nextLevel,
                 iteration: iter + 1,
             });
 
-            // Re-run the search starting at the next level. suppressWatcher: true
-            // prevents this from spawning ANOTHER watcher (we drive the loop here).
-            const result = await this.searchForRequest(requestId, params, {
-                startLevelIndex: nextIndex,
-                suppressWatcher: true,
-            });
-
-            if (result.manualRequestOnly) {
-                // No candidates at this or further levels — searchForRequest
-                // already updated status to needs_manual_handling.
-                logger.info(
-                    { requestId, level: nextLevel },
-                    'Post-probe relaxation: re-search returned manualRequestOnly — watcher exiting',
-                );
-                try {
-                    await requestRepository.updateSearchPhase(requestId, 'exhausted');
-                } catch (err: any) {
-                    logger.warn({ err: err?.message, requestId }, 'updateSearchPhase(exhausted) failed');
-                }
-                try {
-                    await requestRepository.setSearchPaginationCursor(requestId, null);
-                } catch (err: any) {
-                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on exhausted failed');
-                }
-                return;
-            }
-
-            const newAppliedLevel: RelaxationLevel | undefined = result.relaxation?.level
-                ?? RELAXATION_LADDER[nextIndex]?.level;
-            currentLevel = newAppliedLevel ?? nextLevel;
-            // Refresh the pagination context to the new relaxation level so
-            // the inner loop starts paginating from offset = batch1.length at
-            // the new destination/star filter. Falls back to a "no pagination
-            // possible" shape if the recursive call didn't return one
-            // (shouldn't happen for non-manualRequestOnly returns, but defensive).
-            if (result.paginationContext) {
-                paginationContext = result.paginationContext;
-            }
+            logger.info(
+                {
+                    requestId,
+                    fromLevel: previousLevel,
+                    toLevel: nextLevel,
+                    ringIndex,
+                    newStarList: nextStarList,
+                    newTotalCandidates: nextTotalCandidates,
+                    existingViable: finalViableCount,
+                },
+                'Post-probe relaxation: widened star ring — appending more probes',
+            );
+            // Inner loop will paginate the wider ring on the next iteration.
         }
     }
 
@@ -1330,7 +1416,7 @@ export class HotelSearchService {
 
         const nights = request.nights;
         const destinationId = request.destinationId;
-        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
+        const requestedStarRatings = resolveRequestedStars(request);
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const includeAlternativeStars = params.includeAlternativeStars !== false;
@@ -1354,7 +1440,7 @@ export class HotelSearchService {
         const prioritiseYouthFriendly = groupTypeForPriority === 'youth' || groupTypeForPriority === 'school';
         const relaxResult = await this.findCandidatesWithRelaxation({
             destinationId,
-            requestedStarRating,
+            requestedStarRatings,
             facilityIds: params.facilityIds,
             startLevelIndex: internalOpts?.startLevelIndex,
             prioritiseYouthFriendly,
@@ -1617,7 +1703,7 @@ export class HotelSearchService {
 
         const nights = request.nights;
         const destinationId = request.destinationId;
-        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
+        const requestedStarRatings = resolveRequestedStars(request);
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
@@ -1666,7 +1752,7 @@ export class HotelSearchService {
         ) => {
             for (let i = fromIndex; i < RELAXATION_LADDER.length; i++) {
                 const config = RELAXATION_LADDER[i]!;
-                const stars = buildStarList(requestedStarRating, config.starWindow);
+                const stars = buildStarList(requestedStarRatings, config.starWindow);
                 let dbHotels = await hotelSearchRepository.getHotelCodesByDestination(
                     destId,
                     stars,
@@ -1982,7 +2068,7 @@ export class HotelSearchService {
         const dominantRoomType = getDominantRoomType((request as any).rooms);
         const expandedRooms = expandRequestRooms((request as any).rooms);
 
-        const requestedStarRating = (request as any).starRating ? Number((request as any).starRating) : null;
+        const requestedStarRatings = resolveRequestedStars(request);
         void includeAlternativeStars; // superseded by the explicit relaxation ladder
 
         // ── "Never say no" candidate selection (auto-offer flow) ──────────
@@ -1990,7 +2076,7 @@ export class HotelSearchService {
         const autoPrioritiseYouthFriendly = autoGroupType === 'youth' || autoGroupType === 'school';
         const relaxResult = await this.findCandidatesWithRelaxation({
             destinationId: request.destinationId,
-            requestedStarRating,
+            requestedStarRatings,
             facilityIds: params.facilityIds,
             prioritiseYouthFriendly: autoPrioritiseYouthFriendly,
         });
@@ -2062,16 +2148,18 @@ export class HotelSearchService {
         }
 
         // Sort: primary star matches first, then alternatives.
-        // After relaxation, "primary" is whichever stars match the requested rating
-        // exactly; if the requested star rating was dropped, ordering by current
-        // DB order is fine.
+        // After relaxation, "primary" is whichever stars match ANY of the
+        // requested categories within ±0.5. When no stars were requested
+        // (or the filter was relaxed to "any"), every hotel counts as
+        // primary so the original DB order is preserved.
         const primaryHotelCodes = new Set(
-            requestedStarRating == null
+            requestedStarRatings.length === 0
                 ? dbHotels.map((h) => h.hotelCode)
                 : dbHotels
                       .filter((h) => {
                           const s = h.starRating ? Number(h.starRating) : null;
-                          return s !== null && Math.abs(requestedStarRating - s) < 0.5;
+                          if (s === null) return false;
+                          return requestedStarRatings.some((req) => Math.abs(req - s) < 0.5);
                       })
                       .map((h) => h.hotelCode),
         );
@@ -2338,6 +2426,58 @@ export class HotelSearchService {
      *   - 'no_cursor'             : no cursor is persisted yet (pre-feature row, or search exhausted).
      *   - 'exhausted'             : the request's search ended in 'exhausted' — no Search More.
      */
+    /**
+     * Given the cursor's current star list, return the next ring tier
+     * that strictly widens it (adds at least one new star within ±1 of
+     * the requested centres). Returns null when the ring is fully walked.
+     *
+     * Used by Search More to climb the expanding ring tier-by-tier as the
+     * user keeps clicking, AND by the controller's `canSearchMore` check
+     * so the FE knows whether the button is still actionable.
+     */
+    private findNextRingTier(
+        currentStarList: number[],
+        requestedStarRatings: number[],
+    ): number[] | null {
+        if (requestedStarRatings.length === 0) return null; // "any rating" — no widening possible
+        const ladder = buildExpandingRingLadder(requestedStarRatings);
+        const currentSet = new Set(currentStarList);
+        // Walk the ring; the first tier that adds a NEW star wins.
+        for (const tier of ladder) {
+            if (tier.some((s) => !currentSet.has(s))) return tier;
+        }
+        return null;
+    }
+
+    /**
+     * Returns true when the FE should render the Search More button.
+     * Available when EITHER:
+     *   - the current star band still has hotels to probe (cursor.nextOffset
+     *     < cursor.totalCandidates), OR
+     *   - the request has at least one more ring tier to widen to.
+     */
+    async canSearchMore(requestId: string): Promise<boolean> {
+        const phase = await requestRepository.getSearchPhase(requestId);
+        if (phase !== 'settled') return false;
+        const cursor = await requestRepository.getSearchPaginationCursor(requestId);
+        if (!cursor) return false;
+
+        // (a) Current band has hotels left — checked against ACTUAL probed
+        // hotel count, not just the cursor's nextOffset. Multiple Search
+        // More clicks can race with the mini-watcher's cursor write, so
+        // the cursor sometimes lags behind reality. The DB-truth count
+        // catches that and hides the button when every hotel in the
+        // current band has already been probed.
+        const probedCount = await hotelProbeJobRepository.countBySearchRequest(requestId);
+        if (probedCount < cursor.totalCandidates) return true;
+
+        // (b) Ring has more tiers to widen into.
+        const request = await requestRepository.findById(requestId);
+        const requestedStarRatings = resolveRequestedStars(request);
+        const next = this.findNextRingTier(cursor.starRatings, requestedStarRatings);
+        return next !== null;
+    }
+
     async searchMoreForRequest(
         requestId: string,
         params: { mealType?: string; markupPercent?: number; currencyCode?: string; nationalityCode?: string; waitSeconds?: number } = {},
@@ -2357,9 +2497,55 @@ export class HotelSearchService {
             return { decision: 'in_progress', message: 'A search is already in progress for this request.' };
         }
 
-        const cursor = await requestRepository.getSearchPaginationCursor(requestId);
+        let cursor = await requestRepository.getSearchPaginationCursor(requestId);
         if (!cursor) {
             return { decision: 'no_cursor', message: 'Search More not available — run a fresh search first.' };
+        }
+
+        // If the current band is already drained, widen to the next ring
+        // tier BEFORE we flip phase. This means the user's first click on
+        // a "drained current band" request immediately starts a fresh
+        // probe at the next-wider star tier.
+        if (cursor.nextOffset >= cursor.totalCandidates) {
+            const request = await requestRepository.findById(requestId);
+            const requestedStarRatings = resolveRequestedStars(request);
+            const nextTier = this.findNextRingTier(cursor.starRatings, requestedStarRatings);
+            if (!nextTier) {
+                // Ring fully walked AND current band drained — clean up.
+                try {
+                    await requestRepository.setSearchPaginationCursor(requestId, null);
+                } catch (err: any) {
+                    logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(null) on ring exhausted failed');
+                }
+                return {
+                    decision: 'destination_exhausted',
+                    message: 'All star tiers fully explored.',
+                    queuedCount: 0,
+                    nextOffset: cursor.nextOffset,
+                };
+            }
+            const newTotal = await hotelSearchRepository.countHotelsByDestination(
+                cursor.usedDestinationId,
+                nextTier,
+            );
+            // Reset the cursor to walk the wider band from the start. The
+            // de-dup inside enqueueAdditionalCandidates will skip already-
+            // probed hotels at narrower bands.
+            cursor = {
+                usedDestinationId: cursor.usedDestinationId,
+                starRatings: nextTier,
+                totalCandidates: newTotal,
+                nextOffset: 0,
+            };
+            try {
+                await requestRepository.setSearchPaginationCursor(requestId, cursor);
+            } catch (err: any) {
+                logger.warn({ err: err?.message, requestId }, 'setSearchPaginationCursor(widen) in searchMore failed');
+            }
+            logger.info(
+                { requestId, newStarList: nextTier, newTotal },
+                'Search More: widened star band to next ring tier',
+            );
         }
 
         // Flip phase to in_progress BEFORE queueing so a racing second click
@@ -2377,7 +2563,7 @@ export class HotelSearchService {
             { bypassCeiling: true },
         );
 
-        if (result.decision !== 'queued' || result.queuedCount === 0) {
+        if (result.decision !== 'queued') {
             // Destination fully drained at this level — clear cursor, flip
             // phase back, and notify the FE so the button hides.
             try {

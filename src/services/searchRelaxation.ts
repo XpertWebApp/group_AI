@@ -42,26 +42,118 @@ export const RELAXATION_LADDER: ReadonlyArray<RelaxationConfig> = [
  * Build the star-rating list to pass to getHotelCodesByDestination based on
  * the relaxation `starWindow`. Empty array means "no star filter".
  *
- * Examples (requested = 4):
- *   exact → [4]
- *   pm1   → [3, 3.5, 4, 4.5, 5]
- *   pm2   → [2, 2.5, 3, 3.5, 4, 4.5, 5]
- *   any   → []
+ * Accepts an ARRAY of requested star categories (one entry per ticked box
+ * on the create-request form). The widening logic is applied to each entry
+ * independently, then the results are unioned + deduped.
+ *
+ * Examples (window = pm1):
+ *   requested = [4]      → [3, 3.5, 4, 4.5, 5]
+ *   requested = [3, 4]   → [2, 2.5, 3, 3.5, 4, 4.5, 5]    (3±1 ∪ 4±1)
+ *   requested = [3, 5]   → [2, 2.5, 3, 3.5, 4, 4.5, 5]    (3±1 ∪ 5±1)
+ *   requested = [3, 4]   with window = exact → [3, 4]
+ *   requested = []       → []     ("any rating" — empty filter)
+ *
+ * Back-compat: pass a single number wrapped in `[n]`, or call with `null`
+ * (legacy "no rating" sentinel — returns []).
  */
 export function buildStarList(
-    requested: number | null,
+    requested: number[] | number | null,
     window: 'exact' | 'pm1' | 'pm2' | 'any',
 ): number[] {
     if (window === 'any' || requested == null) return [];
-    if (window === 'exact') return [requested];
+    const stars = Array.isArray(requested) ? requested : [requested];
+    if (stars.length === 0) return [];
+    if (window === 'exact') return [...new Set(stars)].sort((a, b) => a - b);
+
     const half = window === 'pm1' ? 1 : 2;
-    const out: number[] = [];
-    const min = Math.max(1, requested - half);
-    const max = Math.min(5, requested + half);
-    for (let s = min; s <= max + 0.01; s += 0.5) {
-        out.push(Math.round(s * 2) / 2);
+    const out = new Set<number>();
+    for (const star of stars) {
+        const min = Math.max(1, star - half);
+        const max = Math.min(5, star + half);
+        for (let s = min; s <= max + 0.01; s += 0.5) {
+            out.add(Math.round(s * 2) / 2);
+        }
     }
-    return [...new Set(out)];
+    return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * Build the "expanding ring" star ladder for a request.
+ *
+ * Each tier is the FULL cumulative star list to query at that step
+ * (suitable to pass directly to `getHotelCodesByDestination`). The
+ * inner pagination loop in the watcher uses this so that, after a
+ * tier's pagination exhausts, the next tier adds the NEXT-CLOSEST
+ * star(s) to the requested centres.
+ *
+ * Priority within ±1 of each requested centre (Oliver's brief):
+ *   tier 0: the requested star(s) themselves           (distance 0)
+ *   tier 1: +0.5 from any centre                       (closest UP)
+ *   tier 2: +1.0 from any centre                       (one full step UP)
+ *   tier 3: -0.5 from any centre                       (closest DOWN)
+ *   tier 4: -1.0 from any centre                       (one full step DOWN)
+ *
+ * Up-first bias is intentional — Oliver prefers showing "a 4-star at
+ * 3-star price" over a 2-star to a 3-star requester.
+ *
+ * Multi-select: each requested star is its own centre. Their rings
+ * are merged tier-by-tier by best priority (a star that's +0.5 from
+ * centre A AND -0.5 from centre B lands in tier 1, not tier 3).
+ *
+ * Stars are clamped to [1, 5]. Empty `requested` returns a single
+ * empty-array tier = "no star filter".
+ *
+ * Examples:
+ *   [3]    → [[3], [3, 3.5], [3, 3.5, 4], [2.5, 3, 3.5, 4], [2, 2.5, 3, 3.5, 4]]
+ *   [3, 4] → [[3, 4], [3, 3.5, 4, 4.5], [3, 3.5, 4, 4.5, 5],
+ *             [2.5, 3, 3.5, 4, 4.5, 5], [2, 2.5, 3, 3.5, 4, 4.5, 5]]
+ *   []     → [[]]
+ */
+export function buildExpandingRingLadder(requested: number[]): number[][] {
+    if (!requested || requested.length === 0) return [[]];
+
+    const centres = [...new Set(requested)].filter((n) => Number.isFinite(n));
+    if (centres.length === 0) return [[]];
+
+    // Offsets in priority order — up first, then down. ±1 cap.
+    const offsets = [0, 0.5, 1, -0.5, -1] as const;
+
+    // For each star within ±1 of any centre, record the BEST (lowest-index)
+    // tier it qualifies for across all centres. A star qualifies for tier
+    // `i` from centre `c` iff `c + offsets[i] === s` (within 0.01 tolerance).
+    const bestTier = new Map<number, number>();
+    for (let tier = 0; tier < offsets.length; tier++) {
+        for (const c of centres) {
+            const raw = c + offsets[tier];
+            const s = Math.round(raw * 2) / 2;
+            if (s < 1 || s > 5) continue;
+            if (!bestTier.has(s) || tier < bestTier.get(s)!) {
+                bestTier.set(s, tier);
+            }
+        }
+    }
+
+    // Build cumulative tiers: tier N contains all stars whose bestTier <= N.
+    const tiers: number[][] = [];
+    for (let i = 0; i < offsets.length; i++) {
+        const stars = [...bestTier.entries()]
+            .filter(([_, t]) => t <= i)
+            .map(([s]) => s)
+            .sort((a, b) => a - b);
+        tiers.push(stars);
+    }
+
+    // De-duplicate adjacent identical tiers — if a centre is at the edge
+    // of the clamp (e.g. 5-star request → +1.0 lands at 6, clamped out),
+    // some tiers may be identical to their predecessor. No point in
+    // running the inner pagination loop a second time with the same
+    // filter — drop the duplicates.
+    const dedup: number[][] = [];
+    for (const t of tiers) {
+        const last = dedup[dedup.length - 1];
+        if (!last || JSON.stringify(last) !== JSON.stringify(t)) dedup.push(t);
+    }
+    return dedup;
 }
 
 /**

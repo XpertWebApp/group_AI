@@ -182,30 +182,26 @@ class GiataSyncService {
         const batchSize = 100;
 
         try {
-            // 2. Fetch all hotels with giataCode, ordered by hotelCode (for deterministic resume)
-            let offset = 0;
+            // 2. Fetch hotels with giataCode using a keyset cursor on hotelCode.
+            //    On resume we pick up STRICTLY AFTER the last hotel we acknowledged
+            //    via lastProcessedKey — so every batch in the loop is fresh work,
+            //    not a re-run of already-synced hotels.
+            //    Hotels are returned ordered by hotelCode ASC; lastProcessedKey
+            //    advances monotonically as we process chunks.
+            let cursor: string | undefined = job.lastProcessedKey ?? undefined;
+            if (cursor) {
+                console.log(`[GIATA] Resume: skipping all hotels with hotelCode <= "${cursor}"`);
+            }
 
             while (true) {
-                const hotels = await giataRepository.getHotelsWithGiataCode({ limit: batchSize, offset });
+                const hotels = await giataRepository.getHotelsWithGiataCode({
+                    limit: batchSize,
+                    afterHotelCode: cursor,
+                });
                 if (hotels.length === 0) break;
 
-                // 3. Skip hotels already processed (resume)
-                let startIdx = 0;
-                if (job.lastProcessedKey && offset === 0) {
-                    const lastIdx = hotels.findIndex((h) => h.hotelCode === job.lastProcessedKey);
-                    if (lastIdx !== -1) {
-                        startIdx = lastIdx + 1;
-                        console.log(`[GIATA] Skipping ${startIdx} already-processed hotels in first batch`);
-                    }
-                    // If not found in first batch, the resume key was in an earlier batch — skip entirely
-                    if (lastIdx === -1 && processed > 0) {
-                        offset += batchSize;
-                        continue;
-                    }
-                }
-
-                // 4. Process remaining hotels in this batch
-                for (let i = startIdx; i < hotels.length; i += CONCURRENT_HOTELS) {
+                // 3. Process this batch in concurrency-limited chunks.
+                for (let i = 0; i < hotels.length; i += CONCURRENT_HOTELS) {
                     const chunk = hotels.slice(i, Math.min(i + CONCURRENT_HOTELS, hotels.length));
                     const results = await Promise.allSettled(
                         chunk.map((h) => this.syncHotel(h.hotelCode, h.giataCode!)),
@@ -218,15 +214,16 @@ class GiataSyncService {
 
                     processed += chunk.length;
                     const lastKey = chunk[chunk.length - 1].hotelCode;
+                    // Advance cursor so the next outer-loop iteration starts here.
+                    cursor = lastKey;
 
-                    // 5. Update progress after each chunk (resume point)
+                    // 4. Persist progress after each chunk (resume point).
                     await giataRepository.updateSyncJob(job.id, {
                         processedRecords: processed,
                         lastProcessedKey: lastKey,
                     });
                 }
 
-                offset += batchSize;
                 console.log(`[GIATA] Full sync progress: ${processed} processed, ${synced} synced, ${errors} errors`);
             }
 

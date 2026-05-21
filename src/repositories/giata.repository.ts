@@ -194,13 +194,32 @@ export class GiataRepository {
 
     // ─── Hotel Queries ──────────────────────────────────────────────────
 
-    /** Get hotels that have a giataCode populated (candidates for GIATA sync). */
-    async getHotelsWithGiataCode(opts?: { limit?: number; offset?: number }) {
+    /**
+     * Get hotels that have a giataCode populated (candidates for GIATA sync).
+     *
+     * Supports two cursor modes:
+     *   - `offset`        — classic offset/limit. Avoid for large catalogues:
+     *                       Postgres still walks all skipped rows.
+     *   - `afterHotelCode` — keyset cursor. Returns rows STRICTLY GREATER than
+     *                       the given hotelCode. Used by resumable syncs so each
+     *                       batch is O(log n) instead of O(n + offset).
+     *
+     * If both are provided, `afterHotelCode` wins.
+     */
+    async getHotelsWithGiataCode(opts?: {
+        limit?: number;
+        offset?: number;
+        afterHotelCode?: string;
+    }) {
+        const where: any = { giataCode: { not: null } };
+        if (opts?.afterHotelCode) {
+            where.hotelCode = { gt: opts.afterHotelCode };
+        }
         return prisma.hotel.findMany({
-            where: { giataCode: { not: null } },
+            where,
             select: { hotelCode: true, giataCode: true, name: true, supplierCode: true },
             take: opts?.limit ?? 500,
-            skip: opts?.offset ?? 0,
+            skip: opts?.afterHotelCode ? 0 : (opts?.offset ?? 0),
             orderBy: { hotelCode: 'asc' },
         });
     }

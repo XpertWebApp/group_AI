@@ -83,6 +83,13 @@ export class RequestService {
             checkoutDate: data.checkoutDate ? new Date(data.checkoutDate) : undefined,
             nights,
             starRating: data.starRating ?? null,
+            // Multi-select star categories — accepted from the FE as
+            // `starRatings: number[]`. Falls back to wrapping the legacy
+            // single `starRating` when only that was sent (Wix webhook,
+            // older FE builds). Default is [] = "any star rating".
+            starRatings: Array.isArray(data.starRatings) && data.starRatings.length > 0
+                ? data.starRatings
+                : (data.starRating != null ? [data.starRating] : []),
             budgetRange: data.budgetRange ?? null,
             budget: data.budget ?? null,
             groupType: parseGroupType(data.groupType),
@@ -183,7 +190,7 @@ export class RequestService {
 
         // Step 1 – Trip Details
         for (const f of [
-            'destinationId', 'destinationName', 'starRating', 'budgetRange',
+            'destinationId', 'destinationName', 'starRating', 'starRatings', 'budgetRange',
             'budget', 'groupType', 'groupSize', 'averageAge', 'currencyCode', 'nationalityCode',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];

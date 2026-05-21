@@ -233,13 +233,13 @@ export class HotelSearchController {
             });
 
             // FE renders the "Search More" button only when this is true.
-            // Available iff: phase has settled, a cursor was persisted, and
-            // the cursor still has room to advance against the destination's
-            // total candidate count at the current relaxation level.
-            const canSearchMore =
-                phase === 'settled' &&
-                paginationCursor != null &&
-                paginationCursor.nextOffset < paginationCursor.totalCandidates;
+            // Available when EITHER (a) the current star band still has
+            // hotels to probe, OR (b) the request has more ring tiers to
+            // widen into (e.g. a 3★ search that exhausted 3★ inventory
+            // can still widen to 3.5★, 4★, 2.5★, 2★). The service
+            // encapsulates both checks so the controller stays simple.
+            void paginationCursor; // not used directly — service reads it itself
+            const canSearchMore = await hotelSearchService.canSearchMore(requestId);
 
             return sendResponse(
                 res,
