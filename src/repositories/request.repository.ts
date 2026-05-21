@@ -24,6 +24,7 @@ const FULL_SELECT = {
     checkoutDate: true,
     nights: true,
     starRating: true,
+    starRatings: true,
     budgetRange: true,
     budget: true,
     groupType: true,

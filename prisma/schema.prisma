@@ -315,7 +315,17 @@ model BookingRequest {
   status                 BookingRequestStatus       @default(pending)
   referenceNumber        Int                        @unique @default(autoincrement()) @map("reference_number")
   checkoutDate           DateTime?                  @map("checkout_date") @db.Date
+  /// Legacy single-value star rating. Kept for back-compat so historic
+  /// requests and the Wix webhook (which sends one value) still work.
+  /// New requests should populate `starRatings` instead; the search
+  /// pipeline reads `starRatings` first and falls back to `[starRating]`.
   starRating             Decimal?                   @map("star_rating") @db.Decimal(2, 1)
+  /// Multi-select star categories — one entry per ticked box on the
+  /// Create Request form. Example: a user picking 3★ + 4★ stores
+  /// `[3.0, 4.0]` here. The search pipeline ORs the half-star ranges
+  /// of each entry together (e.g. 2.5-3.5 OR 3.5-4.5), then the ±1
+  /// relaxation ladder widens that union further.
+  starRatings            Decimal[]                  @map("star_ratings") @db.Decimal(2, 1)
   budgetRange            String?                    @map("budget_range") @db.VarChar(100)
   groupType              String?                    @map("group_type") @db.VarChar(100)
   groupSize              Int?                       @map("group_size")

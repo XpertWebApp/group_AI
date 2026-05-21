@@ -113,6 +113,19 @@ export class HotelProbeJobRepository {
         });
     }
 
+    /**
+     * Count ALL probe jobs (main + alternative, every status) for a request.
+     * Used by `canSearchMore` to compare actual probed hotels against the
+     * destination's total candidate count — catches the case where the
+     * persisted pagination cursor lags behind reality (multiple Search
+     * More clicks racing with the mini-watcher's cursor write).
+     */
+    async countBySearchRequest(searchRequestId: string): Promise<number> {
+        return prisma.hotelProbeJob.count({
+            where: { searchRequestId },
+        });
+    }
+
     async findById(id: string) {
         return prisma.hotelProbeJob.findUnique({ where: { id } });
     }
@@ -134,6 +147,33 @@ export class HotelProbeJobRepository {
             },
             data: { status: HotelProbeJobStatus.QUEUED, startedAt: null },
         });
+    }
+
+    /**
+     * Fail any probe stuck in PROBING / RUNNING for longer than the cutoff.
+     *
+     * Different from `requeueStaleJobs` — we don't try to re-queue them
+     * because that would loop forever on hotels whose WBE call genuinely
+     * hangs (e.g. a specific hotel code that times out on the supplier
+     * side). Marking the probe FAILED lets the post-probe watcher reach
+     * an all-terminal state on its next 5s poll and settle the search.
+     *
+     * Returns the count of probes failed so the caller can log it.
+     */
+    async failStaleProbingJobs(olderThanMs = 120_000) {
+        const cutoff = new Date(Date.now() - olderThanMs);
+        const result = await prisma.hotelProbeJob.updateMany({
+            where: {
+                status: { in: [HotelProbeJobStatus.RUNNING, HotelProbeJobStatus.PROBING] },
+                startedAt: { lt: cutoff },
+            },
+            data: {
+                status: HotelProbeJobStatus.FAILED,
+                completedAt: new Date(),
+                errorMsg: `Probe watchdog: stuck >${Math.round(olderThanMs / 1000)}s, auto-failed so the search can settle`,
+            },
+        });
+        return result.count;
     }
 }
 
