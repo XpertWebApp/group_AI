@@ -187,8 +187,14 @@ export const ListRequestsQuerySchema = z.object({
         .enum(['pending', 'draft', 'processing', 'ai_generated', 'completed', 'cancelled', 'sent', 'declined', 'needs_manual_handling', ''])
         .optional()
         .transform((v) => v || undefined),
+    // Legacy params — applied to `checkinDate`. Kept for back-compat with
+    // older FE callers; new code should use createdFrom/createdTo below.
     dateFrom: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid dateFrom' }),
     dateTo: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid dateTo' }),
+    // New explicit window on `createdAt` — drives the dashboard's
+    // "This Month / Quarter / Year" filter chip. ISO timestamps.
+    createdFrom: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid createdFrom' }),
+    createdTo: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid createdTo' }),
     sortBy: z.enum(['createdAt', 'checkinDate', 'referenceNumber']).optional().default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
 });
@@ -231,6 +237,15 @@ export const AddProposalHotelSchema = z.object({
     address: z.string().max(2000).optional().nullable(),
     addressCity: z.string().max(255).optional().nullable(),
     addressCountry: z.string().max(10).optional().nullable(),
+    /**
+     * Optional public SETTHub deep-link URL. The dashboard uses this to
+     * make the hotel name on the Request Summary page clickable. We
+     * accept a plain URL string here and let the FE source it from the
+     * Add Hotel card (which already has it on each hotel object from
+     * the hotel-search response). If null/missing, the repository
+     * derives it from `masterHotelId` when persisting.
+     */
+    sethubDetailsUrl: z.string().url().max(2000).optional().nullable(),
 });
 
 export const AdjustHotelPricingSchema = z.object({

@@ -1,6 +1,7 @@
 import { PrismaClient, ProposalStatus, Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { floorStarRating } from '../utils/starRating';
+import { buildSethubDetailsUrl } from '../config/sethubUrl';
 
 const prisma = new PrismaClient();
 
@@ -129,6 +130,8 @@ export class ProposalRepository {
             address?: string | null;
             addressCity?: string | null;
             addressCountry?: string | null;
+            /** Optional SETTHub deep-link URL — see persistence logic below. */
+            sethubDetailsUrl?: string | null;
         },
         markupSettings?: any,
     ) {
@@ -158,6 +161,22 @@ export class ProposalRepository {
             const seq = String(count + 1).padStart(3, '0');
             const hotelRef = refNum ? `SETT-${refNum}-${seq}` : null;
 
+            // SETTHub deep-link URL. Prefer the value the FE forwarded
+            // (which it sourced from the hotel-search response, so it's
+            // already computed against `masterHotelId`). When the FE
+            // doesn't send it (older clients, automation paths), derive
+            // it on the fly from `master.hotels.masterHotelId`. Null when
+            // the hotel has no synced master ID — the dashboard renders
+            // a plain heading in that case.
+            let sethubDetailsUrl: string | null = hotelData.sethubDetailsUrl ?? null;
+            if (!sethubDetailsUrl) {
+                const masterHotel = await tx.hotel.findUnique({
+                    where: { hotelCode: hotelData.hotelCode },
+                    select: { masterHotelId: true },
+                });
+                sethubDetailsUrl = buildSethubDetailsUrl(masterHotel?.masterHotelId ?? null);
+            }
+
             const hotel = await tx.proposalHotel.create({
                 data: {
                     proposalId,
@@ -181,6 +200,7 @@ export class ProposalRepository {
                     addressCity: hotelData.addressCity ?? null,
                     addressCountry: hotelData.addressCountry ?? null,
                     hotelRef,
+                    sethubDetailsUrl,
                 },
             });
 

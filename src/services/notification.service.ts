@@ -478,10 +478,16 @@ export class NotificationService {
         rejectionReason: string;
         staffEmail?: string;
     }) {
-        const title = `Offer #${opts.referenceNumber} declined — manual action required`;
+        // Title intentionally avoids the phrase "manual action required" —
+        // that copy is reserved for the search-exhausted lifecycle event
+        // (needs_manual_handling), and reusing it for a decline confused
+        // staff who couldn't tell the two scenarios apart in the notif
+        // list. A clear "declined by customer" reads better and is
+        // unambiguous.
+        const title = `Offer #${opts.referenceNumber} declined by customer`;
         const message =
-            `Offer #${opts.referenceNumber} for ${opts.contactName} (${opts.destinationName}) has been declined. ` +
-            `Reason: ${opts.rejectionReason}`;
+            `${opts.contactName} declined the offer for ${opts.destinationName}. ` +
+            `Reason: ${opts.rejectionReason}. Follow up with the customer to understand the decline and offer alternatives.`;
 
         const emailHtml = buildOfferDeclinedEmail({
             referenceNumber: opts.referenceNumber,
