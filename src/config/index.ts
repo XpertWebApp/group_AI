@@ -28,6 +28,16 @@ const config = {
         username: process.env.GIATA_USERNAME || '',
         password: process.env.GIATA_PASSWORD || '',
     },
+    odoo: {
+        url: process.env.ODOO_URL || '',
+        db: process.env.ODOO_DB || '',
+        username: process.env.ODOO_USERNAME || '',
+        apiKey: process.env.ODOO_API_KEY || '',
+        // Cutover for the offer-send gate. Requests created BEFORE this
+        // timestamp are grandfathered (offer-send works without an Odoo link).
+        // Requests created on/after MUST have odooContactId set before send.
+        gateActiveSince: process.env.ODOO_GATE_ACTIVE_SINCE || '2026-05-23T00:00:00Z',
+    },
     webhook: {
         // Wix (legacy, plain secret header)
         wixSecret: process.env.WEBHOOK_SECRET || '',

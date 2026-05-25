@@ -351,6 +351,11 @@ model BookingRequest {
   /// it left off. NULL when no cursor is available (search exhausted, or
   /// pre-feature row).
   searchPaginationCursor Json?                      @map("search_pagination_cursor")
+  /// Odoo CRM link. NULL = request not yet linked to an Odoo company.
+  /// For requests created on/after ODOO_GATE_ACTIVE_SINCE this must be
+  /// populated before the offer can be sent (see proposals.service).
+  /// Pre-cutover rows are grandfathered (the gate checks createdAt).
+  odooContactId          Int?                       @map("odoo_contact_id")
   attachments            BookingRequestAttachment[]
   proposals              Proposal[]
 
@@ -361,6 +366,7 @@ model BookingRequest {
   @@index([createdAt])
   @@index([referenceNumber])
   @@index([companyName])
+  @@index([odooContactId])
   @@map("booking_requests")
   @@schema("app")
 }

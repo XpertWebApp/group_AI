@@ -89,6 +89,10 @@ export const CreateBookingRequestSchema = z
             .nullable(),
         guestListFileKey: z.string().optional(),
         customerNotes: z.string().max(5000).nullable().optional(),
+        // Odoo CRM link. Optional at request creation (free-text companyName
+        // still works), but offer-send is blocked until this is set on
+        // requests created after the Odoo-gate cutover. See proposals.service.
+        odooContactId: z.number().int().positive().nullable().optional(),
 
         // Step 4: Policies
         termsAndConditions: z.string().optional(),
@@ -159,6 +163,8 @@ export const UpdateBookingRequestSchema = z.object({
         .nullable(),
     guestListFileKey: z.string().optional(),
     customerNotes: z.string().max(5000).nullable().optional(),
+    // Odoo CRM link — staff sets/clears this from the company autocomplete.
+    odooContactId: z.number().int().positive().nullable().optional(),
     // Step 4
     termsAndConditions: z.string().optional(),
     cancellationConditions: z.string().optional(),
@@ -197,6 +203,18 @@ export const ListRequestsQuerySchema = z.object({
     createdTo: z.string().optional().refine((v) => !v || !isNaN(Date.parse(v)), { message: 'Invalid createdTo' }),
     sortBy: z.enum(['createdAt', 'checkinDate', 'referenceNumber']).optional().default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
+});
+
+// ── Odoo company autocomplete ─────────────────────────────────────────────
+// Powers GET /api/v1/odoo/customers/search. Limit is capped at 20 in the
+// controller too — duplicated here so a malformed FE call fails fast at
+// validation rather than firing a wasted Odoo round-trip.
+export const OdooSearchQuerySchema = z.object({
+    q: z.string().min(2, 'Type at least 2 characters').max(100),
+    limit: z
+        .string()
+        .optional()
+        .transform((v) => (v ? Math.min(Math.max(parseInt(v, 10) || 20, 1), 20) : 20)),
 });
 
 // ── Proposal ───────────────────────────────────────────────────────────────

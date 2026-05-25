@@ -402,6 +402,35 @@ export class ProposalService {
 
         // Resolve recipients — sendToEmails (array) > sendToEmail (single) > booking request contact email
         const request = existing.bookingRequest as any;
+
+        // ── Odoo CRM gate ───────────────────────────────────────────────
+        // Oliver's directive: no offer goes out for a request that isn't
+        // linked to a real Odoo customer. Pre-cutover requests are
+        // grandfathered (compared against ODOO_GATE_ACTIVE_SINCE) so we
+        // don't break the existing backlog.
+        const requestCreatedAt = request?.createdAt ? new Date(request.createdAt) : null;
+        const gateActiveSince = new Date(config.odoo.gateActiveSince);
+        if (
+            requestCreatedAt &&
+            requestCreatedAt >= gateActiveSince &&
+            !request?.odooContactId
+        ) {
+            await logAuditEvent({
+                userId,
+                action: 'send_proposal_blocked',
+                entity: 'proposal',
+                entityId: id,
+                details: { reason: 'ODOO_CONTACT_REQUIRED', requestId: existing.requestId },
+                ipAddress: ip,
+            });
+            throw {
+                status: 400,
+                message:
+                    'This request must be linked to an Odoo company before the offer can be sent. Open the request, search the company in the Client field, and save.',
+                code: 'ODOO_CONTACT_REQUIRED',
+            };
+        }
+
         let recipients: string[] = [];
         if (data.sendToEmails && data.sendToEmails.length > 0) {
             recipients = data.sendToEmails;
