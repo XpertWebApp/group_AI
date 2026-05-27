@@ -51,4 +51,16 @@ Thumbs.db
 *.txt
 
 # Public files (docs, images, Figma assets)
-src/publicfiles/
+# Most of this folder is local reference material (Figma exports, brand-
+# guideline PDFs, scratch docs). We track ONLY the runtime assets that the
+# PDF generator and email templates need to render correctly on live —
+# everything else stays ignored.
+src/publicfiles/*
+!src/publicfiles/group-offer-header.png
+!src/publicfiles/sett-logo-no-bg.png
+!src/publicfiles/fonts/
+src/publicfiles/fonts/*
+!src/publicfiles/fonts/Montserrat-Regular.ttf
+!src/publicfiles/fonts/Montserrat-Medium.ttf
+!src/publicfiles/fonts/Montserrat-SemiBold.ttf
+!src/publicfiles/fonts/Montserrat-Bold.ttf
