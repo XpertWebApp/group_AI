@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import notificationRepository, { CreateNotificationData } from '../repositories/notification.repository';
 import failedEmailRepository from '../repositories/failedEmail.repository';
 import logger from '../utils/logger';
+import config from '../config';
 import {
     buildOfferReadyEmail,
     buildInsufficientInventoryEmail,
@@ -102,6 +103,35 @@ interface SendInput {
     attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 }
 
+/**
+ * QA / staging safety net.
+ *
+ * When `EMAIL_INTERCEPT_TO` is set, every outbound email is rerouted to
+ * that address instead of its real recipient — the original `to` is
+ * preserved in the subject prefix (`[QA → original@…]`) and in an
+ * `X-Intended-To` header so QA can verify routing without spamming real
+ * customers. Returns the unchanged `to`/`subject`/`headers` when no
+ * intercept is configured (production behaviour).
+ *
+ * Accepts a single address or a comma-separated list in the env var.
+ */
+function applyEmailIntercept(input: {
+    to: string;
+    subject: string;
+    headers?: Record<string, string>;
+}): { to: string; subject: string; headers: Record<string, string>; intercepted: boolean } {
+    const target = (config.email.interceptTo || '').trim();
+    if (!target) {
+        return { to: input.to, subject: input.subject, headers: input.headers ?? {}, intercepted: false };
+    }
+    return {
+        to: target,
+        subject: `[QA → ${input.to}] ${input.subject}`,
+        headers: { ...(input.headers ?? {}), 'X-Intended-To': input.to },
+        intercepted: true,
+    };
+}
+
 async function sendWithRetry(input: SendInput): Promise<EmailSendResult> {
     const transport = createTransport();
     if (!transport) {
@@ -114,17 +144,26 @@ async function sendWithRetry(input: SendInput): Promise<EmailSendResult> {
 
     const from = resolveFrom();
     const replyTo = input.replyTo ?? resolveReplyToFallback();
+    const routed = applyEmailIntercept({ to: input.to, subject: input.subject });
+
+    if (routed.intercepted) {
+        logger.warn(
+            { eventType: input.eventType, originalTo: input.to, interceptTo: routed.to },
+            'EMAIL_INTERCEPT_TO active — outbound email rerouted to intercept inbox',
+        );
+    }
 
     let lastError: any;
     for (let attempt = 1; attempt <= RETRY_DELAYS_MS.length + 1; attempt++) {
         try {
             const info = await transport.sendMail({
                 from,
-                to: input.to,
-                subject: input.subject,
+                to: routed.to,
+                subject: routed.subject,
                 html: input.html,
                 replyTo,
                 attachments: input.attachments,
+                headers: routed.headers,
             });
             logger.info(
                 {

@@ -38,6 +38,15 @@ const config = {
         // Requests created on/after MUST have odooContactId set before send.
         gateActiveSince: process.env.ODOO_GATE_ACTIVE_SINCE || '2026-05-23T00:00:00Z',
     },
+    email: {
+        // QA / staging safety net. When set, EVERY outbound email is
+        // re-routed to this address instead of its real recipient — the
+        // original target is preserved in the subject prefix
+        // (`[QA → original@…]`) and in an `X-Intended-To` header so QA can
+        // verify routing without spamming real customers. Leave UNSET in
+        // production. Accepts a single address or a comma-separated list.
+        interceptTo: process.env.EMAIL_INTERCEPT_TO || '',
+    },
     webhook: {
         // Wix (legacy, plain secret header)
         wixSecret: process.env.WEBHOOK_SECRET || '',
