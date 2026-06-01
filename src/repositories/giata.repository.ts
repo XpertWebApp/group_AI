@@ -266,9 +266,16 @@ export class GiataRepository {
         return prisma.syncJob.update({ where: { id }, data });
     }
 
+    /**
+     * Find a resumable job: either still IN_PROGRESS (clean interrupt — e.g.
+     * PM2 restart, OOM) OR most-recently FAILED (caught exception). FAILED
+     * is included so a single mid-run throw doesn't discard the keyset
+     * progress we've already persisted — the next invocation continues
+     * from `lastProcessedKey` instead of starting over.
+     */
     async getInProgressJob(type: string) {
         return prisma.syncJob.findFirst({
-            where: { type, status: 'IN_PROGRESS' },
+            where: { type, status: { in: ['IN_PROGRESS', 'FAILED'] } },
             orderBy: { startedAt: 'desc' },
         });
     }

@@ -58,6 +58,7 @@ const FULL_SELECT = {
     contactPhoneCountryCode: true,
     guestListFileKey: true,
     customerNotes: true,
+    odooContactId: true,
     // Step 4 – Policies
     termsAndConditions: true,
     cancellationConditions: true,
@@ -90,6 +91,7 @@ const LIST_SELECT = {
     rooms: true,
     status: true,
     createdAt: true,
+    odooContactId: true,
     assignedUser: {
         select: { id: true, firstName: true, lastName: true, email: true },
     },

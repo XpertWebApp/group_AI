@@ -114,6 +114,10 @@ export class RequestService {
             contactPhoneCountryCode: data.contactPhoneCountryCode ?? null,
             guestListFileKey: data.guestListFileKey ?? null,
             customerNotes: data.customerNotes ?? null,
+            // Odoo CRM link (optional at create — staff can fill it in later
+            // via PATCH). The offer-send gate enforces this on requests
+            // created on/after config.odoo.gateActiveSince.
+            odooContactId: data.odooContactId ?? null,
 
             // Step 4 – Policies
             termsAndConditions: data.termsAndConditions ?? null,
@@ -224,7 +228,7 @@ export class RequestService {
         for (const f of [
             'companyName', 'firstName', 'lastName',
             'contactEmail', 'contactPhone', 'contactPhoneCountryCode',
-            'guestListFileKey', 'customerNotes',
+            'guestListFileKey', 'customerNotes', 'odooContactId',
         ]) {
             if (data[f] !== undefined) updateData[f] = data[f];
         }

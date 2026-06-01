@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import notificationRepository, { CreateNotificationData } from '../repositories/notification.repository';
 import failedEmailRepository from '../repositories/failedEmail.repository';
 import logger from '../utils/logger';
+import config from '../config';
 import {
     buildOfferReadyEmail,
     buildInsufficientInventoryEmail,
@@ -14,6 +15,7 @@ import {
     buildNewRequestContactEmail,
     buildOfferApprovedEmail,
     buildStatusChangeEmail,
+    getInlineLogoAttachments,
 } from './emailTemplate';
 import { EmailSendResult, failure } from './email/emailErrors';
 
@@ -99,7 +101,44 @@ interface SendInput {
     replyTo?: string;
     requestId?: string;
     proposalId?: string;
-    attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
+    /**
+     * Email attachments. Two flavours:
+     *   - Regular file attachment (e.g. the offer PDF): omit `cid`.
+     *   - Inline image referenced from the HTML via <img src="cid:foo">:
+     *     set `cid` to the matching content-id. Nodemailer turns it into
+     *     a multipart/related part so all mail clients (Gmail, Yopmail,
+     *     Outlook) render the image without needing a public URL.
+     */
+    attachments?: Array<{ filename: string; content: Buffer; contentType: string; cid?: string }>;
+}
+
+/**
+ * QA / staging safety net.
+ *
+ * When `EMAIL_INTERCEPT_TO` is set, every outbound email is rerouted to
+ * that address instead of its real recipient — the original `to` is
+ * preserved in the subject prefix (`[QA → original@…]`) and in an
+ * `X-Intended-To` header so QA can verify routing without spamming real
+ * customers. Returns the unchanged `to`/`subject`/`headers` when no
+ * intercept is configured (production behaviour).
+ *
+ * Accepts a single address or a comma-separated list in the env var.
+ */
+function applyEmailIntercept(input: {
+    to: string;
+    subject: string;
+    headers?: Record<string, string>;
+}): { to: string; subject: string; headers: Record<string, string>; intercepted: boolean } {
+    const target = (config.email.interceptTo || '').trim();
+    if (!target) {
+        return { to: input.to, subject: input.subject, headers: input.headers ?? {}, intercepted: false };
+    }
+    return {
+        to: target,
+        subject: `[QA → ${input.to}] ${input.subject}`,
+        headers: { ...(input.headers ?? {}), 'X-Intended-To': input.to },
+        intercepted: true,
+    };
 }
 
 async function sendWithRetry(input: SendInput): Promise<EmailSendResult> {
@@ -114,17 +153,40 @@ async function sendWithRetry(input: SendInput): Promise<EmailSendResult> {
 
     const from = resolveFrom();
     const replyTo = input.replyTo ?? resolveReplyToFallback();
+    const routed = applyEmailIntercept({ to: input.to, subject: input.subject });
+
+    if (routed.intercepted) {
+        logger.warn(
+            { eventType: input.eventType, originalTo: input.to, interceptTo: routed.to },
+            'EMAIL_INTERCEPT_TO active — outbound email rerouted to intercept inbox',
+        );
+    }
+
+    // Auto-attach the inline brand logos when the HTML references them via
+    // `cid:` URLs (which it does on localhost dev — see emailTemplate.ts).
+    // Production builds use hosted URLs (`https://…/assets/…png`) instead,
+    // so the HTML contains no `cid:` refs and no inline attachments are
+    // added. This keeps prod email small while making local QA work in
+    // any mail client without needing a public URL.
+    const baseAttachments = input.attachments ?? [];
+    const inlineLogos = (input.html.includes('cid:sett-groups-logo') || input.html.includes('cid:sett-umbrella-logo'))
+        ? getInlineLogoAttachments()
+        : [];
+    const finalAttachments = inlineLogos.length > 0
+        ? [...baseAttachments, ...inlineLogos]
+        : baseAttachments;
 
     let lastError: any;
     for (let attempt = 1; attempt <= RETRY_DELAYS_MS.length + 1; attempt++) {
         try {
             const info = await transport.sendMail({
                 from,
-                to: input.to,
-                subject: input.subject,
+                to: routed.to,
+                subject: routed.subject,
                 html: input.html,
                 replyTo,
-                attachments: input.attachments,
+                attachments: finalAttachments.length > 0 ? finalAttachments : undefined,
+                headers: routed.headers,
             });
             logger.info(
                 {

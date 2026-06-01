@@ -171,8 +171,24 @@ class GiataSyncService {
             console.log(`[GIATA] Full sync: starting new job ${job.id} (${totalRecords} hotels)`);
             logger.info({ jobId: job.id, totalRecords }, 'GIATA full sync: starting new job');
         } else {
-            console.log(`[GIATA] Full sync: RESUMING job ${job.id} from key "${job.lastProcessedKey}" (${job.processedRecords} already done)`);
-            logger.info({ jobId: job.id, lastKey: job.lastProcessedKey, processed: job.processedRecords }, 'GIATA full sync: resuming');
+            // Resume: refresh totalRecords + flip status back to IN_PROGRESS.
+            // - Refresh: the catalogue can grow between runs; without this the
+            //   progress percentage drifts past 100% once `processedRecords`
+            //   exceeds the stale `totalRecords` snapshot.
+            // - Flip: a previously FAILED job needs to be in_progress again so
+            //   it isn't picked up twice if another invocation races in.
+            const freshTotal = await giataRepository.countHotelsWithGiataCode();
+            await giataRepository.updateSyncJob(job.id, {
+                status: 'IN_PROGRESS',
+                totalRecords: freshTotal,
+                errorMessage: null,
+            });
+            job = { ...job, status: 'IN_PROGRESS' as any, totalRecords: freshTotal, errorMessage: null };
+            console.log(`[GIATA] Full sync: RESUMING job ${job.id} from key "${job.lastProcessedKey}" (${job.processedRecords}/${freshTotal} already done)`);
+            logger.info(
+                { jobId: job.id, lastKey: job.lastProcessedKey, processed: job.processedRecords, totalRecords: freshTotal },
+                'GIATA full sync: resuming',
+            );
         }
 
         let synced = 0;
