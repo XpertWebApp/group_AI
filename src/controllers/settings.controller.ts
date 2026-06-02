@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import settingsService from '../services/settings.service';
-import gmailService from '../services/gmail.service';
 import { logAuditEvent } from '../utils/audit';
 import { sendResponse } from '../utils/response';
 
@@ -45,11 +44,12 @@ export class SettingsController {
         }
     }
 
-    // ── Email Configuration ──────────────────────────────────────────────────
+    // ── Email Configuration (Brevo SMTP) ─────────────────────────────────────
 
     /**
      * GET /api/v1/settings/email
-     * Returns all users' Google connection status + sender display name.
+     * Returns the three-block payload: senderIdentity, connection, intercept.
+     * See `email-config-settings-handover.md` §4.1.
      */
     async getEmailConfig(req: Request, res: Response, next: NextFunction) {
         try {
@@ -62,12 +62,20 @@ export class SettingsController {
 
     /**
      * PUT /api/v1/settings/email
-     * Updates the sender display name (fromName).
+     * Partial update of senderIdentity fields. Returns the full email-config
+     * payload (same shape as GET) so the FE can re-render off the response.
      */
     async updateEmailConfig(req: Request, res: Response, next: NextFunction) {
         try {
             const data = (req as any).validated.body;
             const result = await settingsService.updateEmailConfig(data);
+            await logAuditEvent({
+                userId: (req as any).user?.id,
+                action: 'settings.email.update',
+                entity: 'settings',
+                entityId: 'email',
+                details: { keys: Object.keys(data) },
+            });
             return sendResponse(res, 200, result, 'Email configuration updated');
         } catch (error) {
             next(error);
@@ -75,22 +83,37 @@ export class SettingsController {
     }
 
     /**
-     * POST /api/v1/settings/email/disconnect/:userId
-     * Admin disconnects a user's Google account.
+     * GET /api/v1/settings/email/test-status
+     * Forces a fresh transporter.verify() call against Brevo and returns
+     * the connection state. Bypasses the 60s cache used by GET /settings/email.
+     * Always returns 200 — the connection state is data, not an error.
      */
-    async disconnectUserGoogle(req: Request, res: Response, next: NextFunction) {
+    async getEmailTestStatus(req: Request, res: Response, next: NextFunction) {
         try {
-            const targetUserId = req.params.userId as string;
-            await gmailService.disconnect(targetUserId);
+            const result = await settingsService.refreshEmailTestStatus();
+            return sendResponse(res, 200, result, 'Email test status refreshed');
+        } catch (error) {
+            next(error);
+        }
+    }
 
+    /**
+     * POST /api/v1/settings/email/test-send
+     * Sends a small "configuration test" email via the live Brevo transport.
+     * Rate-limited by middleware (1/min per IP).
+     */
+    async sendEmailTest(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { to } = (req as any).validated.body as { to: string };
+            const result = await settingsService.sendTestEmail(to);
             await logAuditEvent({
-                userId: (req as any).user.id,
-                action: 'admin_google_oauth_disconnect',
-                entity: 'user',
-                entityId: targetUserId,
+                userId: (req as any).user?.id,
+                action: 'settings.email.test_send',
+                entity: 'settings',
+                entityId: 'email',
+                details: { to },
             });
-
-            return sendResponse(res, 200, null, 'Google account disconnected for user');
+            return sendResponse(res, 200, result, 'Test email sent');
         } catch (error) {
             next(error);
         }

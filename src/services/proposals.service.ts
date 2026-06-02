@@ -1,5 +1,5 @@
 import proposalRepository from '../repositories/proposal.repository';
-import notificationService from './notification.service';
+import notificationService, { resolveStaffNotificationEmail } from './notification.service';
 import { generateOfferPdf, OfferPdfData } from './pdfGeneration.service';
 import requestRepository from '../repositories/request.repository';
 import requestsService from './requests.service';
@@ -390,7 +390,12 @@ export class ProposalService {
         return proposalRepository.findById(id);
     }
 
-    async sendProposal(id: string, data: { sendToEmail?: string; sendToEmails?: string[] }, userId: string, ip?: string) {
+    async sendProposal(
+        id: string,
+        data: { sendToEmail?: string; sendToEmails?: string[]; language?: PdfLanguage },
+        userId: string,
+        ip?: string,
+    ) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
         this.claimForRequest(existing.requestId, userId, ip);
@@ -454,11 +459,14 @@ export class ProposalService {
 
         const recipientEmail = recipients.join(', ');
 
-        // Generate the PDF (re-use the same flow as approve/preview)
+        // Generate the PDF (re-use the same flow as approve/preview).
+        // Honour the staff-picked `language` so the PDF + email body match
+        // the customer's preferred language. Default to English.
+        const sendLanguage: PdfLanguage = data.language ?? 'en';
         let pdfBuffer: Buffer;
         let pdfData: OfferPdfData;
         try {
-            pdfData = await this.buildPdfData(existing);
+            pdfData = await this.buildPdfData(existing, sendLanguage);
             pdfBuffer = await generateOfferPdf(pdfData);
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'sendProposal: PDF generation failed');
@@ -518,6 +526,7 @@ export class ProposalService {
             userId,
             requestId: existing.requestId ?? undefined,
             proposalId: id,
+            language: sendLanguage,
         });
 
         // CRITICAL: only mark proposal as 'sent' if the email actually went through.
@@ -681,17 +690,35 @@ export class ProposalService {
         }));
     }
 
-    /** Download the PDF for a specific offer (by offer id). */
+    /**
+     * Download the PDF for a specific offer (by offer id).
+     *
+     * When `language` is provided, the PDF is re-generated in that
+     * language from the current proposal state. When omitted, the
+     * original (cached) PDF from the time of sending is returned. See
+     * the `downloadPdf` docstring for the snapshot trade-off.
+     */
     async downloadOfferPdf(
         proposalId: string,
         offerId: string,
+        language?: PdfLanguage,
     ): Promise<{ pdfBuffer: Buffer; filename: string }> {
         const offer = await proposalRepository.getOfferById(offerId);
         if (!offer || offer.proposalId !== proposalId) {
             throw { status: 404, message: 'Offer not found', code: 'OFFER_NOT_FOUND' };
         }
 
-        const filename = `offer-${offer.offerNumber}-${offer.type}.pdf`;
+        const langSuffix = language ? `-${language}` : '';
+        const filename = `offer-${offer.offerNumber}-${offer.type}${langSuffix}.pdf`;
+
+        // ── Re-generate on language request ─────────────────────────────
+        if (language) {
+            const proposal = await proposalRepository.findById(proposalId);
+            if (!proposal) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+            const pdfData = await this.buildPdfData(proposal, language);
+            const pdfBuffer = await generateOfferPdf(pdfData);
+            return { pdfBuffer, filename };
+        }
 
         // Legacy base64 data URI (S3 not configured at the time of sending)
         if (offer.pdfUrl.startsWith('data:')) {
@@ -776,7 +803,7 @@ export class ProposalService {
                 destinationName,
                 approvedBy: userId,
                 agentEmail,
-                staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
+                staffEmail: resolveStaffNotificationEmail(),
             });
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'Step 4.2: Failed to send approval notification — proposal is still approved');
@@ -870,7 +897,7 @@ export class ProposalService {
                 destinationName,
                 rejectedBy: userId,
                 rejectionReason: data.rejectionReason.trim(),
-                staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
+                staffEmail: resolveStaffNotificationEmail(),
             });
         } catch (err: any) {
             logger.error({ err, proposalId: id }, 'Step 4.2: Failed to send decline notification — proposal is still declined');
@@ -1010,25 +1037,45 @@ export class ProposalService {
                 totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1) * (s.days ?? 1),
             }));
 
-        // ── Terms & Cancellation from settings — pick correct language variant ─
-        // When language is 'de', always prefer the German policy from settings.
-        // Only fall back to the booking request's stored value (English) if no German version exists.
+        // ── Terms & Cancellation: live settings, snapshot fallback ──────
+        // Source precedence (per Neha + FE alignment 2026-06-02,
+        // `policies-rich-text-handover.md` §8):
+        //   1. /settings/policies in the requested language (live admin edit)
+        //   2. /settings/policies in the OTHER language (when only one
+        //      translation exists)
+        //   3. The per-request BookingRequest snapshot
+        //      (`termsAndConditions` / `cancellationConditions`) for legacy
+        //      requests created before settings was populated
+        //
+        // This matches the FE preview pixel-for-pixel: what staff see in
+        // ContractPreviewModal is what gets sent. Trade-off: editing
+        // /settings/policies AFTER an offer was sent will change what a
+        // re-download shows. Acceptable per product decision; the snapshot
+        // exists only to keep the old data path working.
         let finalTerms: string | null = null;
         let finalCxl: string | null = null;
 
         try {
             const policies = await settingsService.getPolicies() as Record<string, string>;
             if (language === 'de') {
-                finalTerms = policies?.termsConditionsDe || termsAndConditions || policies?.termsConditionsEn || null;
-                finalCxl = policies?.cancellationConditionsDe || cancellationConditions || policies?.cancellationConditionsEn || null;
+                finalTerms = policies?.termsConditionsDe || policies?.termsConditionsEn || null;
+                finalCxl  = policies?.cancellationConditionsDe || policies?.cancellationConditionsEn || null;
             } else {
-                finalTerms = termsAndConditions || policies?.termsConditionsEn || null;
-                finalCxl = cancellationConditions || policies?.cancellationConditionsEn || null;
+                finalTerms = policies?.termsConditionsEn || policies?.termsConditionsDe || null;
+                finalCxl  = policies?.cancellationConditionsEn || policies?.cancellationConditionsDe || null;
             }
-        } catch {
-            finalTerms = termsAndConditions;
-            finalCxl = cancellationConditions;
+        } catch (err) {
+            logger.warn({ err, language }, 'Failed to load /settings/policies — falling back to per-request snapshot');
+            finalTerms = null;
+            finalCxl = null;
         }
+
+        // Legacy snapshot fallback — only used when settings is empty for
+        // both languages, OR when the settings call errored. The snapshot is
+        // language-agnostic (pre-bilingual data); we use it as-is regardless
+        // of the requested PDF language.
+        if (!finalTerms && termsAndConditions) finalTerms = termsAndConditions;
+        if (!finalCxl && cancellationConditions) finalCxl = cancellationConditions;
 
         // ── Translate dynamic user-entered text if target language ≠ source ─
         // Source is assumed English (staff/webhook input). Only translate when
@@ -1109,9 +1156,34 @@ export class ProposalService {
         return proposalRepository.update(id, { status });
     }
 
-    async downloadPdf(id: string): Promise<{ pdfBuffer: Buffer; filename: string }> {
+    /**
+     * Download the PDF for a proposal.
+     *
+     * When `language` is provided, the PDF is **re-generated** in that
+     * language from the current proposal state (the cached S3 blob is
+     * ignored). When `language` is omitted, the cached blob is served as
+     * before. This keeps the EN/DE bilingual feature working without
+     * having to maintain per-language S3 keys: callers ask for what they
+     * want at download time and we render on demand.
+     */
+    async downloadPdf(
+        id: string,
+        language?: PdfLanguage,
+    ): Promise<{ pdfBuffer: Buffer; filename: string }> {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+
+        // ── Re-generate on language request ─────────────────────────────
+        // Build PdfData from the live proposal state and render fresh.
+        // Note: this reads CURRENT proposal data, not a frozen snapshot.
+        // If the proposal was edited after send, the re-rendered PDF
+        // reflects those edits. Documented in the plan as a known
+        // trade-off (a snapshot-aware re-render would need a follow-up).
+        if (language) {
+            const pdfData = await this.buildPdfData(existing, language);
+            const pdfBuffer = await generateOfferPdf(pdfData);
+            return { pdfBuffer, filename: `offer-${id}-${language}.pdf` };
+        }
 
         if (!existing.pdfUrl) {
             throw { status: 404, message: 'No PDF available for this proposal', code: 'PDF_NOT_FOUND' };

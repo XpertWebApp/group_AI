@@ -7,7 +7,8 @@
  */
 
 import hotelSearchService from './hotelSearch.service';
-import notificationService from './notification.service';
+import notificationService, { resolveStaffNotificationEmail } from './notification.service';
+import { loadDefaultMarkupPercent } from './settings.service';
 import requestRepository from '../repositories/request.repository';
 import proposalRepository from '../repositories/proposal.repository';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
@@ -16,7 +17,12 @@ import { countTotalRooms } from '../utils/roomUtils';
 import { BookingRequestStatus } from '@prisma/client';
 import { TARGET_VIABLE_HOTELS, SEARCH_BATCH_SIZE, MAX_SEARCH_BATCHES } from '../config/probeConfig';
 
-const DEFAULT_MARKUP_PCT = 18;
+/**
+ * Crash-proof fallback markup. Only used if the live Settings value couldn't
+ * be loaded — the real default is `settings.general.defaultMarkupPercentage`
+ * (loaded once at the top of `run()` and threaded through the pipeline).
+ */
+const LEGACY_MARKUP_FALLBACK = 18;
 
 /** Max time to wait for all probe jobs to complete (ms). */
 const JOB_WAIT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -193,6 +199,13 @@ export class OfferGenerationService {
             return;
         }
 
+        // Resolve the live default markup once for the whole pipeline. Cached
+        // in settings.service for 30 s; bust on PUT /settings/general so admin
+        // edits take effect immediately. Falls back to the legacy 18 % only
+        // when Settings is missing/unparseable so the pipeline never crashes.
+        const markupPercent = (await loadDefaultMarkupPercent()) || LEGACY_MARKUP_FALLBACK;
+        logger.info({ requestId, markupPercent }, 'Resolved default markup for offer generation');
+
         const refNum = (request as any).referenceNumber as number;
         const contactName = (request as any).contactName ?? (request as any).firstName ?? 'Guest';
         const destinationName = (request as any).destinationName ?? 'Unknown destination';
@@ -216,7 +229,7 @@ export class OfferGenerationService {
             const mealType = (request as any).breakfastPreference === 'BB' ? 'BB' : undefined;
             const queueResult = await hotelSearchService.generateAutoOffer(requestId, {
                 mealType,
-                markupPercent: DEFAULT_MARKUP_PCT,
+                markupPercent,
             });
 
             if (queueResult.jobsQueued === 0) {
@@ -238,7 +251,7 @@ export class OfferGenerationService {
                 const reason = queueResult.manualRequestOnly
                     ? 'No hotels found at any relaxation level — flagged for manual handling.'
                     : 'No candidate hotels found for this destination and star rating.';
-                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: resolveStaffNotificationEmail() });
                 return;
             }
 
@@ -273,7 +286,7 @@ export class OfferGenerationService {
                 const batch = await hotelSearchService.enqueueAdditionalCandidates(
                     requestId,
                     paginationContext,
-                    { mealType, markupPercent: DEFAULT_MARKUP_PCT },
+                    { mealType, markupPercent },
                 );
                 if (batch.decision !== 'queued' || batch.queuedCount === 0) {
                     logger.info(
@@ -305,7 +318,7 @@ export class OfferGenerationService {
                 }
                 const reason = 'No hotels with sufficient capacity found after probing — flagged for manual handling.';
                 logger.warn({ requestId }, reason);
-                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: resolveStaffNotificationEmail() });
                 return;
             }
 
@@ -322,7 +335,7 @@ export class OfferGenerationService {
                 }
                 const reason = 'No hotels passed the accumulation gate (all had < 6 rooms or no valid supplier split).';
                 logger.warn({ requestId, completedJobs: completedJobs.length }, reason);
-                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: process.env.STAFF_NOTIFICATION_EMAIL });
+                await notificationService.notifyOfferGenerationFailed({ requestId, referenceNumber: refNum, reason, staffEmail: resolveStaffNotificationEmail() });
                 return;
             }
 
@@ -389,7 +402,7 @@ export class OfferGenerationService {
             }
 
             // Apply markup (15–20%, default 18%)
-            const rawSellingPrice = buyingPriceBase * (1 + DEFAULT_MARKUP_PCT / 100);
+            const rawSellingPrice = buyingPriceBase * (1 + markupPercent / 100);
 
             // Apply price psychology — Oliver's rule: avoid round numbers
             const rounded = Math.ceil(rawSellingPrice);
@@ -406,7 +419,7 @@ export class OfferGenerationService {
                 `totalOfferPrice=${totalOfferPrice} (${unifiedSellingPrice} × ${roomsNeeded} rooms × ${nights} nights)`,
             );
             logger.info(
-                { requestId, buyingPriceBase, rawSellingPrice, unifiedSellingPrice, totalOfferPrice, roomsNeeded, nights, markup: DEFAULT_MARKUP_PCT },
+                { requestId, buyingPriceBase, rawSellingPrice, unifiedSellingPrice, totalOfferPrice, roomsNeeded, nights, markup: markupPercent },
                 'Step 4.1: Unified pricing calculated',
             );
 
@@ -416,7 +429,7 @@ export class OfferGenerationService {
                 : '';
             const proposal = await proposalRepository.createForRequest(requestId, {
                 notes: `Auto-generated offer. ${acceptedHotels.length} hotel(s) accepted (${roomsCommitted}/${roomsNeeded} rooms).${shortfallNote}`,
-                markupSettings: { globalMarkupPercent: DEFAULT_MARKUP_PCT, source: 'auto' },
+                markupSettings: { globalMarkupPercent: markupPercent, source: 'auto' },
             });
 
             // Step 4.2: Add ACCEPTED hotels to the proposal — separate line items per room type (EC3)
@@ -565,7 +578,7 @@ export class OfferGenerationService {
                     referenceNumber: refNum,
                     contactName,
                     destinationName,
-                    staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
+                    staffEmail: resolveStaffNotificationEmail(),
                 });
             } else {
                 // ESCALATE TO HUMAN — target not met, partial offer saved for review
@@ -597,7 +610,7 @@ export class OfferGenerationService {
                     roomsMissing,
                     hotelsAccepted: acceptedHotels.length,
                     suggestion,
-                    staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
+                    staffEmail: resolveStaffNotificationEmail(),
                 });
             }
         } catch (err: any) {
@@ -611,7 +624,7 @@ export class OfferGenerationService {
                 requestId,
                 referenceNumber: refNum,
                 reason: err?.message ?? 'Unknown error',
-                staffEmail: process.env.STAFF_NOTIFICATION_EMAIL,
+                staffEmail: resolveStaffNotificationEmail(),
             });
         }
     }

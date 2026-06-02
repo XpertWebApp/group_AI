@@ -1,5 +1,5 @@
 import requestRepository from '../repositories/request.repository';
-import notificationService from './notification.service';
+import notificationService, { resolveStaffNotificationEmail } from './notification.service';
 import { parseGroupType } from './webhook.service';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
@@ -153,7 +153,7 @@ export class RequestService {
         const reqId = (request as any).id;
         const displayName = contactName ?? data.companyName ?? 'Customer';
         const destName = data.destinationName ?? 'Unknown destination';
-        const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+        const staffEmail = resolveStaffNotificationEmail();
 
         if (staffEmail) {
             void notificationService
@@ -277,7 +277,7 @@ export class RequestService {
         // Fire status-change email if the new state is in the configured trigger list
         // and we actually transitioned (not a no-op write).
         if (NOTIFY_STATUS_TRANSITIONS.has(status) && fromStatus && fromStatus !== status) {
-            const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+            const staffEmail = resolveStaffNotificationEmail();
             if (staffEmail) {
                 const full = (before as any) ?? {};
                 const refNum = full.referenceNumber ?? 0;

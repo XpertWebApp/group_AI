@@ -4,6 +4,8 @@ import logger from './utils/logger';
 import { PrismaClient } from '@prisma/client';
 import './services/cron.service'; // Initialize cron jobs
 import { refreshSupplierLimitsCache } from './config/supplierLimits';
+import { warmSenderCache } from './services/emailConfig.helpers';
+import { loadDefaultMarkupPercent } from './services/settings.service';
 import { startHotelProbeWorker } from './queue/hotelProbe.worker';
 import { closeConnection } from './queue/rabbitmq.client';
 import hotelSearchService from './services/hotelSearch.service';
@@ -19,6 +21,18 @@ const startServer = async () => {
         // Load supplier limits from DB into in-memory cache
         await refreshSupplierLimitsCache();
         logger.info('Supplier limits cache loaded');
+
+        // Warm the email-sender identity cache so the first outbound mail
+        // doesn't pay a DB hit. Non-blocking — falls back to env defaults
+        // if the warmup fails.
+        await warmSenderCache();
+        logger.info('Email sender cache warmed');
+
+        // Warm the default-markup cache so calculate-price calls and other
+        // sync read paths (calculateSellPrice, recalcTotals) return the
+        // current Settings value from cold-start onwards.
+        const initialMarkup = await loadDefaultMarkupPercent();
+        logger.info({ defaultMarkupPercent: initialMarkup }, 'Default markup cache warmed');
 
         // Start RabbitMQ hotel probe worker (non-blocking — logs errors and continues)
         startHotelProbeWorker().catch((err) => {

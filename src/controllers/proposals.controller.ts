@@ -249,7 +249,12 @@ export class ProposalsController {
 
     async downloadPdf(req: Request, res: Response, next: NextFunction) {
         try {
-            const { pdfBuffer, filename } = await proposalsService.downloadPdf(req.params['id'] as string);
+            const query = (req as any).validated?.query ?? req.query;
+            const language = query.language as 'en' | 'de' | undefined;
+            const { pdfBuffer, filename } = await proposalsService.downloadPdf(
+                req.params['id'] as string,
+                language,
+            );
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             return res.send(pdfBuffer);
@@ -273,7 +278,13 @@ export class ProposalsController {
         try {
             const proposalId = req.params['id'] as string;
             const offerId = req.params['offerId'] as string;
-            const { pdfBuffer, filename } = await proposalsService.downloadOfferPdf(proposalId, offerId);
+            const query = (req as any).validated?.query ?? req.query;
+            const language = query.language as 'en' | 'de' | undefined;
+            const { pdfBuffer, filename } = await proposalsService.downloadOfferPdf(
+                proposalId,
+                offerId,
+                language,
+            );
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             return res.send(pdfBuffer);

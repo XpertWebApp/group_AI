@@ -40,7 +40,13 @@ async function recalcTotals(
 
     // totalSell = apply globalMarkupPercent to totalBuy (hotel side) then add service sell prices
     let totalSell: Decimal;
-    const globalMarkupPercent = markupSettings?.globalMarkupPercent ?? 18; // default 18% until settings feature (milestone 5)
+    // New proposals always snapshot the live `defaultMarkupPercentage` from
+    // /settings/general into their `markupSettings.globalMarkupPercent` at
+    // create time (see offerGeneration.service.ts). This fallback only fires
+    // for legacy proposals that were created before the snapshot was written.
+    // Keep the literal 18 % here so re-aggregating an old proposal yields
+    // the same total it was originally sent at — do NOT read live settings.
+    const globalMarkupPercent = markupSettings?.globalMarkupPercent ?? 18;
     const hotelSell = hotelBuy.mul(new Decimal(1).plus(new Decimal(globalMarkupPercent).div(100)));
     totalSell = hotelSell.plus(serviceSell);
 

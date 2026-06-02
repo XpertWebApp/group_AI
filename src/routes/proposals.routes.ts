@@ -13,6 +13,7 @@ import {
     SendProposalSchema,
     ApproveProposalSchema,
     DeclineProposalSchema,
+    DownloadPdfQuerySchema,
 } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
 
@@ -98,7 +99,12 @@ router.post(
     proposalsController.previewPdf,
 );
 
-router.get('/:id/pdf', authMiddleware, proposalsController.downloadPdf);
+router.get(
+    '/:id/pdf',
+    authMiddleware,
+    validate(DownloadPdfQuerySchema, 'query'),
+    proposalsController.downloadPdf,
+);
 
 router.post(
     '/:id/actions/approve',
@@ -116,6 +122,11 @@ router.post(
 
 // Offer history (initial / final / revisions)
 router.get('/:id/offers', authMiddleware, proposalsController.listOffers);
-router.get('/:id/offers/:offerId/pdf', authMiddleware, proposalsController.downloadOfferPdf);
+router.get(
+    '/:id/offers/:offerId/pdf',
+    authMiddleware,
+    validate(DownloadPdfQuerySchema, 'query'),
+    proposalsController.downloadOfferPdf,
+);
 
 export default router;

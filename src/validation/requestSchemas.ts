@@ -328,13 +328,25 @@ export const PreviewPdfSchema = z.object({
 });
 
 // ── Send Proposal ─────────────────────────────────────────────────────────
+// `language` selects the PDF (and email body) language used when the offer
+// is sent to the customer. Defaults to English when omitted, so legacy
+// callers keep working without changes.
 export const SendProposalSchema = z.object({
     sendToEmail: z.string().email().optional(),
     sendToEmails: z.array(z.string().email()).min(1).max(20).optional(),
+    language: z.enum(['en', 'de']).optional(),
 }).refine(
     (d) => !(d.sendToEmail && d.sendToEmails),
     { message: 'Provide either sendToEmail or sendToEmails, not both' },
 );
+
+// ── Download PDF ─────────────────────────────────────────────────────────
+// Used by both `GET /:id/pdf` and `GET /:id/offers/:offerId/pdf`. When
+// `language` is provided we re-generate the PDF in the requested language
+// instead of returning the cached blob. Omitted = serve cached.
+export const DownloadPdfQuerySchema = z.object({
+    language: z.enum(['en', 'de']).optional(),
+});
 
 // ── Approve / Decline Proposal ───────────────────────────────────────────────
 export const ApproveProposalSchema = z.object({
@@ -348,18 +360,49 @@ export const DeclineProposalSchema = z.object({
 });
 
 // ── Settings: General Configuration ─────────────────────────────────────────
+// `defaultMarkupPercentage` is stored as a decimal string. Accepts up to ten
+// integer digits plus an optional fractional part (e.g. "0", "18", "879.8",
+// "9999999999"). Range 0–9999999999 — a non-cap for practical purposes; the
+// upper bound exists to keep the column from accepting infinity.
 export const UpdateGeneralConfigSchema = z.object({
     defaultMarkupPercentage: z
         .string()
-        .regex(/^\d{1,3}$/, 'Must be a number between 0 and 100')
-        .refine((v) => parseInt(v, 10) >= 0 && parseInt(v, 10) <= 100, {
-            message: 'Markup must be between 0 and 100',
+        .regex(/^\d{1,10}(\.\d+)?$/, 'Must be a non-negative number with up to 10 integer digits')
+        .refine((v) => {
+            const n = parseFloat(v);
+            return Number.isFinite(n) && n >= 0 && n <= 9_999_999_999;
+        }, {
+            message: 'Markup must be between 0 and 9999999999',
         }),
 });
 
-// ── Settings: Email Configuration (Google OAuth) ────────────────────────────
+// ── Settings: Email Configuration (Brevo SMTP) ──────────────────────────────
+// Sender-identity fields per `email-config-settings-handover.md` §4.2. All
+// four fields are OPTIONAL so the FE can send partial updates. Empty string
+// is accepted on the email fields and means "clear this value; the BE will
+// fall back to env at send time".
+const optionalSettingsEmail = z
+    .string()
+    .max(120)
+    .refine((v) => v === '' || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), {
+        message: 'Invalid email address',
+    })
+    .optional();
+
 export const UpdateEmailConfigSchema = z.object({
-    fromName: z.string().min(1, 'From name is required'),
+    fromName: z
+        .string()
+        .max(80)
+        .refine((v) => !/[\r\n]/.test(v), { message: 'Sender name must not contain newlines' })
+        .optional(),
+    fromEmail: optionalSettingsEmail,
+    replyToFallback: optionalSettingsEmail,
+    staffNotificationEmail: optionalSettingsEmail,
+});
+
+// POST /api/v1/settings/email/test-send — sends a sample mail via Brevo.
+export const SendTestEmailSchema = z.object({
+    to: z.string().email('Invalid email address'),
 });
 
 // ── Settings: Company Details ───────────────────────────────────────────────

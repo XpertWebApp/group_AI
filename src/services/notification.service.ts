@@ -5,6 +5,10 @@ import failedEmailRepository from '../repositories/failedEmail.repository';
 import logger from '../utils/logger';
 import config from '../config';
 import {
+    getSenderIdentitySync,
+    getSenderIdentity,
+} from './emailConfig.helpers';
+import {
     buildOfferReadyEmail,
     buildInsufficientInventoryEmail,
     buildOfferDeclinedEmail,
@@ -36,21 +40,54 @@ function resolveSecure(): boolean {
     return process.env.SMTP_SECURE === 'true';
 }
 
-/** Build the From header from Oliver's name+email split, falling back to the legacy combined SMTP_FROM. */
+/**
+ * Build the `From:` header.
+ *
+ * Source precedence (DB-first per `email-config-settings-handover.md`):
+ *   1. `settings.email.fromName` + `.fromEmail` (admin-edited via PUT
+ *      /settings/email) — cached by emailConfig.helpers, busted on write.
+ *   2. `SMTP_FROM_NAME` + `SMTP_FROM_EMAIL` env vars (boot-time defaults).
+ *   3. Legacy combined `SMTP_FROM` env var.
+ *   4. Hard-coded fallback so a misconfigured deploy never emits an empty From.
+ */
 function resolveFrom(): string {
-    const name = process.env.SMTP_FROM_NAME;
-    const email = process.env.SMTP_FROM_EMAIL;
-    if (name && email) return `${name} <${email}>`;
+    const sender = getSenderIdentitySync();
+    if (sender.fromName && sender.fromEmail) return `${sender.fromName} <${sender.fromEmail}>`;
+    if (sender.fromEmail) return sender.fromEmail;
     return process.env.SMTP_FROM ?? 'SETT Groups <groups@s-e-t-t.com>';
 }
 
-/** Reply-To fallback (used when the request has no assigned active staff). */
+/**
+ * Reply-To address used when the proposal has no assigned active staff.
+ * Same DB-first precedence as resolveFrom().
+ */
 export function resolveReplyToFallback(): string {
-    return (
-        process.env.SMTP_REPLY_TO ??
-        process.env.SMTP_REPLY_TO_FALLBACK ??
-        'groups@s-e-t-t.com'
-    );
+    const sender = getSenderIdentitySync();
+    if (sender.replyToFallback) return sender.replyToFallback;
+    return 'groups@s-e-t-t.com';
+}
+
+/**
+ * Recipient for staff-side operational alerts (new request from webhook,
+ * offer-generation failure, etc). DB-first; falls back to env or empty
+ * string (in which case the caller should skip the alert).
+ *
+ * Use this from any service that needs the alert address — do NOT read
+ * `process.env.STAFF_NOTIFICATION_EMAIL` directly; that bypasses admin edits.
+ */
+export function resolveStaffNotificationEmail(): string {
+    const sender = getSenderIdentitySync();
+    return sender.staffNotificationEmail ?? '';
+}
+
+/**
+ * Async variant — guarantees DB freshness. Use sparingly (e.g. one-shot
+ * cron jobs that don't benefit from the cache); hot send paths should use
+ * the sync variant above.
+ */
+export async function resolveStaffNotificationEmailFresh(): Promise<string> {
+    const sender = await getSenderIdentity();
+    return sender.staffNotificationEmail ?? '';
 }
 
 function createTransport(): Transporter | null {
@@ -741,12 +778,18 @@ export class NotificationService {
         userId?: string;
         requestId?: string;
         proposalId?: string;
+        /** PDF language — also drives the email subject + headline language. */
+        language?: 'en' | 'de';
     }): Promise<EmailSendResult> {
-        const subject = `Your Group Offer #${opts.referenceNumber} — ${opts.destinationName}`;
+        const language = opts.language ?? 'en';
+        const subject = language === 'de'
+            ? `Ihr Gruppenangebot #${opts.referenceNumber} — ${opts.destinationName}`
+            : `Your Group Offer #${opts.referenceNumber} — ${opts.destinationName}`;
         const html = buildOfferPdfEmail({
             referenceNumber: opts.referenceNumber,
             contactName: opts.contactName,
             destinationName: opts.destinationName,
+            language,
         });
 
         // Customer-facing — Reply-To is the group inbox (Read B rule).

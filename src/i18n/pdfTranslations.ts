@@ -83,6 +83,47 @@ export interface PdfTranslations {
     mealFullBoard: string;
     mealAllInclusive: string;
     mealRoomOnly: string;
+
+    // ── Redesigned PDF (2026-06-02 — FE handover) ──────────────────────────
+    // Strings added to support the brand-spec PDF redesign that matches the
+    // FE preview modal. Keys named after the slice the FE doc uses
+    // (`offer.contract.*`) so cross-referencing remains easy.
+
+    /** Green small-caps ribbon in the navy header. */
+    offer: string;
+    /** "Document No." prefix in the header (the value gets appended). */
+    documentNo: string;
+    /** Small-caps green label above the supplier column. */
+    supplier: string;
+    /** Small-caps green label above the customer column. */
+    customer: string;
+    /** Reservation reference label shown next to each hotel name. */
+    reservationRef: string;
+    /** Service-details table — first column header. */
+    service: string;
+    /** Service-details table — date column header. */
+    date: string;
+    /** Hotel-details table — sell column header. (Replaces the old `rate`.) */
+    sell: string;
+    /** Bottom-of-document grand-total bar label. */
+    grandTotal: string;
+    /** Payment-details section heading. */
+    paymentDetails: string;
+    /** Payment-due pill — "Please pay {amount} by {date}." */
+    payPrompt: string;
+    /** Payment-due pill — connector between amount and due-date. */
+    payBy: string;
+    /** Bank-table row labels. */
+    bankName: string;
+    accountHolder: string;
+    iban: string;
+    swiftBic: string;
+    /** Long legal blurb shown in the footer (left side). */
+    footerLegal: string;
+    /** Single MetaRow label rendered next to the customer's name. */
+    contactPerson: string;
+    /** Single MetaRow label rendered when the BookingRequest has no `hotelLocation` set. */
+    addressFallback: string;
 }
 
 const en: PdfTranslations = {
@@ -157,6 +198,27 @@ const en: PdfTranslations = {
     mealFullBoard: 'Full Board',
     mealAllInclusive: 'All Inclusive',
     mealRoomOnly: 'Room Only',
+
+    // Redesigned PDF (FE handover)
+    offer: 'OFFER',
+    documentNo: 'Document No.',
+    supplier: 'Supplier',
+    customer: 'Customer',
+    reservationRef: 'Reservation Ref.',
+    service: 'Service',
+    date: 'Date',
+    sell: 'Sell',
+    grandTotal: 'Grand Total',
+    paymentDetails: 'Payment Details',
+    payPrompt: 'Please pay',
+    payBy: 'by',
+    bankName: 'Bank Name',
+    accountHolder: 'Account Holder',
+    iban: 'IBAN',
+    swiftBic: 'SWIFT / BIC',
+    footerLegal: '© 2026 S-E-T-T Worldwide Reservation FZE. All rights reserved. This document is generated electronically and is valid without signature.',
+    contactPerson: 'Contact Person',
+    addressFallback: 'Address',
 };
 
 const de: PdfTranslations = {
@@ -226,6 +288,27 @@ const de: PdfTranslations = {
     mealFullBoard: 'Vollpension',
     mealAllInclusive: 'All Inclusive',
     mealRoomOnly: 'Nur Übernachtung',
+
+    // Redesigned PDF (FE handover)
+    offer: 'ANGEBOT',
+    documentNo: 'Dokument Nr.',
+    supplier: 'Lieferant',
+    customer: 'Kunde',
+    reservationRef: 'Reservierungs-Ref.',
+    service: 'Service',
+    date: 'Datum',
+    sell: 'Preis',
+    grandTotal: 'Gesamtsumme',
+    paymentDetails: 'Zahlungsdetails',
+    payPrompt: 'Bitte zahlen Sie',
+    payBy: 'bis',
+    bankName: 'Bankname',
+    accountHolder: 'Kontoinhaber',
+    iban: 'IBAN',
+    swiftBic: 'SWIFT / BIC',
+    footerLegal: '© 2026 S-E-T-T Worldwide Reservation FZE. Alle Rechte vorbehalten. Dieses Dokument wird elektronisch erstellt und ist auch ohne Unterschrift gültig.',
+    contactPerson: 'Ansprechpartner',
+    addressFallback: 'Adresse',
 };
 
 const translations: Record<PdfLanguage, PdfTranslations> = { en, de };

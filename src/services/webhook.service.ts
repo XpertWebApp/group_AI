@@ -15,7 +15,7 @@
 
 import { PrismaClient, BookingRequestStatus } from '@prisma/client';
 import offerGenerationService from './offerGeneration.service';
-import notificationService from './notification.service';
+import notificationService, { resolveStaffNotificationEmail } from './notification.service';
 import destinationRepository from '../repositories/destination.repository';
 import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
@@ -420,7 +420,7 @@ export class WebhookService {
         // Fire-and-forget — never block the webhook response on email delivery.
         const refNum = (bookingRequest as any).referenceNumber as number;
         const displayName = (requestPayload as any).contactName ?? (requestPayload as any).companyName ?? 'Customer';
-        const staffEmail = process.env.STAFF_NOTIFICATION_EMAIL;
+        const staffEmail = resolveStaffNotificationEmail();
 
         // Webhooks can come from Wix (default) or WordPress (delegated via wordpressWebhook.service).
         // The delegating service sets `source: 'wordpress'` on the payload it forwards.

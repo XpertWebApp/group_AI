@@ -9,6 +9,7 @@ import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
+import { loadDefaultMarkupPercent, getDefaultMarkupPercentSync } from './settings.service';
 import {
     PROBE_BATCH_SIZE,
     PROBE_MULTIPLIER,
@@ -1425,7 +1426,10 @@ export class HotelSearchService {
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const includeAlternativeStars = params.includeAlternativeStars !== false;
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
-        const markupPercent = 18;
+        // Read the live default markup from Settings (cached 30s). The hot
+        // path downstream uses `getDefaultMarkupPercentSync()` which now
+        // returns the same value. Per-supplier overrides not yet implemented.
+        const markupPercent = await loadDefaultMarkupPercent();
 
         const checkinDate = request.checkinDate instanceof Date
             ? request.checkinDate.toISOString().split('T')[0]
@@ -1711,7 +1715,8 @@ export class HotelSearchService {
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
-        const markupPercent = 18;
+        // Read the live default markup from Settings (cached 30s).
+        const markupPercent = await loadDefaultMarkupPercent();
 
         const checkinDate = request.checkinDate instanceof Date
             ? request.checkinDate.toISOString().split('T')[0]
@@ -2063,7 +2068,7 @@ export class HotelSearchService {
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const includeAlternativeStars = params.includeAlternativeStars !== false;
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
-        const markupPercent = params.markupPercent ?? 18;
+        const markupPercent = params.markupPercent ?? (await loadDefaultMarkupPercent());
 
         const checkinDate = request.checkinDate instanceof Date
             ? request.checkinDate.toISOString().split('T')[0]
@@ -2322,7 +2327,7 @@ export class HotelSearchService {
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
         const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
-        const markupPercent = params.markupPercent ?? 18;
+        const markupPercent = params.markupPercent ?? (await loadDefaultMarkupPercent());
         const checkinDate = request.checkinDate instanceof Date
             ? request.checkinDate.toISOString().split('T')[0]
             : String(request.checkinDate);
@@ -2643,18 +2648,24 @@ export class HotelSearchService {
      *   1. Take the highest mid-range supplier buying price
      *   2. Apply markup (15-20%)
      *   3. Apply price psychology (avoid round numbers)
+     *
+     * `markupPercent` is optional — when omitted, the live Settings value is
+     * used (read from the warm cache populated by the orchestrator above).
+     * Callers in a hot loop should pre-resolve the percent once and pass it
+     * in explicitly.
      */
     calculateSellPrice(
         buyingPrice: number,
-        markupPercent: number = 18,
+        markupPercent?: number,
     ): { buyingPrice: number; sellPrice: number; markupPercent: number } {
-        const raw = buyingPrice * (1 + markupPercent / 100);
+        const effectiveMarkup = markupPercent ?? getDefaultMarkupPercentSync();
+        const raw = buyingPrice * (1 + effectiveMarkup / 100);
         const rounded = Math.ceil(raw);
         let psychPrice = rounded;
         if (rounded % 10 === 0) psychPrice = rounded - 2; // €200 → €198
         else if (rounded % 5 === 0) psychPrice = rounded - 1; // €195 → €194
 
-        return { buyingPrice, sellPrice: psychPrice, markupPercent };
+        return { buyingPrice, sellPrice: psychPrice, markupPercent: effectiveMarkup };
     }
 
     /**

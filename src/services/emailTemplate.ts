@@ -640,32 +640,70 @@ export function buildOfferPdfEmail(opts: {
     referenceNumber: number;
     contactName: string;
     destinationName: string;
+    /** Email body language — matches the language of the attached PDF. */
+    language?: 'en' | 'de';
 }): string {
+    // Small hand-translated dictionary for customer-facing strings on the
+    // offer-PDF email. DeepL is intentionally NOT used here — this is a
+    // tiny transactional notification, the strings are stable, and we want
+    // the email send to stay synchronous + offline-safe.
+    const lang = opts.language ?? 'en';
+    const t = lang === 'de'
+        ? {
+            preheader: `Ihr Gruppenangebot #${opts.referenceNumber} für ${opts.destinationName} ist bereit`,
+            heading: 'Ihr Gruppenangebot ist bereit',
+            subtitle: `Gruppenunterkunfts-Angebot &middot; ${opts.destinationName}`,
+            dear: `Sehr geehrte/r ${opts.contactName},`,
+            intro: `Vielen Dank für Ihre Anfrage. Im Anhang finden Sie Ihr Gruppenunterkunfts-Angebot für <strong>${opts.destinationName}</strong>.`,
+            referenceLabel: 'Referenz',
+            destinationLabel: 'Reiseziel',
+            calloutTitle: 'Noch nicht bestätigt',
+            calloutBody: 'Die Hotelverfügbarkeit ist begrenzt und kann sich ändern — antworten Sie auf diese E-Mail, um Ihre Buchung zu bestätigen.',
+            replyLine: 'Bei Fragen oder zur Bestätigung Ihrer Buchung antworten Sie bitte auf diese E-Mail oder nutzen Sie den untenstehenden Link.',
+            cta: 'Kontakt aufnehmen',
+            didYouHeadline: 'Wir vermitteln auch Sport- &amp; Event-Tickets für Gruppen.',
+            didYouBody: 'Champions League, Formel 1, Wimbledon, NFL und mehr — buchbar in Gruppenvolumen zusammen mit Ihrer Unterkunft.',
+            didYouCta: 'Zum Ticketshop',
+        }
+        : {
+            preheader: `Your group accommodation offer #${opts.referenceNumber} for ${opts.destinationName} is ready`,
+            heading: 'Your group offer is ready',
+            subtitle: `Group accommodation offer &middot; ${opts.destinationName}`,
+            dear: `Dear ${opts.contactName},`,
+            intro: `Thank you for your enquiry. Please find attached your group accommodation offer for <strong>${opts.destinationName}</strong>.`,
+            referenceLabel: 'Reference',
+            destinationLabel: 'Destination',
+            calloutTitle: 'Not yet confirmed',
+            calloutBody: 'Hotel availability is limited and subject to change — reply to this email to confirm your booking.',
+            replyLine: 'To confirm your booking or for any questions, please reply to this email or use the link below.',
+            cta: 'Contact Us',
+            didYouHeadline: 'We also handle sports &amp; event tickets for group sizes.',
+            didYouBody: 'Champions League, F1, Wimbledon, NFL and more — bookable in group volumes alongside your accommodation.',
+            didYouCta: 'Visit the Ticket Shop',
+        };
+
     return emailLayout({
         type: 'group',
-        preheader: `Your group accommodation offer #${opts.referenceNumber} for ${opts.destinationName} is ready`,
+        preheader: t.preheader,
         body: `
-            ${heading('Your group offer is ready')}
-            ${subtitle(`Group accommodation offer &middot; ${opts.destinationName}`)}
-            ${paragraph(`Dear ${opts.contactName},`)}
-            ${paragraph(`Thank you for your enquiry. Please find attached your group accommodation offer for <strong>${opts.destinationName}</strong>.`)}
+            ${heading(t.heading)}
+            ${subtitle(t.subtitle)}
+            ${paragraph(t.dear)}
+            ${paragraph(t.intro)}
             ${detailsCard(
                 [
-                    { label: 'Reference', value: `#${opts.referenceNumber}` },
-                    { label: 'Destination', value: opts.destinationName },
+                    { label: t.referenceLabel, value: `#${opts.referenceNumber}` },
+                    { label: t.destinationLabel, value: opts.destinationName },
                 ],
-                offerCallout(
-                    'Not yet confirmed',
-                    'Hotel availability is limited and subject to change — reply to this email to confirm your booking.',
-                ),
+                offerCallout(t.calloutTitle, t.calloutBody),
             )}
-            ${paragraph('To confirm your booking or for any questions, please reply to this email or use the link below.')}
-            ${ctaButton('Contact Us', `mailto:groups@s-e-t-t.com?subject=Offer%20%23${opts.referenceNumber}`)}
+            ${paragraph(t.replyLine)}
+            ${ctaButton(t.cta, `mailto:groups@s-e-t-t.com?subject=Offer%20%23${opts.referenceNumber}`)}
             ${signatureBlock()}
             ${didYouKnow({
-                headline: 'We also handle sports &amp; event tickets for group sizes.',
-                body: 'Champions League, F1, Wimbledon, NFL and more — bookable in group volumes alongside your accommodation.',
-                cta: { label: 'Visit the Ticket Shop', url: 'https://www.s-e-t-t.com/tickets' },
+                headline: t.didYouHeadline,
+                body: t.didYouBody,
+                cta: { label: t.didYouCta, url: 'https://www.s-e-t-t.com/tickets' },
             })}
         `,
     });
