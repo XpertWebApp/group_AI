@@ -41,6 +41,44 @@ export interface OfferHotel {
     cancelDeadline: string | null;
     /** Stable per-hotel reference (SETT-{requestRef}-{NNN}). */
     hotelRef?: string | null;
+    /**
+     * SETTHub hotel-detail URL — same link the FE renders on the Add Hotel
+     * card. When present, the hotel name becomes a PDF link the customer
+     * can click to open the hotel page in their browser. Falls back to
+     * plain text when null (legacy proposals).
+     */
+    sethubDetailsUrl?: string | null;
+    /**
+     * Pre-fetched hotel thumbnail as a `data:image/jpeg;base64,...` URI.
+     * Inlined at PDF-build time so the PDF stays self-contained — the
+     * customer's PDF viewer never reaches out to WBE to resolve the image.
+     * Null when WBE has no image for the hotel; the hotel block then
+     * renders without a thumbnail (graceful degradation).
+     */
+    hotelImageDataUri?: string | null;
+    /**
+     * Street address (first line). Combined with addressCity + addressCountry
+     * to render the full location below the hotel name.
+     */
+    address?: string | null;
+    /**
+     * Short hotel description — sourced from GIATA (preferred, multi-lang)
+     * with WBE static-data fallback. Rendered as ~2 lines below the
+     * address; truncated client-side to keep card height manageable.
+     */
+    description?: string | null;
+    /**
+     * Top hotel facilities — pre-resolved facility names ordered by
+     * importance (Internet, Restaurant, Air Conditioning first). Capped
+     * at ~8 in the PDF to avoid wall-of-chip clutter.
+     */
+    facilities?: string[];
+    /**
+     * True when the option's price includes free cancellation until
+     * `cancelDeadline`. Renders as a brand-green check badge on the
+     * card — matches the FE Hotel Card treatment.
+     */
+    freeCancellation?: boolean | null;
 }
 
 export interface OfferService {
@@ -169,6 +207,35 @@ function getInlineLogoDataUri(): string {
     return `data:image/png;base64,${bytes.toString('base64')}`;
 }
 
+/**
+ * Footer logo — the SETT umbrella mark for the navy footer band.
+ *
+ * Asset choice: the S-E-T-T Groups wordmark uses black text on a
+ * transparent background, which becomes invisible on the navy band.
+ * The umbrella mark uses brand-green lettering (with green sub-text)
+ * which reads cleanly on navy.
+ *
+ * The transparent-bg variant (`sett-umbrella-logo-transparent.png`)
+ * was generated from the white-bg source with ImageMagick:
+ *   convert sett-umbrella-logo.png -fuzz 5% -transparent white
+ *           sett-umbrella-logo-transparent.png
+ * Falls back to the white-bg original if the transparent variant
+ * isn't present (e.g. fresh checkout before the asset is committed).
+ *
+ * Same inline-data-URI approach as the header logo so the PDF stays
+ * self-contained for emailed delivery.
+ */
+function getInlineFooterLogoDataUri(): string {
+    const transparent = resolveAsset('sett-umbrella-logo-transparent.png');
+    const fallback = resolveAsset('sett-umbrella-logo.png');
+    const p = transparent ?? fallback;
+    if (!p) {
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    }
+    const bytes = fs.readFileSync(p);
+    return `data:image/png;base64,${bytes.toString('base64')}`;
+}
+
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
 /** EU dotted date: dd.mm.yyyy. Returns "—" when input is missing/invalid. */
@@ -230,7 +297,94 @@ function metaRow(label: string, value: string): string {
         </div>`;
 }
 
-/** A grouped hotel block: header + table + subtotal. */
+/** Translate a meal-plan code (BB / RO / HB / FB / AI) into the brand label. */
+function mealPlanLabel(code: string | null | undefined, t: PdfTranslations): string {
+    const upper = String(code ?? '').toUpperCase().trim();
+    switch (upper) {
+        case 'BB': return t.mealBreakfast;
+        case 'RO': return t.mealRoomOnly;
+        case 'HB': return t.mealHalfBoard;
+        case 'FB': return t.mealFullBoard;
+        case 'AI': return t.mealAllInclusive;
+        default:   return upper ? upper : '';
+    }
+}
+
+/** Render a star rating as filled + empty stars, brand-green tint. */
+function renderStars(rating: number | null | undefined): string {
+    const n = Number(rating);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const full = Math.max(0, Math.min(5, Math.round(n)));
+    const empty = 5 - full;
+    return `<span class="star-rating" aria-label="${full} star">${'★'.repeat(full)}${'☆'.repeat(empty)}</span>`;
+}
+
+/**
+ * Format a full address — street, city, country — into a single line.
+ * Omits any of the three parts that are missing without leaving stray
+ * commas. Returns an empty string when every part is missing so the
+ * caller can hide the address row entirely.
+ */
+function formatFullAddress(
+    street: string | null | undefined,
+    city: string | null | undefined,
+    country: string | null | undefined,
+): string {
+    const parts = [street, city, country]
+        .map((p) => (p ?? '').trim())
+        .filter((p) => p.length > 0);
+    return parts.join(', ');
+}
+
+/**
+ * Truncate a description to ~ N characters at a word boundary so the
+ * card stays compact. Appends a single ellipsis when truncation
+ * actually clipped content. Returns the original string when it fits.
+ */
+function clampDescription(text: string | null | undefined, maxChars = 220): string {
+    if (!text) return '';
+    const t = String(text).replace(/\s+/g, ' ').trim();
+    if (t.length <= maxChars) return t;
+    const slice = t.slice(0, maxChars);
+    const lastSpace = slice.lastIndexOf(' ');
+    return (lastSpace > maxChars * 0.6 ? slice.slice(0, lastSpace) : slice).trimEnd() + '…';
+}
+
+/**
+ * Format the cancellation deadline date as EU "11.10.2026". Returns an
+ * empty string when missing.
+ */
+function formatCancelDeadlineEU(iso: string | null | undefined): string {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        const dd = String(d.getUTCDate()).padStart(2, '0');
+        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const yyyy = d.getUTCFullYear();
+        return `${dd}.${mm}.${yyyy}`;
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Hotel card — single visual unit per hotel.
+ *
+ * Layout (top to bottom inside the card):
+ *  1. HEADER STRIP: image on the left (160×120, optional), metadata
+ *     column on the right (hotel name → star rating → location →
+ *     meal-plan chip), reservation ref top-right.
+ *  2. PRICING TABLE: room-type breakdown with sell/qty/nights/total,
+ *     subtotal row at the bottom.
+ *
+ * Pagination: cards are designed to ALLOW breaking across pages when a
+ * card is too tall to fit in the remaining space — strict
+ * `page-break-inside: avoid` causes huge empty gaps when the engine
+ * defers a card to the next page. Instead we keep the header strip
+ * together with the first table row (orphans/widows + page-break-after
+ * hints) so a card never has its header orphaned at the bottom of a page.
+ */
 function renderHotelBlock(
     h: OfferHotel,
     rows: OfferHotel[],
@@ -243,12 +397,8 @@ function renderHotelBlock(
     let subtotal = 0;
     const rowsHtml = rows
         .map((r) => {
-            const total = (r.pricePerRoomPerNight ?? 0) * (r.roomQty ?? 0); // roomQty already times nights per FE assumption
+            const total = (r.pricePerRoomPerNight ?? 0) * (r.roomQty ?? 0);
             subtotal += total;
-            // FE spec computes total = sell × qty × nights. Our backend has
-            // already collapsed qty*nights into `roomQty` for some rows;
-            // keep nights=1 in the display so the math reads sanely and
-            // matches the existing buildPdfData behaviour.
             return `
                 <div class="row">
                     <div class="col flex">${escapeHtml(r.roomType || '—')}</div>
@@ -260,13 +410,59 @@ function renderHotelBlock(
         })
         .join('');
 
+    const nameHtml = h.sethubDetailsUrl
+        ? `<a class="hotel-name" href="${escapeHtml(h.sethubDetailsUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.hotelName || '—')}</a>`
+        : `<span class="hotel-name">${escapeHtml(h.hotelName || '—')}</span>`;
+
+    const starsHtml = renderStars(h.starRating);
+    const fullAddress = formatFullAddress(h.address, h.addressCity, h.addressCountry);
+    const description = clampDescription(h.description);
+    const meal = mealPlanLabel(h.mealPlan, t);
+
+    // Brand-priority chip row: meal plan first (most important commercial
+    // fact), then up to 3 facility names from the enrichment helper.
+    // Per product call — keep the row to a single line so the card stays
+    // compact and consistent across hotels.
+    const chipList: string[] = [];
+    if (meal) chipList.push(meal);
+    if (h.facilities?.length) {
+        for (const f of h.facilities) {
+            if (chipList.length >= 4) break; // 1 meal + 3 facilities
+            if (f && !chipList.includes(f)) chipList.push(f);
+        }
+    }
+    const chipsHtml = chipList.length
+        ? `<div class="hotel-card-tags">${chipList.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join('')}</div>`
+        : '';
+
+    // Free-cancellation badge — top-right of the card header, matches FE
+    // Hotel Card. Only renders when ProposalHotel.freeCancellation is true.
+    const cancelDate = formatCancelDeadlineEU(h.cancelDeadline);
+    const cxlBadgeHtml = h.freeCancellation
+        ? `<div class="cxl-badge" aria-label="${escapeHtml(t.freeCancellation)}">
+                <div class="cxl-badge-title">✓ ${escapeHtml(t.freeCancellation)}</div>
+                ${cancelDate ? `<div class="cxl-badge-sub">${escapeHtml(t.cancelBefore)} ${cancelDate}</div>` : ''}
+            </div>`
+        : '';
+
     return `
-        <div class="hotel-block">
-            <div class="hotel-header">
-                <span class="hotel-name">${escapeHtml(h.hotelName || '—')}</span>
-                ${ref ? `<span class="hotel-ref"><b>${escapeHtml(t.reservationRef)}</b> ${escapeHtml(ref)}</span>` : ''}
+        <div class="hotel-card">
+            <div class="hotel-card-header">
+                ${h.hotelImageDataUri ? `<img class="hotel-thumb" src="${h.hotelImageDataUri}" alt="">` : '<div class="hotel-thumb-empty" aria-hidden="true"></div>'}
+                <div class="hotel-card-meta">
+                    <div class="hotel-card-name-row">
+                        <div class="hotel-card-name-stack">
+                            ${nameHtml}
+                            ${starsHtml ? `<div class="hotel-card-stars">${starsHtml}</div>` : ''}
+                        </div>
+                        ${cxlBadgeHtml}
+                    </div>
+                    ${fullAddress ? `<div class="hotel-card-location"><span class="pin">📍</span> ${escapeHtml(fullAddress)}</div>` : ''}
+                    ${description ? `<div class="hotel-card-desc">${escapeHtml(description)}</div>` : ''}
+                    ${chipsHtml}
+                </div>
             </div>
-            <div class="tbl">
+            <div class="tbl hotel-card-table">
                 <div class="thead">
                     <div class="col flex">${escapeHtml(t.roomTypeCol)}</div>
                     <div class="col w80">${escapeHtml(t.sell)}</div>
@@ -280,6 +476,7 @@ function renderHotelBlock(
                     <span class="val">${symbol}${formatPriceEU(subtotal)}</span>
                 </div>
             </div>
+            ${ref ? `<div class="hotel-card-footer"><span class="hotel-ref"><b>${escapeHtml(t.reservationRef)}</b> ${escapeHtml(ref)}</span></div>` : ''}
         </div>`;
 }
 
@@ -306,7 +503,7 @@ function renderHotelDetails(
         .join('');
 
     return `
-        <div class="section">
+        <div class="section section-hotels">
             <h3>${escapeHtml(t.hotelDetails)}</h3>
             ${blocks}
         </div>`;
@@ -399,6 +596,7 @@ function buildOfferHtml(data: OfferPdfData): string {
     }
 
     const logoSrc = getInlineLogoDataUri();
+    const footerLogoSrc = getInlineFooterLogoDataUri();
     const hotelDetailsHtml = renderHotelDetails(data.hotels, t, data.currency);
     const serviceDetailsHtml = renderServiceDetails(data.services, t, data.currency);
 
@@ -501,6 +699,13 @@ function buildOfferHtml(data: OfferPdfData): string {
     border-bottom: 1px solid var(--border);
     page-break-inside: avoid;
   }
+  /* The hotel-details section can be tall (1 card per hotel, ~280 px
+     each at 4-hotel proposals). Don't strict-keep it on one page —
+     individual cards manage their own pagination via the hotel-card
+     rules. Without this override, a 4-hotel section would block-break
+     to page 2 leaving page 1 mostly empty. */
+  .section.section-hotels { page-break-inside: auto; }
+  .section.section-hotels h3 { page-break-after: avoid; }
   .section h3 {
     color: var(--navy);
     font-size: 16px;
@@ -608,22 +813,222 @@ function buildOfferHtml(data: OfferPdfData): string {
   .col.w100 { width: 100px; text-align: right; }
   .col.w130 { width: 130px; text-align: center; }
 
-  /* ── Hotel block group (§6.4) ──────────────────────────────────────── */
-  .hotel-block { margin-bottom: 20px; page-break-inside: avoid; }
-  .hotel-block:last-child { margin-bottom: 0; }
-  .hotel-header {
+  /* ── Hotel card (§6.4 — redesigned) ─────────────────────────────────
+     Each hotel renders as ONE cohesive card:
+     - Header strip: 160x120 image + metadata column (name, stars,
+       location, meal-plan chip) + reservation ref top-right
+     - Pricing table: room-type breakdown with subtotal
+     The card has subtle navy left-border for brand identity, light grey
+     border-radius for a soft card feel, and a faint shadow approximation
+     via background tint on the header strip.
+  */
+  .hotel-card {
+    margin-bottom: 18px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--navy);
+    overflow: hidden;
+    /* Soft pagination: a card may split across pages if it's too tall to
+       fit in the remaining space (strict page-break-inside: avoid causes
+       huge whitespace gaps). The header-with-first-row guarantee comes
+       from the hotel-card-header rule below. */
+    page-break-inside: auto;
+    orphans: 3;
+    widows: 3;
+  }
+  .hotel-card:last-child { margin-bottom: 0; }
+
+  /* Header strip — image on the left, metadata column on the right.
+     Keep this together with the first table row so a card never
+     orphans its header at the bottom of a page. */
+  .hotel-card-header {
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
+    padding: 14px;
+    background: #fafbfa;
+    page-break-after: avoid;
+  }
+
+  /* 160x120 postcard-sized hotel image. object-fit: cover crops to
+     fill the box without distorting; soft border + radius matches
+     the FE Add-Hotel card. */
+  .hotel-thumb {
+    width: 160px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #f5f5f5;
+    flex-shrink: 0;
+  }
+  /* When a hotel has no image at all, render a clean grey placeholder
+     rather than a broken-img icon. Same dimensions as a real thumb so
+     the layout doesn't shift between image / no-image hotels. */
+  .hotel-thumb-empty {
+    width: 160px;
+    height: 120px;
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+    background: #f5f5f5;
+    flex-shrink: 0;
+  }
+
+  /* Metadata column — fills remaining width to the right of the image. */
+  .hotel-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0; /* allow long names to wrap */
+    flex: 1;
+  }
+  /* Top row inside the metadata column: name + stars stack on the left,
+     free-cancellation badge pushes to the right. Aligned to the top so
+     long hotel names wrap downward without dragging the badge. */
+  .hotel-card-name-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 8px;
+    align-items: flex-start;
+    gap: 12px;
   }
-  .hotel-header .hotel-name {
+  .hotel-card-name-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+  .hotel-name {
     color: var(--navy);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
+    letter-spacing: -0.005em;
+    text-decoration: none; /* no underline on the linked variant */
+    line-height: 1.25;
   }
-  .hotel-header .hotel-ref {
+  .hotel-card-stars { line-height: 1; }
+  .star-rating {
+    color: var(--green);
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+
+  /* Free-cancellation badge — top-right of card header. Soft brand-tinted
+     background, brand-green check, navy title, grey deadline sub-line.
+     Sits at the same baseline as the hotel name. */
+  .cxl-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--pill);
+    border: 1px solid var(--green-light);
+    flex-shrink: 0;
+    max-width: 200px;
+    text-align: right;
+  }
+  .cxl-badge-title {
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+  }
+  .cxl-badge-sub {
+    color: var(--grey);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  /* Address line: pin emoji acts as a small icon glyph. Same grey
+     tone as the FE Hotel Card location row. */
+  .hotel-card-location {
     color: var(--grey);
     font-size: 12px;
+    line-height: 1.4;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .hotel-card-location .pin {
+    font-size: 11px;
+    opacity: 0.7;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  /* Short hotel description — sits between location and chips. Reserves
+     ~3 lines of space so every card has a consistent description block
+     height (12px font * 1.5 line-height = 18px per line → 3 lines ≈ 54px).
+     Long descriptions clamp to 3 lines with a trailing ellipsis via
+     -webkit-line-clamp. Short descriptions occupy the same 3-line slot,
+     which keeps the chip row + pricing table aligned across cards.
+     The JS-side clampDescription() caps at 220 chars as a backstop so
+     Puppeteer never has to render a multi-KB string. */
+  .hotel-card-desc {
+    color: var(--navy);
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: 0.85;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: calc(12px * 1.5 * 3); /* 3 reserved lines */
+  }
+  .hotel-card-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  /* Inline chip — meal plan + facilities. Soft brand-tinted background,
+     navy text, pill-shaped. Stays compact even when wrapping. */
+  .chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--pill);
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    border: 1px solid var(--green-light);
+  }
+
+  /* The pricing table inside a card. The base .tbl styling is already
+     defined elsewhere — these rules only adjust how it sits inside the
+     card chrome (no double border, full-bleed within the card). */
+  .hotel-card-table {
+    border-top: 1px solid var(--border);
+    border-radius: 0; /* card itself owns the rounded corners */
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  /* Card footer — reservation reference moved here so it sits below the
+     pricing summary, where staff/customer expects to find tracking IDs.
+     Keeps the top-right of the card free for the free-cancellation badge. */
+  .hotel-card-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 16px;
+    background: #fafbfa;
+    border-top: 1px solid var(--border);
+  }
+  .hotel-card-footer .hotel-ref {
+    color: var(--grey);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .hotel-ref {
+    color: var(--grey);
+    font-size: 11px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   /* ── Grand total bar (§6.6) ────────────────────────────────────────── */
@@ -782,11 +1187,30 @@ function buildOfferHtml(data: OfferPdfData): string {
     justify-content: space-between;
     align-items: flex-end;
   }
+  /* Left column: SETT Groups logo above the legal blurb. Stacking
+     the brand mark on top of the fine-print reads as "here's who
+     this document is from, and here's the legal note" — the standard
+     corporate-document footer pattern. */
+  .doc-footer .footer-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 520px;
+  }
+  /* SETT umbrella mark on the navy band. Brand-green letterforms read
+     cleanly on navy without any CSS filter. 40px keeps the mark
+     visible but smaller than the larger "24 H GROUP OFFER" mark in
+     the header so the visual hierarchy stays right. */
+  .doc-footer .footer-logo {
+    height: 40px;
+    width: auto;
+    display: block;
+  }
   .doc-footer .legal {
     color: rgba(255, 255, 255, 0.8);
     font-size: 10px;
     line-height: 1.5;
-    max-width: 520px;
     margin: 0;
   }
   .doc-footer .issued .lbl {
@@ -891,7 +1315,10 @@ function buildOfferHtml(data: OfferPdfData): string {
   <!-- ── Footer (§6.10) ───────────────────────────────────────────── -->
   <div class="footer-divider"></div>
   <div class="doc-footer">
-    <p class="legal">${escapeHtml(t.footerLegal)}</p>
+    <div class="footer-left">
+      <img class="footer-logo" src="${footerLogoSrc}" alt="SETT Groups" />
+      <p class="legal">${escapeHtml(t.footerLegal)}</p>
+    </div>
     <div class="issued">
       <div class="lbl">${escapeHtml(t.issuedBy)}</div>
       <div class="name">${escapeHtml(ISSUED_BY)}</div>

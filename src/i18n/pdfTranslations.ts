@@ -124,6 +124,10 @@ export interface PdfTranslations {
     contactPerson: string;
     /** Single MetaRow label rendered when the BookingRequest has no `hotelLocation` set. */
     addressFallback: string;
+    /** Free-cancellation badge on the hotel card (top-right corner). */
+    freeCancellation: string;
+    /** Cancellation deadline prefix in the hotel card badge ("Cancel before 11.10.2026"). */
+    cancelBefore: string;
 }
 
 const en: PdfTranslations = {
@@ -219,6 +223,8 @@ const en: PdfTranslations = {
     footerLegal: '© 2026 S-E-T-T Worldwide Reservation FZE. All rights reserved. This document is generated electronically and is valid without signature.',
     contactPerson: 'Contact Person',
     addressFallback: 'Address',
+    freeCancellation: 'Free Cancellation',
+    cancelBefore: 'Cancel before',
 };
 
 const de: PdfTranslations = {
@@ -309,6 +315,8 @@ const de: PdfTranslations = {
     footerLegal: '© 2026 S-E-T-T Worldwide Reservation FZE. Alle Rechte vorbehalten. Dieses Dokument wird elektronisch erstellt und ist auch ohne Unterschrift gültig.',
     contactPerson: 'Ansprechpartner',
     addressFallback: 'Adresse',
+    freeCancellation: 'Kostenfreie Stornierung',
+    cancelBefore: 'Stornieren bis',
 };
 
 const translations: Record<PdfLanguage, PdfTranslations> = { en, de };

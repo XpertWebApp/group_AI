@@ -12,6 +12,8 @@ import storageService from './storage.service';
 import config from '../config';
 import { PdfLanguage } from '../i18n/pdfTranslations';
 import { translateBatch } from './translation.service';
+import { resolveHotelImagesForPdf } from '../utils/hotelImageForPdf';
+import { resolveHotelEnrichmentForPdf, type PdfLanguageCode } from '../utils/hotelEnrichmentForPdf';
 
 // Proposals are editable in `draft` (staff is still building it) AND in
 // `pending_admin_approval` (waiting for admin sign-off — staff can still adjust
@@ -995,6 +997,24 @@ export class ProposalService {
             if (h.currency) currency = h.currency;
         }
 
+        // Pre-fetch hotel thumbnails in parallel — one DB query for the
+        // image-key set + parallel WBE CDN fetches. Inlined as data URIs
+        // so the emailed PDF stays self-contained (no network at viewer
+        // time). Failures are absorbed per-hotel; a missing image just
+        // means the hotel block renders without a thumbnail.
+        // ── Hotel enrichment ────────────────────────────────────────────
+        // Run image, description, and facilities lookups in parallel so the
+        // whole PDF-data pipeline is bounded by the slowest of the three
+        // batches (typically the image fetcher, since it hits WBE/GIATA
+        // over the network). Per-source failures are absorbed inside the
+        // helpers — the PDF still renders if any one of them comes back
+        // empty.
+        const hotelCodes = activeHotels.map((h: any) => h.hotelCode).filter(Boolean);
+        const [hotelImagesByCode, hotelEnrichmentByCode] = await Promise.all([
+            resolveHotelImagesForPdf(hotelCodes),
+            resolveHotelEnrichmentForPdf(hotelCodes, language as PdfLanguageCode),
+        ]);
+
         // Map hotel entries — each ProposalHotel has a rooms JSON with one or more room type keys
         // e.g. { double: { qty: 20, sell: 178, net: 155, nights: 3 } }
         // or legacy: { standard: { qty: 30, sell: 178, net: 155, nights: 3 } }
@@ -1006,22 +1026,46 @@ export class ProposalService {
             const roomData = hRooms[roomType] ?? {};
             const qty = roomData.qty ?? 0;
             const sell = roomData.sell ?? sellingPrice;
+            const enrichment = hotelEnrichmentByCode.get(h.hotelCode) ?? { description: null, facilities: [] };
 
             return {
                 hotelName: h.hotelName ?? h.hotelCode ?? 'Unknown Hotel',
-                starRating: null as number | null,
-                addressCity: null as string | null,
-                addressCountry: null as string | null,
+                // Map the persisted starRating from ProposalHotel — not
+                // hardcoded null. Previously the PDF always rendered without
+                // star icons because this field was being stubbed.
+                starRating: typeof h.starRating === 'number' ? h.starRating : (h.starRating ? Number(h.starRating) : null),
+                // Same fix for the address fields — these are persisted on
+                // ProposalHotel and were being dropped on the way to the PDF.
+                address: h.address ?? null,
+                addressCity: h.addressCity ?? null,
+                addressCountry: h.addressCountry ?? null,
                 roomType,
                 roomQty: qty,
                 mealPlan,
                 pricePerRoomPerNight: sell,
                 totalPrice: Number(h.totalPrice ?? 0),
                 cancelDeadline: h.cancelDeadline ? new Date(h.cancelDeadline).toISOString() : null,
+                // Persisted on the ProposalHotel row — drives the "Free
+                // Cancellation" green badge on the card.
+                freeCancellation: typeof h.freeCancellation === 'boolean' ? h.freeCancellation : null,
                 // Stable per-hotel reference (SETT-{requestRef}-{NNN}) — the
                 // PDF renders this exact string so it matches the dashboard
                 // Offer Preview. Falls back to null for legacy rows.
                 hotelRef: (h as any).hotelRef ?? null,
+                // SETTHub hotel-detail URL — makes the hotel name clickable
+                // in the PDF, opening the hotel page (same link the FE Add
+                // Hotel card uses). Null for legacy rows; PDF renders plain
+                // text in that case.
+                sethubDetailsUrl: (h as any).sethubDetailsUrl ?? null,
+                // Pre-fetched thumbnail inlined as a data URI. Null when
+                // WBE has no image for the hotelCode — the PDF renders
+                // the hotel block without the thumbnail column in that case.
+                hotelImageDataUri: hotelImagesByCode.get(h.hotelCode) ?? null,
+                // Resolved from GIATA (preferred) → master.Hotel.metadata
+                // fallback. Language-aware via the `language` param above.
+                description: enrichment.description,
+                // Brand-prioritised facility-name list, capped at 8.
+                facilities: enrichment.facilities,
             };
         });
 
