@@ -332,6 +332,18 @@ export class WebhookService {
             groupSize,
             averageAge: data.average_age != null ? Number(data.average_age) : null,
             currencyCode: 'EUR',
+            // Nationality drives the WBE rate-card selection — different
+            // nationalities see different prices for the same hotel.
+            // Wix should send `nationality_code` as an ISO-style code
+            // (e.g. 'DE', 'AE', 'HU') matching `master.nationalities.code`.
+            // If absent the row is created null and the hotel-search
+            // resolver applies a cutoff-date guard (see
+            // hotelSearch.service.ts:resolveNationalityCode). Coordinate
+            // with the Wix form owner to add this field.
+            nationalityCode:
+                (typeof data.nationality_code === 'string' && data.nationality_code.trim()) ||
+                (typeof data.nationalityCode === 'string' && data.nationalityCode.trim()) ||
+                null,
 
             // Room & accommodations
             rooms,
@@ -363,6 +375,19 @@ export class WebhookService {
 
             status: BookingRequestStatus.pending,
         };
+
+        if (!requestPayload.nationalityCode) {
+            logger.warn(
+                {
+                    submissionId: submissionId ?? null,
+                    email: emailNormalized,
+                    formId: payload?.formId ?? null,
+                },
+                'Wix webhook payload missing nationality_code — request saved with null. ' +
+                    'Hotel search will reject post-cutoff or fall back to HU for legacy rows. ' +
+                    'Update the Wix form to send nationality_code.',
+            );
+        }
 
         // Dry-run: return the simulated payload without persisting or triggering
         // offer generation. All validation & parsing above has already run, so

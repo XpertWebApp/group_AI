@@ -33,6 +33,54 @@ import {
 import { logAuditEvent } from '../utils/audit';
 import { BookingRequestStatus } from '@prisma/client';
 import { broadcast } from './sseManager';
+import config from '../config';
+
+/**
+ * Resolve the nationality code for a WBE search.
+ *
+ * Precedence:
+ *   1. Caller-supplied param override (search-time customisation)
+ *   2. BookingRequest.nationalityCode set by staff on the Create Request form
+ *   3. Legacy 'HU' fallback — ONLY for requests created before
+ *      `config.nationality.fallbackCutoffDate`. New requests must have a
+ *      nationality (the Zod schema rejects missing values at the API
+ *      boundary), so the only path that reaches this fallback today is a
+ *      webhook-created row (Wix / WordPress) that didn't pass nationality
+ *      in its payload.
+ *
+ * Post-cutoff with no nationality: throws a structured 400 error. WBE
+ * would reject the search anyway; failing fast with a clear message is
+ * better than a cryptic upstream failure. The fix is to populate
+ * `nationalityCode` on the request — staff via Edit Request, or by
+ * fixing the upstream webhook payload to carry the field.
+ */
+function resolveNationalityCode(
+    paramOverride: string | null | undefined,
+    request: { nationalityCode: string | null; createdAt: Date; id: string },
+): string {
+    if (paramOverride) return paramOverride;
+    if (request.nationalityCode) return request.nationalityCode;
+
+    const cutoff = new Date(config.nationality.fallbackCutoffDate);
+    if (request.createdAt < cutoff) {
+        logger.warn(
+            { requestId: request.id, createdAt: request.createdAt.toISOString() },
+            "Legacy request without nationalityCode — falling back to 'HU' (pre-cutoff grandfather)",
+        );
+        return 'HU';
+    }
+
+    logger.error(
+        { requestId: request.id, createdAt: request.createdAt.toISOString() },
+        'Cannot search: request has no nationalityCode and was created after the fallback cutoff',
+    );
+    throw {
+        status: 400,
+        message:
+            'This request has no nationality set. Open the request, pick a nationality on the Trip Details panel, then re-run the search.',
+        code: 'NATIONALITY_REQUIRED',
+    };
+}
 
 /**
  * Read the requested star categories from a BookingRequest row.
@@ -1423,7 +1471,11 @@ export class HotelSearchService {
         const destinationId = request.destinationId;
         const requestedStarRatings = resolveRequestedStars(request);
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
-        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        // Was: `params.nationalityCode ?? request.nationalityCode ?? 'HU'`.
+        // The silent 'HU' default was the root cause of "prices don't match
+        // Hub" — see commit notes 2026-06-26. New code uses a cutoff-date
+        // guard so only legacy rows still hit the 'HU' branch.
+        const nationalityCode = resolveNationalityCode(params.nationalityCode, request);
         const includeAlternativeStars = params.includeAlternativeStars !== false;
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
         // Read the live default markup from Settings (cached 30s). The hot
@@ -1713,7 +1765,11 @@ export class HotelSearchService {
         const destinationId = request.destinationId;
         const requestedStarRatings = resolveRequestedStars(request);
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
-        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        // Was: `params.nationalityCode ?? request.nationalityCode ?? 'HU'`.
+        // The silent 'HU' default was the root cause of "prices don't match
+        // Hub" — see commit notes 2026-06-26. New code uses a cutoff-date
+        // guard so only legacy rows still hit the 'HU' branch.
+        const nationalityCode = resolveNationalityCode(params.nationalityCode, request);
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
         // Read the live default markup from Settings (cached 30s).
         const markupPercent = await loadDefaultMarkupPercent();
@@ -2065,7 +2121,11 @@ export class HotelSearchService {
         }
 
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
-        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        // Was: `params.nationalityCode ?? request.nationalityCode ?? 'HU'`.
+        // The silent 'HU' default was the root cause of "prices don't match
+        // Hub" — see commit notes 2026-06-26. New code uses a cutoff-date
+        // guard so only legacy rows still hit the 'HU' branch.
+        const nationalityCode = resolveNationalityCode(params.nationalityCode, request);
         const includeAlternativeStars = params.includeAlternativeStars !== false;
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
         const markupPercent = params.markupPercent ?? (await loadDefaultMarkupPercent());
@@ -2325,7 +2385,11 @@ export class HotelSearchService {
 
         const totalRooms = countTotalRooms(request.rooms);
         const currencyCode = params.currencyCode ?? request.currencyCode ?? 'EUR';
-        const nationalityCode = params.nationalityCode ?? request.nationalityCode ?? 'HU';
+        // Was: `params.nationalityCode ?? request.nationalityCode ?? 'HU'`.
+        // The silent 'HU' default was the root cause of "prices don't match
+        // Hub" — see commit notes 2026-06-26. New code uses a cutoff-date
+        // guard so only legacy rows still hit the 'HU' branch.
+        const nationalityCode = resolveNationalityCode(params.nationalityCode, request);
         const waitSeconds = params.waitSeconds ?? PROBE_WAIT_SECONDS;
         const markupPercent = params.markupPercent ?? (await loadDefaultMarkupPercent());
         const checkinDate = request.checkinDate instanceof Date

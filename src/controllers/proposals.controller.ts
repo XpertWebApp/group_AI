@@ -14,7 +14,16 @@ export class ProposalsController {
 
     async get(req: Request, res: Response, next: NextFunction) {
         try {
-            const result = await proposalsService.getProposalById(req.params['id'] as string);
+            // Optional `?language=de` query param drives the hotel
+            // description language; default 'en'. The FE Hotel Card
+            // enrichment block (imageUrl / description / facilities)
+            // is added by the service layer.
+            const rawLang = String(req.query['language'] ?? '').toLowerCase();
+            const language: 'en' | 'de' = rawLang === 'de' ? 'de' : 'en';
+            const result = await proposalsService.getProposalById(
+                req.params['id'] as string,
+                { language },
+            );
             return sendResponse(res, 200, result, 'Proposal retrieved');
         } catch (error) {
             next(error);
@@ -71,6 +80,54 @@ export class ProposalsController {
         try {
             const result = await proposalsService.listHotels(req.params['id'] as string);
             return sendResponse(res, 200, result, 'Hotels retrieved');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * PATCH /api/v1/proposals/:id/hotels/:hotelId/cancellation
+     * Set or clear a staff override on the cancellation deadline. Pass
+     * `cancelDeadlineOverride: null` to clear. Application-layer guard
+     * rejects overrides later than the supplier's actual deadline.
+     */
+    async updateHotelCancellation(req: Request, res: Response, next: NextFunction) {
+        try {
+            const body = (req as any).validated?.body ?? req.body;
+            const userId = (req as any).user?.id;
+            const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.ip;
+            const result = await proposalsService.updateHotelCancellation(
+                req.params['id'] as string,
+                req.params['hotelId'] as string,
+                { cancelDeadlineOverride: body.cancelDeadlineOverride ?? null },
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Hotel cancellation deadline updated');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * PATCH /api/v1/proposals/:id/payment-deadline
+     * Set or clear the customer payment deadline on a proposal. Pass
+     * `paymentDeadline: null` to clear. Application-layer guard rejects
+     * dates in the past or on/after the earliest hotel cancellation
+     * deadline on the proposal.
+     */
+    async updatePaymentDeadline(req: Request, res: Response, next: NextFunction) {
+        try {
+            const body = (req as any).validated?.body ?? req.body;
+            const userId = (req as any).user?.id;
+            const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.ip;
+            const result = await proposalsService.updatePaymentDeadline(
+                req.params['id'] as string,
+                { paymentDeadline: body.paymentDeadline ?? null },
+                userId,
+                ip,
+            );
+            return sendResponse(res, 200, result, 'Proposal payment deadline updated');
         } catch (error) {
             next(error);
         }

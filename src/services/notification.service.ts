@@ -780,6 +780,8 @@ export class NotificationService {
         proposalId?: string;
         /** PDF language — also drives the email subject + headline language. */
         language?: 'en' | 'de';
+        /** Customer payment deadline (ISO 8601). Surfaced in the email body. */
+        paymentDeadline?: string | null;
     }): Promise<EmailSendResult> {
         const language = opts.language ?? 'en';
         const subject = language === 'de'
@@ -790,6 +792,7 @@ export class NotificationService {
             contactName: opts.contactName,
             destinationName: opts.destinationName,
             language,
+            paymentDeadline: opts.paymentDeadline ?? null,
         });
 
         // Customer-facing — Reply-To is the group inbox (Read B rule).

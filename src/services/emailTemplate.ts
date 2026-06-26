@@ -642,6 +642,14 @@ export function buildOfferPdfEmail(opts: {
     destinationName: string;
     /** Email body language — matches the language of the attached PDF. */
     language?: 'en' | 'de';
+    /**
+     * Customer payment deadline. When present, surfaced in the email
+     * details card as "Payment due by DD.MM.YYYY" so the customer sees
+     * it in the email body itself (in addition to the attached PDF).
+     * Null/undefined → row is omitted (legacy proposals only — the Send
+     * Offer flow blocks sending without a deadline set).
+     */
+    paymentDeadline?: string | null;
 }): string {
     // Small hand-translated dictionary for customer-facing strings on the
     // offer-PDF email. DeepL is intentionally NOT used here — this is a
@@ -657,6 +665,7 @@ export function buildOfferPdfEmail(opts: {
             intro: `Vielen Dank für Ihre Anfrage. Im Anhang finden Sie Ihr Gruppenunterkunfts-Angebot für <strong>${opts.destinationName}</strong>.`,
             referenceLabel: 'Referenz',
             destinationLabel: 'Reiseziel',
+            paymentDueLabel: 'Zahlungsfrist',
             calloutTitle: 'Noch nicht bestätigt',
             calloutBody: 'Die Hotelverfügbarkeit ist begrenzt und kann sich ändern — antworten Sie auf diese E-Mail, um Ihre Buchung zu bestätigen.',
             replyLine: 'Bei Fragen oder zur Bestätigung Ihrer Buchung antworten Sie bitte auf diese E-Mail oder nutzen Sie den untenstehenden Link.',
@@ -673,6 +682,7 @@ export function buildOfferPdfEmail(opts: {
             intro: `Thank you for your enquiry. Please find attached your group accommodation offer for <strong>${opts.destinationName}</strong>.`,
             referenceLabel: 'Reference',
             destinationLabel: 'Destination',
+            paymentDueLabel: 'Payment due by',
             calloutTitle: 'Not yet confirmed',
             calloutBody: 'Hotel availability is limited and subject to change — reply to this email to confirm your booking.',
             replyLine: 'To confirm your booking or for any questions, please reply to this email or use the link below.',
@@ -681,6 +691,27 @@ export function buildOfferPdfEmail(opts: {
             didYouBody: 'Champions League, F1, Wimbledon, NFL and more — bookable in group volumes alongside your accommodation.',
             didYouCta: 'Visit the Ticket Shop',
         };
+
+    // Format the payment deadline as DD.MM.YYYY for the email body. The
+    // attached PDF uses the same formatter (formatDateEU). Matched here
+    // inline to keep this module free of cross-imports from the PDF
+    // service — same two-digit-day, two-digit-month, four-digit-year shape.
+    let paymentDueRow: { label: string; value: string } | null = null;
+    if (opts.paymentDeadline) {
+        const d = new Date(opts.paymentDeadline);
+        if (!Number.isNaN(d.getTime())) {
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const yyyy = d.getUTCFullYear();
+            paymentDueRow = { label: t.paymentDueLabel, value: `${dd}.${mm}.${yyyy}` };
+        }
+    }
+
+    const detailRows = [
+        { label: t.referenceLabel, value: `#${opts.referenceNumber}` },
+        { label: t.destinationLabel, value: opts.destinationName },
+        ...(paymentDueRow ? [paymentDueRow] : []),
+    ];
 
     return emailLayout({
         type: 'group',
@@ -691,10 +722,7 @@ export function buildOfferPdfEmail(opts: {
             ${paragraph(t.dear)}
             ${paragraph(t.intro)}
             ${detailsCard(
-                [
-                    { label: t.referenceLabel, value: `#${opts.referenceNumber}` },
-                    { label: t.destinationLabel, value: opts.destinationName },
-                ],
+                detailRows,
                 offerCallout(t.calloutTitle, t.calloutBody),
             )}
             ${paragraph(t.replyLine)}

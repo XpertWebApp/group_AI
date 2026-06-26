@@ -14,6 +14,8 @@ import {
     ApproveProposalSchema,
     DeclineProposalSchema,
     DownloadPdfQuerySchema,
+    UpdateProposalHotelCancellationSchema,
+    UpdateProposalPaymentDeadlineSchema,
 } from '../validation/requestSchemas';
 import rateLimit from 'express-rate-limit';
 
@@ -61,6 +63,28 @@ router.patch(
     authMiddleware,
     validate(ToggleProposalHotelSchema, 'body'),
     proposalsController.toggleHotelIncluded,
+);
+
+// PATCH the cancellation-deadline override on a single proposal hotel.
+// Pass `{ cancelDeadlineOverride: null }` in the body to clear back to the
+// supplier's date. Application-layer guard rejects overrides later than the
+// supplier's actual deadline (would expose SETT to the cancellation penalty).
+router.patch(
+    '/:id/hotels/:hotelId/cancellation',
+    authMiddleware,
+    validate(UpdateProposalHotelCancellationSchema, 'body'),
+    proposalsController.updateHotelCancellation,
+);
+
+// PATCH the customer payment deadline on a proposal (single date for the
+// whole proposal). Pass `{ paymentDeadline: null }` to clear, which marks
+// the proposal unsendable. Application-layer guard rejects past dates and
+// any date on/after the earliest hotel cancellation deadline.
+router.patch(
+    '/:id/payment-deadline',
+    authMiddleware,
+    validate(UpdateProposalPaymentDeadlineSchema, 'body'),
+    proposalsController.updatePaymentDeadline,
 );
 
 // Services on proposal

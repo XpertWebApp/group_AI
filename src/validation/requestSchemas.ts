@@ -67,7 +67,14 @@ export const CreateBookingRequestSchema = z
         groupSize: z.number().int().min(1).optional(),
         averageAge: z.number().int().min(6).max(25).optional(),
         currencyCode: z.string().min(2).max(10).optional(),
-        nationalityCode: z.string().min(1).max(10).optional(),
+        // REQUIRED as of 2026-06-26 — eliminates the silent 'HU' default
+        // that was previously being sent to WBE when staff didn't pick
+        // a nationality. The FE Create Request form must surface a
+        // dropdown sourced from GET /api/v1/nationalities. Webhook
+        // payloads (Wix, WordPress) that don't carry a nationality fall
+        // through to the legacy 'HU' fallback in hotelSearch.service.ts
+        // — only for rows created before the cutoff date.
+        nationalityCode: z.string().min(1).max(10),
 
         // Step 2: Room & Accommodations
         rooms: RoomsSchema.optional(),
@@ -357,6 +364,42 @@ export const ApproveProposalSchema = z.object({
 
 export const DeclineProposalSchema = z.object({
     rejectionReason: z.string().min(1, 'Rejection reason is required').max(2000),
+});
+
+// ── Proposal Hotel: Cancellation Deadline Override ──────────────────────────
+// PATCH /api/v1/proposals/:id/hotels/:hotelId/cancellation
+//
+// Staff can override the supplier-set cancellation deadline. Passing
+// `cancelDeadlineOverride: null` (or omitting it with `clear: true`) resets
+// to the supplier's date. Application-layer guard enforces that the override
+// must be EARLIER than the supplier's `cancelDeadline` — staff can be more
+// conservative but cannot promise a later date than the supplier allows.
+export const UpdateProposalHotelCancellationSchema = z.object({
+    cancelDeadlineOverride: z
+        .string()
+        .nullable()
+        .refine((v) => v === null || !isNaN(Date.parse(v)), {
+            message: 'Invalid date (expected ISO 8601 or null to clear)',
+        }),
+});
+
+// ── Proposal: Payment Deadline ──────────────────────────────────────────────
+// PATCH /api/v1/proposals/:id/payment-deadline
+//
+// Staff sets a single payment deadline for the whole proposal. Pass
+// `paymentDeadline: null` to clear (which makes the offer unsendable
+// again until staff re-sets it). Application-layer guard enforces:
+//   1. Date is in the future (>= today)
+//   2. Date is earlier than the earliest effective cancellation deadline
+//      across all hotels on the proposal (customer must pay before any
+//      cancellation window closes — otherwise SETT eats the penalty).
+export const UpdateProposalPaymentDeadlineSchema = z.object({
+    paymentDeadline: z
+        .string()
+        .nullable()
+        .refine((v) => v === null || !isNaN(Date.parse(v)), {
+            message: 'Invalid date (expected ISO 8601 or null to clear)',
+        }),
 });
 
 // ── Settings: General Configuration ─────────────────────────────────────────

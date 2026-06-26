@@ -14,6 +14,7 @@ import { PdfLanguage } from '../i18n/pdfTranslations';
 import { translateBatch } from './translation.service';
 import { resolveHotelImagesForPdf } from '../utils/hotelImageForPdf';
 import { resolveHotelEnrichmentForPdf, type PdfLanguageCode } from '../utils/hotelEnrichmentForPdf';
+import { resolveHotelEnrichmentForFe } from '../utils/hotelEnrichmentForFe';
 
 // Proposals are editable in `draft` (staff is still building it) AND in
 // `pending_admin_approval` (waiting for admin sign-off — staff can still adjust
@@ -107,12 +108,54 @@ export class ProposalService {
         return proposalRepository.findAll();
     }
 
-    async getProposalById(id: string) {
+    async getProposalById(id: string, opts?: { language?: 'en' | 'de' }) {
         const proposal = await proposalRepository.findById(id);
         if (!proposal) {
             throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
         }
-        return proposal;
+
+        // Enrich each hotel row with the three fields the FE Hotel Card
+        // needs but ProposalHotel doesn't persist directly:
+        //   - imageUrl     (GIATA-priority proxy URL, WBE fallback)
+        //   - description  (GIATA short text in requested lang, WBE meta fallback)
+        //   - facilities[] (brand-priority capped list)
+        //
+        // Done in one parallel batch so the response latency is bounded by
+        // the slowest single query. Failure-isolated per the helper — a
+        // hotel without enrichment data falls back to nulls and renders a
+        // placeholder card on the FE.
+        const hotels = (proposal as any).hotels ?? [];
+        const hotelCodes = hotels.map((h: any) => h.hotelCode).filter(Boolean);
+
+        if (hotelCodes.length === 0) return proposal;
+
+        const language: PdfLanguageCode = opts?.language === 'de' ? 'de' : 'en';
+        const enrichmentByCode = await resolveHotelEnrichmentForFe(hotelCodes, language);
+
+        const enrichedHotels = hotels.map((h: any) => {
+            const enrichment = enrichmentByCode.get(h.hotelCode) ?? {
+                imageUrl: null,
+                description: null,
+                facilities: [],
+            };
+            // Derived field for FE convenience: the date to actually show
+            // the customer is the override when present, otherwise the
+            // supplier's date. The FE can also read the raw cancelDeadline
+            // and cancelDeadlineOverride separately when it needs to display
+            // the "supplier vs override" comparison row.
+            const effectiveCancelDeadline =
+                h.cancelDeadlineOverride ?? h.cancelDeadline ?? null;
+
+            return {
+                ...h,
+                imageUrl: enrichment.imageUrl,
+                description: enrichment.description,
+                facilities: enrichment.facilities,
+                effectiveCancelDeadline,
+            };
+        });
+
+        return { ...(proposal as any), hotels: enrichedHotels };
     }
 
     async createProposal(data: any) {
@@ -217,6 +260,216 @@ export class ProposalService {
         const proposal = await proposalRepository.findById(proposalId);
         if (!proposal) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
         return proposalRepository.findHotels(proposalId);
+    }
+
+    /**
+     * Set or clear the cancellation-deadline override on a single proposal
+     * hotel. Pass `cancelDeadlineOverride: null` to clear (reverts customer-
+     * facing display back to the supplier's date).
+     *
+     * Guard rules:
+     *  1. The proposal must exist.
+     *  2. The hotel must belong to that proposal.
+     *  3. The proposal must be modifiable (not sent / declined / etc.) and
+     *     not locked by another user.
+     *  4. **Override date must be earlier than the supplier's `cancelDeadline`.**
+     *     Staff can be more conservative (promise customer 20 Dec when
+     *     supplier says 23 Dec) but cannot promise a later date than the
+     *     supplier will honour — that would expose SETT to the full
+     *     cancellation penalty.
+     *  5. Override date must not be in the past.
+     *
+     * Audit-logged with both old and new values so disputes are traceable.
+     */
+    async updateHotelCancellation(
+        proposalId: string,
+        hotelId: string,
+        params: { cancelDeadlineOverride: string | null },
+        userId?: string,
+        ip?: string,
+    ) {
+        const existing = await proposalRepository.findById(proposalId);
+        if (!existing) {
+            throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        }
+        assertModifiable(existing);
+        assertNotLocked(existing, userId);
+        this.claimForRequest(existing.requestId, userId, ip);
+
+        const hotel = (existing.hotels ?? []).find((h: any) => h.id === hotelId);
+        if (!hotel) {
+            throw {
+                status: 404,
+                message: 'Hotel not found on this proposal',
+                code: 'NOT_FOUND',
+            };
+        }
+
+        const newOverride = params.cancelDeadlineOverride
+            ? new Date(params.cancelDeadlineOverride)
+            : null;
+
+        // Guard 4: override must be EARLIER than supplier's date.
+        if (newOverride !== null) {
+            const supplierDate = (hotel as any).cancelDeadline
+                ? new Date((hotel as any).cancelDeadline)
+                : null;
+            if (supplierDate && newOverride.getTime() >= supplierDate.getTime()) {
+                throw {
+                    status: 400,
+                    message:
+                        "Override date must be earlier than the supplier's cancellation deadline (" +
+                        supplierDate.toISOString().slice(0, 10) +
+                        '). Staff can promise an earlier cancellation date, but not a later one — SETT would be exposed to the full supplier penalty.',
+                    code: 'CXL_OVERRIDE_TOO_LATE',
+                    supplierDeadline: supplierDate.toISOString(),
+                };
+            }
+
+            // Guard 5: not in the past.
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
+            if (newOverride.getTime() < today.getTime()) {
+                throw {
+                    status: 400,
+                    message: 'Override date cannot be in the past.',
+                    code: 'CXL_OVERRIDE_IN_PAST',
+                };
+            }
+        }
+
+        if (!userId) {
+            throw {
+                status: 401,
+                message: 'Authenticated user required to set override',
+                code: 'UNAUTHORIZED',
+            };
+        }
+
+        const result = await proposalRepository.updateHotelCancellation(hotelId, {
+            cancelDeadlineOverride: newOverride,
+            overriddenBy: userId,
+        });
+
+        await logAuditEvent({
+            userId,
+            action: 'update_hotel_cancellation_override',
+            entity: 'proposal_hotel',
+            entityId: hotelId,
+            details: {
+                proposalId,
+                previousOverride: (hotel as any).cancelDeadlineOverride ?? null,
+                newOverride: newOverride ? newOverride.toISOString() : null,
+                supplierDeadline: (hotel as any).cancelDeadline ?? null,
+            },
+            ipAddress: ip,
+        });
+
+        return result;
+    }
+
+    /**
+     * Set or clear the customer payment deadline on a proposal. Pass
+     * `paymentDeadline: null` to clear, which leaves the proposal in the
+     * "unsendable" state (Send Offer flow refuses until the date is set
+     * again).
+     *
+     * Guard rules:
+     *  1. The proposal must exist.
+     *  2. The proposal must be modifiable (not sent / approved / declined)
+     *     and not locked by another user.
+     *  3. Date must not be in the past.
+     *  4. **Date must be earlier than the earliest effective cancellation
+     *     deadline across all hotels on the proposal.** Customer must pay
+     *     before any hotel's cancellation window closes — otherwise SETT
+     *     is on the hook for the supplier penalty when the customer
+     *     doesn't pay in time and a hotel's free-cxl window has already
+     *     elapsed.
+     *
+     * Audit-logged with both old and new values so disputes are traceable.
+     */
+    async updatePaymentDeadline(
+        proposalId: string,
+        params: { paymentDeadline: string | null },
+        userId?: string,
+        ip?: string,
+    ) {
+        const existing = await proposalRepository.findById(proposalId);
+        if (!existing) {
+            throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
+        }
+        assertModifiable(existing);
+        assertNotLocked(existing, userId);
+        this.claimForRequest(existing.requestId, userId, ip);
+
+        if (!userId) {
+            throw {
+                status: 401,
+                message: 'Authenticated user required to set payment deadline',
+                code: 'UNAUTHORIZED',
+            };
+        }
+
+        const newDeadline = params.paymentDeadline
+            ? new Date(params.paymentDeadline)
+            : null;
+
+        if (newDeadline !== null) {
+            // Guard 3: not in the past.
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
+            if (newDeadline.getTime() < today.getTime()) {
+                throw {
+                    status: 400,
+                    message: 'Payment deadline cannot be in the past.',
+                    code: 'PAYMENT_DEADLINE_IN_PAST',
+                };
+            }
+
+            // Guard 4: must be earlier than earliest effective cancellation
+            // deadline. Use the override when present, otherwise the
+            // supplier's date — same semantics as effectiveCancelDeadline
+            // used elsewhere in this service.
+            const hotels = (existing.hotels ?? []) as any[];
+            let earliestCxl: Date | null = null;
+            for (const h of hotels) {
+                const effective = h.cancelDeadlineOverride ?? h.cancelDeadline;
+                if (!effective) continue;
+                const d = new Date(effective);
+                if (!earliestCxl || d < earliestCxl) earliestCxl = d;
+            }
+
+            if (earliestCxl && newDeadline.getTime() >= earliestCxl.getTime()) {
+                throw {
+                    status: 400,
+                    message:
+                        'Payment deadline must be earlier than the earliest cancellation deadline (' +
+                        earliestCxl.toISOString().slice(0, 10) +
+                        '). The customer must pay before any hotel\'s cancellation window closes — otherwise SETT is exposed to the supplier penalty if payment is late.',
+                    code: 'PAYMENT_DEADLINE_AFTER_CANCELLATION',
+                    earliestCancellationDeadline: earliestCxl.toISOString(),
+                };
+            }
+        }
+
+        const result = await proposalRepository.updatePaymentDeadline(proposalId, {
+            paymentDeadline: newDeadline,
+            setBy: userId,
+        });
+
+        await logAuditEvent({
+            userId,
+            action: 'update_proposal_payment_deadline',
+            entity: 'proposal',
+            entityId: proposalId,
+            details: {
+                previousDeadline: (existing as any).paymentDeadline ?? null,
+                newDeadline: newDeadline ? newDeadline.toISOString() : null,
+            },
+            ipAddress: ip,
+        });
+
+        return result;
     }
 
     async adjustHotelPricing(proposalId: string, hotelId: string, data: any, userId?: string) {
@@ -440,6 +693,39 @@ export class ProposalService {
             };
         }
 
+        // ── Payment-deadline gate ───────────────────────────────────────
+        // The customer-facing PDF + email both display "Payment due by
+        // <date>" — that date is staff-set on the proposal. Refuse to
+        // send when it's null so the customer never receives an offer
+        // without a payment deadline. Pre-cutover proposals (created
+        // before the field shipped) fall back to checkoutDate − 30 days
+        // in the PDF renderer; we only block sending when the proposal
+        // was created on/after the cutover date.
+        const proposalCreatedAt = (existing as any).createdAt
+            ? new Date((existing as any).createdAt)
+            : null;
+        const paymentGateCutoff = new Date('2026-06-26T00:00:00Z');
+        if (
+            !(existing as any).paymentDeadline &&
+            proposalCreatedAt &&
+            proposalCreatedAt >= paymentGateCutoff
+        ) {
+            await logAuditEvent({
+                userId,
+                action: 'send_proposal_blocked',
+                entity: 'proposal',
+                entityId: id,
+                details: { reason: 'PAYMENT_DEADLINE_REQUIRED' },
+                ipAddress: ip,
+            });
+            throw {
+                status: 400,
+                message:
+                    'Set a payment deadline on this proposal before sending. The customer-facing PDF and email both display "Payment due by <date>" and cannot be sent without it.',
+                code: 'PAYMENT_DEADLINE_REQUIRED',
+            };
+        }
+
         let recipients: string[] = [];
         if (data.sendToEmails && data.sendToEmails.length > 0) {
             recipients = data.sendToEmails;
@@ -529,6 +815,9 @@ export class ProposalService {
             requestId: existing.requestId ?? undefined,
             proposalId: id,
             language: sendLanguage,
+            paymentDeadline: (existing as any).paymentDeadline
+                ? new Date((existing as any).paymentDeadline).toISOString()
+                : null,
         });
 
         // CRITICAL: only mark proposal as 'sent' if the email actually went through.
@@ -972,6 +1261,13 @@ export class ProposalService {
             : '';
         const nights = (request as any)?.nights ?? 1;
         const totalRooms = countTotalRooms((request as any)?.rooms);
+        // Guest count for the Trip Details "GUESTS" cell. Sourced from
+        // BookingRequest.groupSize — captured on the Step 1 Trip Details
+        // form. Falls back to null on legacy requests that pre-date the
+        // field; the PDF template renders "—" in that case.
+        const groupSize = typeof (request as any)?.groupSize === 'number'
+            ? (request as any).groupSize
+            : null;
         const mealPlan = (request as any)?.breakfastPreference ?? 'RO';
         let specialRequirements = (request as any)?.specialRequirements ?? null;
         let customerNotes = (request as any)?.customerNotes ?? null;
@@ -1016,41 +1312,57 @@ export class ProposalService {
         ]);
 
         // Map hotel entries — each ProposalHotel has a rooms JSON with one or more room type keys
-        // e.g. { double: { qty: 20, sell: 178, net: 155, nights: 3 } }
-        // or legacy: { standard: { qty: 30, sell: 178, net: 155, nights: 3 } }
-        const hotels = activeHotels.map((h: any) => {
+        // e.g. { single: {...}, twin: {...}, standardDoubleBeds: { qty: 6, sell: 348, net: 332.77, nights: 1 } }
+        // We emit ONE OfferHotel row per room-type key with qty > 0; the PDF
+        // renderer groups them back into a single hotel card via hotelName,
+        // so a 4-room-type hotel renders as one card with 4 table rows.
+        // Previously this code picked a single key and dropped the rest —
+        // the QA Group AI Tool Report 1b §6b bug.
+        const hotels = activeHotels.flatMap((h: any) => {
             const hRooms = h.rooms as any ?? {};
-            // Find the room type key — first non-standard key, or 'standard', or fallback to 'double'
-            const roomTypeKeys = Object.keys(hRooms);
-            const roomType = roomTypeKeys.find((k) => k !== 'standard') ?? roomTypeKeys[0] ?? 'double';
-            const roomData = hRooms[roomType] ?? {};
-            const qty = roomData.qty ?? 0;
-            const sell = roomData.sell ?? sellingPrice;
             const enrichment = hotelEnrichmentByCode.get(h.hotelCode) ?? { description: null, facilities: [] };
 
-            return {
+            // Filter to entries that look like a real room-type row: nested
+            // object shape with `qty` defined. Plain-number top-level keys
+            // (legacy BookingRequest.rooms shape) are ignored — those never
+            // appear on a ProposalHotel.rooms.
+            const typedEntries = Object.entries(hRooms).filter(([, v]: [string, any]) =>
+                v !== null && typeof v === 'object' && typeof v.qty === 'number',
+            );
+
+            // Sort to a stable, customer-friendly order: bigger rooms first
+            // because Standard Doubles are usually the bulk of a group's
+            // booking. Falls back to insertion order via toLowerCase string.
+            const ORDER = ['single', 'twin', 'twinBeds', 'double', 'standardDoubleBeds', 'triple', 'quadruple', 'quadruple__sub_double', 'suite', 'suites', 'standard'];
+            typedEntries.sort(([a], [b]) => {
+                const ai = ORDER.indexOf(a);
+                const bi = ORDER.indexOf(b);
+                if (ai !== -1 && bi !== -1) return ai - bi;
+                if (ai !== -1) return -1;
+                if (bi !== -1) return 1;
+                return a.localeCompare(b);
+            });
+
+            // Skip hotels with no usable room data so we don't emit an
+            // empty card with just the image and header.
+            if (typedEntries.length === 0) return [];
+
+            // Shared per-hotel facts — repeated across every emitted row so
+            // the PDF can render them once at the hotel-card header level
+            // and once per table row. The renderer reads them from rows[0].
+            const sharedFields = {
                 hotelName: h.hotelName ?? h.hotelCode ?? 'Unknown Hotel',
-                // Map the persisted starRating from ProposalHotel — not
-                // hardcoded null. Previously the PDF always rendered without
-                // star icons because this field was being stubbed.
                 starRating: typeof h.starRating === 'number' ? h.starRating : (h.starRating ? Number(h.starRating) : null),
-                // Same fix for the address fields — these are persisted on
-                // ProposalHotel and were being dropped on the way to the PDF.
                 address: h.address ?? null,
                 addressCity: h.addressCity ?? null,
                 addressCountry: h.addressCountry ?? null,
-                roomType,
-                roomQty: qty,
                 mealPlan,
-                pricePerRoomPerNight: sell,
                 totalPrice: Number(h.totalPrice ?? 0),
-                cancelDeadline: h.cancelDeadline ? new Date(h.cancelDeadline).toISOString() : null,
-                // Persisted on the ProposalHotel row — drives the "Free
-                // Cancellation" green badge on the card.
+                cancelDeadline: (() => {
+                    const effective = h.cancelDeadlineOverride ?? h.cancelDeadline;
+                    return effective ? new Date(effective).toISOString() : null;
+                })(),
                 freeCancellation: typeof h.freeCancellation === 'boolean' ? h.freeCancellation : null,
-                // Stable per-hotel reference (SETT-{requestRef}-{NNN}) — the
-                // PDF renders this exact string so it matches the dashboard
-                // Offer Preview. Falls back to null for legacy rows.
                 hotelRef: (h as any).hotelRef ?? null,
                 // SETTHub hotel-detail URL — makes the hotel name clickable
                 // in the PDF, opening the hotel page (same link the FE Add
@@ -1067,6 +1379,18 @@ export class ProposalService {
                 // Brand-prioritised facility-name list, capped at 8.
                 facilities: enrichment.facilities,
             };
+
+            // Emit one OfferHotel row per room-type. The PDF renderer groups
+            // by hotelName so all rows for one hotel collapse into one card.
+            return typedEntries.map(([roomType, data]: [string, any]) => ({
+                ...sharedFields,
+                roomType,
+                roomQty: data.qty ?? 0,
+                nights: typeof data.nights === 'number' && data.nights > 0
+                    ? data.nights
+                    : nights,
+                pricePerRoomPerNight: data.sell ?? sellingPrice,
+            }));
         });
 
         // ── Services ─────────────────────────────────────────────────────
@@ -1172,6 +1496,7 @@ export class ProposalService {
             checkinDate,
             checkoutDate,
             nights,
+            groupSize,
 
             // Hotels
             hotels,
@@ -1184,6 +1509,9 @@ export class ProposalService {
             customerNotes,
             cancellationConditions: finalCxl,
             termsAndConditions: finalTerms,
+            paymentDeadline: (proposal as any).paymentDeadline
+                ? new Date((proposal as any).paymentDeadline).toISOString()
+                : null,
 
             // Totals
             currency,

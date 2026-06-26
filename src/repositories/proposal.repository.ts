@@ -79,6 +79,68 @@ export class ProposalRepository {
         });
     }
 
+    /** Look up a single ProposalHotel by id. Used by the cancellation-override
+     *  flow to read the row before computing the update. */
+    async findHotelById(hotelId: string) {
+        return prisma.proposalHotel.findUnique({ where: { id: hotelId } });
+    }
+
+    /**
+     * Set / clear the cancellation-deadline override on a single proposal
+     * hotel. Pass `cancelDeadlineOverride: null` to clear back to the
+     * supplier's date.
+     *
+     * The application-layer guard (in proposals.service) verifies the
+     * override is earlier than the supplier's `cancelDeadline` before this
+     * is called. This repo method assumes pre-validated input.
+     */
+    async updateHotelCancellation(
+        hotelId: string,
+        params: {
+            cancelDeadlineOverride: Date | null;
+            overriddenBy: string;
+        },
+    ) {
+        return prisma.proposalHotel.update({
+            where: { id: hotelId },
+            data: {
+                cancelDeadlineOverride: params.cancelDeadlineOverride,
+                cancelDeadlineOverriddenBy:
+                    params.cancelDeadlineOverride !== null ? params.overriddenBy : null,
+                cancelDeadlineOverriddenAt: new Date(),
+            },
+        });
+    }
+
+    /**
+     * Set / clear the customer payment deadline on a proposal. Pass
+     * `paymentDeadline: null` to clear (which makes the proposal
+     * unsendable again until staff re-sets it).
+     *
+     * The application-layer guard (in proposals.service) verifies:
+     *   1. Date is in the future
+     *   2. Date is earlier than the earliest effective cancellation
+     *      deadline across all hotels on the proposal
+     * This repo method assumes pre-validated input.
+     */
+    async updatePaymentDeadline(
+        proposalId: string,
+        params: {
+            paymentDeadline: Date | null;
+            setBy: string;
+        },
+    ) {
+        return prisma.proposal.update({
+            where: { id: proposalId },
+            data: {
+                paymentDeadline: params.paymentDeadline,
+                paymentDeadlineSetBy:
+                    params.paymentDeadline !== null ? params.setBy : null,
+                paymentDeadlineSetAt: new Date(),
+            },
+        });
+    }
+
     async createForRequest(requestId: string, data: { notes?: string; markupSettings?: any }) {
         return prisma.proposal.create({
             data: {

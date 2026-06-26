@@ -38,6 +38,19 @@ const config = {
         // Requests created on/after MUST have odooContactId set before send.
         gateActiveSince: process.env.ODOO_GATE_ACTIVE_SINCE || '2026-05-23T00:00:00Z',
     },
+    nationality: {
+        // Cutover for the silent 'HU' fallback. Requests created BEFORE this
+        // timestamp can still hit the 'HU' default in hotelSearch.service.ts
+        // when their `nationalityCode` is null (Wix webhook backfill case).
+        // Requests created on/after this timestamp will use the staff-picked
+        // value — the Zod schema now refuses to accept missing nationality
+        // at the API boundary.
+        //
+        // Once 100% of new requests carry a nationality and the backlog of
+        // legacy null rows is drained, this guard can be deleted from
+        // hotelSearch.service.ts entirely.
+        fallbackCutoffDate: process.env.NATIONALITY_FALLBACK_CUTOFF_DATE || '2026-06-26T00:00:00Z',
+    },
     email: {
         // QA / staging safety net. When set, EVERY outbound email is
         // re-routed to this address instead of its real recipient — the

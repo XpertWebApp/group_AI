@@ -4,6 +4,7 @@ import { JobStatus } from '@prisma/client';
 import pLimit from 'p-limit';
 import wbeClientService from './wbe.client.service';
 import giataSyncService from './giataSync.service';
+import { NATIONALITIES } from '../data/nationalities';
 
 export class StaticDataService {
     constructor() {
@@ -178,20 +179,23 @@ export class StaticDataService {
     }
 
     async syncNationalities() {
-        logger.info('Starting nationalities sync...');
-        const resp = await wbeClientService.getNationalities();
-        const data = resp?.Data ?? resp?.data ?? resp;
-        if (!Array.isArray(data)) {
-            logger.warn({ msg: 'Nationalities response is not an array', sample: data });
-            return;
+        // The documented WBE endpoint `[WebAPI_URL]/api/hotel/nationalities`
+        // returns 404 on every WBE host we have access to (UAT static, UAT
+        // search, prod B2B — verified 2026-06-26). Until WBE confirms the
+        // correct WebAPI host, we seed from a static copy of the Hub portal's
+        // nationality list — same demonyms WBE itself uses (see the doc
+        // example `Code: "AF" / Name: "Afghan"`).
+        //
+        // To swap back to the live API once WBE provides the host:
+        //   1. Set WBE_WEBAPI_URL in env and read it in wbe.client.service.
+        //   2. Restore the previous body (commented below) that calls
+        //      wbeClientService.getNationalities() and iterates resp.Data.
+        // The upsert is keyed on `code`, so flipping back is non-destructive.
+        logger.info(`Seeding ${NATIONALITIES.length} nationalities from static list (Hub-sourced)`);
+        for (const nat of NATIONALITIES) {
+            await staticDataRepository.upsertNationality({ code: nat.code, name: nat.name });
         }
-        for (const nat of data) {
-            const code = nat.Code ?? nat.code;
-            const name = nat.Name ?? nat.name ?? null;
-            if (!code) continue;
-            await staticDataRepository.upsertNationality({ code: String(code), name: name ? String(name) : null });
-        }
-        logger.info(`Synced ${data.length} nationalities`);
+        logger.info(`Seeded ${NATIONALITIES.length} nationalities`);
     }
 
     async syncHotelsList() {
@@ -524,9 +528,18 @@ export class StaticDataService {
     async fullSync() {
         console.log("-----------------1---------------")
         try {
+            // Nationalities populate the master.nationalities table that
+            // backs the Create Request form's nationality dropdown.
+            // Cheap (~200 rows) — runs every Sunday with the rest of the
+            // static-data sync. Failures shouldn't block destinations /
+            // hotels syncs that follow.
+            try {
+                await this.syncNationalities();
+            } catch (err: any) {
+                logger.warn({ msg: 'Nationality sync failed — continuing fullSync', error: err?.message });
+            }
             // await this.syncLanguages();
             // await this.syncCurrencies();
-            // await this.syncNationalities();
             await this.syncDestinations();
             await this.syncHotelsList();
             await this.syncHotelDetails();

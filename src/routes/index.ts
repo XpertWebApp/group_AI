@@ -6,6 +6,7 @@ import requestsRoutes from './requests.routes';
 import proposalsRoutes from './proposals.routes';
 import hotelsRoutes from './hotels.routes';
 import destinationsRoutes from './destinations.routes';
+import nationalitiesRoutes from './nationalities.routes';
 import dashboardRoutes from './dashboard.routes';
 import settingsRoutes from './settings.routes';
 import odooRoutes from './odoo.routes';
@@ -21,6 +22,7 @@ router.use('/requests', requestsRoutes);
 router.use('/proposals', proposalsRoutes);
 router.use('/hotels', hotelsRoutes);
 router.use('/destinations', destinationsRoutes);
+router.use('/nationalities', nationalitiesRoutes);
 router.use('/odoo', odooRoutes);
 
 export default router;

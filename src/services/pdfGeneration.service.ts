@@ -33,8 +33,17 @@ export interface OfferHotel {
     starRating: number | null;
     addressCity: string | null;
     addressCountry: string | null;
+    /**
+     * Room-type key from ProposalHotel.rooms (e.g. "standardDoubleBeds",
+     * "single", "quadruple__sub_double"). The PDF renderer humanises this
+     * via `humaniseRoomType()` before display, so the customer sees
+     * "Standard Double Rooms" rather than the raw camelCase key.
+     */
     roomType: string;
+    /** Rooms of THIS type only — not the total across the hotel. */
     roomQty: number;
+    /** Nights of THIS room-type stay (usually mirrors the trip nights). */
+    nights: number;
     mealPlan: string;
     pricePerRoomPerNight: number;
     totalPrice: number;
@@ -129,6 +138,15 @@ export interface OfferPdfData {
     customerNotes: string | null;
     cancellationConditions: string | null;
     termsAndConditions: string | null;
+    /**
+     * Customer payment deadline — staff-set on the proposal (no automatic
+     * default). When present, rendered as a "Payment due by DD MMM YYYY"
+     * line in the policies/cancellation section so the customer knows
+     * when they must pay. Null when unset; the renderer simply omits the
+     * line in that case (but the Send Offer flow blocks sending when
+     * null, so a real customer-facing PDF should always have it set).
+     */
+    paymentDeadline?: string | null;
 
     // Totals
     currency: string;
@@ -310,6 +328,51 @@ function mealPlanLabel(code: string | null | undefined, t: PdfTranslations): str
     }
 }
 
+/**
+ * Humanise a room-type JSON key into a customer-facing label.
+ *
+ *   "single"                → "Single"
+ *   "twin"                  → "Twin"
+ *   "double"                → "Double"
+ *   "triple"                → "Triple"
+ *   "quadruple"             → "Quadruple"
+ *   "suites"                → "Suite"
+ *   "standardDoubleBeds"    → "Standard Double Rooms"
+ *   "twinBeds"              → "Twin Beds"
+ *   "quadruple__sub_double" → "Quadruple Sub Double"
+ *
+ * Falls back to a Title-cased version of the raw key when no explicit
+ * mapping exists, so future room-type keys auto-resolve to something
+ * presentable without a code change.
+ */
+function humaniseRoomType(key: string | null | undefined): string {
+    if (!key) return '—';
+    const raw = String(key).trim();
+    const known: Record<string, string> = {
+        single: 'Single',
+        twin: 'Twin',
+        double: 'Double',
+        triple: 'Triple',
+        quadruple: 'Quadruple',
+        suites: 'Suite',
+        suite: 'Suite',
+        standard: 'Standard',
+        standardDoubleBeds: 'Standard Double Rooms',
+        twinBeds: 'Twin Beds',
+        quadruple__sub_double: 'Quadruple Sub Double',
+    };
+    if (known[raw]) return known[raw];
+    // Generic fallback — split camelCase + snake_case / double-underscore and
+    // Title-case each word. e.g. "junior_suite" → "Junior Suite",
+    // "presidentialSuite" → "Presidential Suite".
+    return raw
+        .replace(/[_]+/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .toLowerCase()
+        .replace(/(^|\s)\S/g, (m) => m.toUpperCase())
+        .trim();
+}
+
 /** Render a star rating as filled + empty stars, brand-green tint. */
 function renderStars(rating: number | null | undefined): string {
     const n = Number(rating);
@@ -397,14 +460,18 @@ function renderHotelBlock(
     let subtotal = 0;
     const rowsHtml = rows
         .map((r) => {
-            const total = (r.pricePerRoomPerNight ?? 0) * (r.roomQty ?? 0);
+            // Row total = sell × qty × nights. Each room-type row carries
+            // its own nights value (usually mirrors trip nights, but
+            // ProposalHotel.rooms allows per-type variation).
+            const nights = Math.max(1, r.nights ?? 1);
+            const total = (r.pricePerRoomPerNight ?? 0) * (r.roomQty ?? 0) * nights;
             subtotal += total;
             return `
                 <div class="row">
-                    <div class="col flex">${escapeHtml(r.roomType || '—')}</div>
+                    <div class="col flex">${escapeHtml(humaniseRoomType(r.roomType))}</div>
                     <div class="col w80">${symbol}${formatPriceEU(r.pricePerRoomPerNight)}</div>
                     <div class="col w55">${r.roomQty ?? 0}</div>
-                    <div class="col w65">1</div>
+                    <div class="col w65">${nights}</div>
                     <div class="col w100 bold">${symbol}${formatPriceEU(total)}</div>
                 </div>`;
         })
@@ -585,9 +652,24 @@ function buildOfferHtml(data: OfferPdfData): string {
     );
     const grandTotal = hotelsTotal + servicesTotal;
 
-    // Payment due date = checkoutDate - 30 days
+    // Payment due date.
+    //
+    // Precedence:
+    //   1. `data.paymentDeadline` — staff-set on the proposal via the new
+    //      PATCH /api/v1/proposals/:id/payment-deadline endpoint. This is
+    //      the customer-facing date and the Send Offer flow refuses to
+    //      send without it set.
+    //   2. Legacy fallback: checkoutDate − 30 days. Kept ONLY for backward
+    //      compatibility with proposals created before the payment-deadline
+    //      field shipped. Once the legacy backlog is drained this can be
+    //      removed and the renderer should bail out with '—' instead.
     let paymentDue = '—';
-    if (data.checkoutDate) {
+    if (data.paymentDeadline) {
+        const pd = new Date(data.paymentDeadline);
+        if (!Number.isNaN(pd.getTime())) {
+            paymentDue = formatDateEU(pd.toISOString());
+        }
+    } else if (data.checkoutDate) {
         const co = new Date(data.checkoutDate);
         if (!Number.isNaN(co.getTime())) {
             const d = new Date(co.getTime() - 30 * 24 * 60 * 60 * 1000);

@@ -407,6 +407,19 @@ model Proposal {
   rejectedBy       String?           @map("rejected_by") @db.Uuid
   rejectionReason  String?           @map("rejection_reason")
   pdfUrl           String?           @map("pdf_url") @db.Text
+  /// Customer payment deadline. Staff-set on the proposal — no automatic
+  /// default. The Send Offer flow refuses to send while this is null.
+  /// Application-layer guard enforces that this date must be earlier
+  /// than the earliest effective cancellation deadline across all hotels
+  /// on the proposal (so the customer pays before any cancellation
+  /// window closes).
+  paymentDeadline      DateTime? @map("payment_deadline") @db.Timestamptz(6)
+  /// UUID of the staff user who set the most recent paymentDeadline.
+  /// Null when paymentDeadline is null.
+  paymentDeadlineSetBy String?   @map("payment_deadline_set_by") @db.Uuid
+  /// Timestamp of the most recent paymentDeadline change (set or cleared).
+  /// Used for audit display.
+  paymentDeadlineSetAt DateTime? @map("payment_deadline_set_at") @db.Timestamptz(6)
   hotels           ProposalHotel[]
   services         ProposalService[]
   offers           ProposalOffer[]
@@ -454,7 +467,21 @@ model ProposalHotel {
   totalPrice           Decimal   @map("total_price") @db.Decimal(12, 2)
   currency             String    @db.VarChar(10)
   freeCancellation     Boolean?  @map("free_cancellation")
+  /// Supplier's cancellation deadline as returned by WBE's optionDetailsV2
+  /// (CxlPolicy.OptionDate). Authoritative — never overwritten so we keep
+  /// an audit trail of what the supplier actually committed to.
   cancelDeadline       DateTime? @map("cancel_deadline") @db.Timestamptz(6)
+  /// Optional staff-set override of the cancellation deadline. When present,
+  /// this date is used in the customer-facing PDF and FE display INSTEAD of
+  /// `cancelDeadline`. Application-layer guard enforces that overrides must
+  /// be EARLIER than the supplier's `cancelDeadline` (can't overpromise).
+  cancelDeadlineOverride       DateTime? @map("cancel_deadline_override") @db.Timestamptz(6)
+  /// UUID of the staff user who set the most recent override. Null when no
+  /// override is set. Reset to null when override is cleared.
+  cancelDeadlineOverriddenBy   String?   @map("cancel_deadline_overridden_by") @db.Uuid
+  /// Timestamp of the most recent override action (set or cleared). Used for
+  /// audit display ("Set by Vincent on 12 Jun 2026").
+  cancelDeadlineOverriddenAt   DateTime? @map("cancel_deadline_overridden_at") @db.Timestamptz(6)
   supplierCode         String?   @map("supplier_code") @db.VarChar(50)
   rooms                Json?
   latitude             Decimal?  @db.Decimal(10, 7)
