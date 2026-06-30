@@ -128,6 +128,17 @@ export interface PdfTranslations {
     freeCancellation: string;
     /** Cancellation deadline prefix in the hotel card badge ("Cancel before 11.10.2026"). */
     cancelBefore: string;
+
+    /**
+     * Room-type key → localised label map. Used by `humaniseRoomType()` in
+     * the PDF generator to translate raw `ProposalHotel.rooms` keys
+     * (e.g. "standardDoubleBeds", "twin", "quadruple__sub_double") into
+     * customer-facing labels. Missing keys fall back to a Title-cased
+     * version of the raw camelCase key — fine for English but produces
+     * an English label in a German PDF, which is the bug QA flagged.
+     * Cover the keys we actually emit.
+     */
+    roomTypes: Record<string, string>;
 }
 
 const en: PdfTranslations = {
@@ -225,6 +236,19 @@ const en: PdfTranslations = {
     addressFallback: 'Address',
     freeCancellation: 'Free Cancellation',
     cancelBefore: 'Cancel before',
+    roomTypes: {
+        single: 'Single Room',
+        twin: 'Twin Room',
+        twinBeds: 'Twin Beds',
+        double: 'Double Room',
+        standardDoubleBeds: 'Standard Double Room',
+        standard: 'Standard Room',
+        triple: 'Triple Room',
+        quadruple: 'Quadruple Room',
+        quadruple__sub_double: 'Quadruple Sub Double',
+        suite: 'Suite',
+        suites: 'Suite',
+    },
 };
 
 const de: PdfTranslations = {
@@ -317,6 +341,19 @@ const de: PdfTranslations = {
     addressFallback: 'Adresse',
     freeCancellation: 'Kostenfreie Stornierung',
     cancelBefore: 'Stornieren bis',
+    roomTypes: {
+        single: 'Einzelzimmer',
+        twin: 'Zweibettzimmer',
+        twinBeds: 'Zweibettzimmer',
+        double: 'Doppelzimmer',
+        standardDoubleBeds: 'Standard-Doppelzimmer',
+        standard: 'Standardzimmer',
+        triple: 'Dreibettzimmer',
+        quadruple: 'Vierbettzimmer',
+        quadruple__sub_double: 'Vierbettzimmer (Doppel)',
+        suite: 'Suite',
+        suites: 'Suite',
+    },
 };
 
 const translations: Record<PdfLanguage, PdfTranslations> = { en, de };

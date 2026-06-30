@@ -345,26 +345,24 @@ function mealPlanLabel(code: string | null | undefined, t: PdfTranslations): str
  * mapping exists, so future room-type keys auto-resolve to something
  * presentable without a code change.
  */
-function humaniseRoomType(key: string | null | undefined): string {
+function humaniseRoomType(
+    key: string | null | undefined,
+    t?: PdfTranslations,
+): string {
     if (!key) return '—';
     const raw = String(key).trim();
-    const known: Record<string, string> = {
-        single: 'Single',
-        twin: 'Twin',
-        double: 'Double',
-        triple: 'Triple',
-        quadruple: 'Quadruple',
-        suites: 'Suite',
-        suite: 'Suite',
-        standard: 'Standard',
-        standardDoubleBeds: 'Standard Double Rooms',
-        twinBeds: 'Twin Beds',
-        quadruple__sub_double: 'Quadruple Sub Double',
-    };
-    if (known[raw]) return known[raw];
+    // Prefer the localised label from the active translation dictionary —
+    // this is what makes German PDFs render "Standard-Doppelzimmer"
+    // instead of the camelCase "standardDoubleBeds" or English fallback
+    // "Standard Double Rooms".
+    const localised = t?.roomTypes?.[raw];
+    if (localised) return localised;
     // Generic fallback — split camelCase + snake_case / double-underscore and
     // Title-case each word. e.g. "junior_suite" → "Junior Suite",
-    // "presidentialSuite" → "Presidential Suite".
+    // "presidentialSuite" → "Presidential Suite". Used when a brand-new
+    // room-type key from WBE / GIATA hasn't been added to the dictionary
+    // yet; reads naturally in English and is at least not raw camelCase
+    // in any other language until someone adds the translation.
     return raw
         .replace(/[_]+/g, ' ')
         .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -468,7 +466,7 @@ function renderHotelBlock(
             subtotal += total;
             return `
                 <div class="row">
-                    <div class="col flex">${escapeHtml(humaniseRoomType(r.roomType))}</div>
+                    <div class="col flex">${escapeHtml(humaniseRoomType(r.roomType, t))}</div>
                     <div class="col w80">${symbol}${formatPriceEU(r.pricePerRoomPerNight)}</div>
                     <div class="col w55">${r.roomQty ?? 0}</div>
                     <div class="col w65">${nights}</div>
@@ -1395,21 +1393,96 @@ function buildOfferHtml(data: OfferPdfData): string {
   ${termsHtml}
 
   <!-- ── Footer (§6.10) ───────────────────────────────────────────── -->
-  <div class="footer-divider"></div>
-  <div class="doc-footer">
-    <div class="footer-left">
-      <img class="footer-logo" src="${footerLogoSrc}" alt="SETT Groups" />
-      <p class="legal">${escapeHtml(t.footerLegal)}</p>
-    </div>
-    <div class="issued">
-      <div class="lbl">${escapeHtml(t.issuedBy)}</div>
-      <div class="name">${escapeHtml(ISSUED_BY)}</div>
-    </div>
-  </div>
+  <!-- Rendered by Puppeteer's native displayHeaderFooter at the bottom
+       of every page (see generateOfferPdf below + buildFooterTemplate).
+       Pinning a footer to the bottom of the last page via CSS does NOT
+       work under Chromium's print engine — it ignores flex pagination
+       and the 'vh' unit resolves only to the per-page box, so the
+       sticky-footer pattern falls apart. Native footer-template is the
+       reliable workaround. -->
 
 </div>
 </body>
 </html>`;
+}
+
+/**
+ * Build the HTML passed to Puppeteer's `footerTemplate`. Rendered at the
+ * bottom of EVERY page in the print viewport. Constraints from Puppeteer:
+ *   - Inline styles only (no <link>, no <style> blocks honoured).
+ *   - Images must be data URIs.
+ *   - Font size has to be set explicitly — the default is tiny.
+ *   - The template body must be wrapped in a root element to render
+ *     (Puppeteer documents this).
+ *
+ * The visual mirrors the previous inline footer (navy band, green
+ * divider, SETT logo + legal blurb on the left, "ISSUED BY <name>" on
+ * the right) so existing PDFs look unchanged on page 1.
+ */
+function buildFooterTemplate(
+    t: PdfTranslations,
+    footerLogoDataUri: string,
+): string {
+    // The escape helpers from the outer module aren't in scope here
+    // because the footer is rendered in Chrome's print-utility process
+    // (a separate document). Inline-escape the strings we know come
+    // from the dictionary; they're hand-written and don't carry HTML,
+    // but we still escape defensively to avoid any breakage if a
+    // future dictionary entry contains `<`/`&`.
+    const esc = (s: string) =>
+        String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    return `
+<div style="
+    width: 100%;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+">
+  <div style="height: 2px; background: #AAC737;"></div>
+  <div style="
+      background: #071C42;
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      box-sizing: border-box;
+  ">
+    <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        max-width: 520px;
+    ">
+      <img src="${footerLogoDataUri}" alt="SETT Groups" style="height: 32px; width: auto; display: block;" />
+      <p style="
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 9px;
+          line-height: 1.4;
+          margin: 0;
+      ">${esc(t.footerLegal)}</p>
+    </div>
+    <div>
+      <div style="
+          color: #AAC737;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+      ">${esc(t.issuedBy)}</div>
+      <div style="
+          color: #fff;
+          font-size: 12px;
+          font-weight: 600;
+          margin-top: 2px;
+      ">${esc(ISSUED_BY)}</div>
+    </div>
+  </div>
+</div>`;
 }
 
 // ─── Puppeteer renderer ──────────────────────────────────────────────────────
@@ -1485,11 +1558,31 @@ export async function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
         await page.setContent(html, { waitUntil: 'load' });
         // Give web fonts a moment to load even after `load` fires.
         await page.evaluateHandle('document.fonts.ready');
+        // Render the navy footer band via Puppeteer's native footer slot,
+        // pinned to the bottom of every page. CSS-based sticky footers
+        // do NOT work under Chromium's print pagination — flex layout is
+        // skipped during page-break computation and vh units resolve
+        // only to the per-page box. The native slot sidesteps all of
+        // that and renders reliably across single-page and multi-page
+        // documents.
+        //
+        // bottom: '110px' reserves vertical room so body content doesn't
+        // bleed under the footer band when content reaches the page
+        // edge. The footer template's painted height is ~96px (2px
+        // divider + ~94px navy band); 110px gives a small visual gap.
+        const t = getPdfTranslations(data.language === 'de' ? 'de' : 'en');
+        const footerLogoSrc = getInlineFooterLogoDataUri();
         const pdf = await page.pdf({
             format: 'A4',
             printBackground: true,
-            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            margin: { top: 0, right: 0, bottom: '110px', left: 0 },
             preferCSSPageSize: true,
+            displayHeaderFooter: true,
+            // Empty header (Puppeteer requires both templates when
+            // displayHeaderFooter is true; otherwise it renders its
+            // default date/page header).
+            headerTemplate: '<span></span>',
+            footerTemplate: buildFooterTemplate(t, footerLogoSrc),
         });
         return Buffer.from(pdf);
     } catch (err) {
