@@ -262,8 +262,15 @@ function formatDateEU(dateStr: string | null | undefined): string {
     try {
         const d = new Date(dateStr);
         if (Number.isNaN(d.getTime())) return '—';
+        // Use UTC accessors so the displayed date doesn't shift with the
+        // renderer host's timezone. Checkin/checkout dates and payment
+        // deadlines are stored as end-of-day UTC (or as bare YYYY-MM-DD
+        // which JS parses as UTC midnight); rendering via getDate() /
+        // getMonth() / getFullYear() would silently bump those to the
+        // "day before" on any server west of UTC. Matches the
+        // convention already used by formatCancelDeadlineEU() (line 418).
         const pad = (n: number) => String(n).padStart(2, '0');
-        return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+        return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
     } catch {
         return '—';
     }
@@ -638,10 +645,25 @@ function buildOfferHtml(data: OfferPdfData): string {
         : (data.contactPhone || '—');
     const customerAddress = data.hotelLocation || data.destinationName || '—';
 
-    // Compute grand total from the hotel + service rows so it matches what the
-    // tables visibly add up to. (data.totalPrice may be stale on legacy rows.)
+    // Compute grand total from the hotel + service rows so it matches what
+    // the tables visibly add up to. (data.totalPrice may be stale on legacy
+    // rows.)
+    //
+    // The hotel-row formula MUST include nights — each row's visible total
+    // is `sell × qty × nights` (see renderHotelBlock line 465), and the
+    // per-hotel Subtotal is the sum of those row totals. Skipping `nights`
+    // here produced a Grand Total that was `subtotal ÷ nights` (QA report
+    // 2026-06-27: subtotal €10,688.00 but grand total €3,648.00 — 4-night
+    // stay, 1/4 of the correct figure).
+    //
+    // Each hotel row carries its OWN `nights` value (usually the trip
+    // nights, but ProposalHotel.rooms allows per-type variation), so we
+    // multiply per-row, not by a single trip-level `data.nights`.
     const hotelsTotal = (data.hotels ?? []).reduce(
-        (acc, h) => acc + ((h.pricePerRoomPerNight ?? 0) * (h.roomQty ?? 0)),
+        (acc, h) => {
+            const nights = Math.max(1, h.nights ?? 1);
+            return acc + ((h.pricePerRoomPerNight ?? 0) * (h.roomQty ?? 0) * nights);
+        },
         0,
     );
     const servicesTotal = (data.services ?? []).reduce(
