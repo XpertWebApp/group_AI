@@ -1530,6 +1530,13 @@ export class ProposalService {
             // Viewer timezone — keeps the cancel-deadline badge in the PDF in
             // sync with the on-screen Offer Preview (see OfferPdfData.timezone).
             timezone: timezone ?? null,
+
+            // Document date — the proposal's creation date, so the PDF header
+            // shows the SAME date as the on-screen Offer Preview (and stays
+            // stable on re-download) instead of the render date.
+            documentDate: proposal?.createdAt
+                ? new Date(proposal.createdAt).toISOString()
+                : null,
         };
     }
 

@@ -164,6 +164,15 @@ export interface OfferPdfData {
      * cancel-deadline badge; when omitted the deadline is formatted in UTC.
      */
     timezone?: string | null;
+
+    /**
+     * ISO creation date of the offer/proposal, used for the document date in
+     * the PDF header (and the year in the "506/2026" document number). Set to
+     * the proposal's `createdAt` so the PDF shows the SAME date as the
+     * on-screen Offer Preview and stays stable on re-download, instead of
+     * drifting to the render date. When omitted, falls back to "now".
+     */
+    documentDate?: string | null;
 }
 
 // ─── SETT supplier hard-codes (FE handover §6.2 / §6.7) ──────────────────────
@@ -666,18 +675,24 @@ function buildOfferHtml(data: OfferPdfData): string {
     const t = getPdfTranslations(lang);
     const symbol = data.currency === 'EUR' ? '€' : data.currency + ' ';
 
-    // Document metadata
-    const documentCode = `${data.referenceNumber}/${new Date().getFullYear()}`;
-    const createdAt = formatDateEU(new Date().toISOString());
+    // Document metadata — use the offer/proposal creation date (stable) rather
+    // than the render date, so the PDF header matches the on-screen Offer
+    // Preview and doesn't jump to "today" every time the PDF is re-generated.
+    const docDateIso = data.documentDate ?? new Date().toISOString();
+    const docDateObj = new Date(docDateIso);
+    const docYear = Number.isNaN(docDateObj.getTime())
+        ? new Date().getFullYear()
+        : docDateObj.getUTCFullYear();
+    const documentCode = `${data.referenceNumber}/${docYear}`;
+    const createdAt = formatDateEU(docDateIso);
 
     // Customer block
     const customerName = data.contactName?.trim()
         || data.companyNameClient?.trim()
         || '—';
-    const customerPhone = data.contactPhoneCountryCode
-        ? `${data.contactPhoneCountryCode} ${data.contactPhone}`
-        : (data.contactPhone || '—');
-    const customerAddress = data.hotelLocation || data.destinationName || '—';
+    // Show the customer phone exactly as entered — no country-code prefix —
+    // to match the on-screen Offer Preview (which shows the bare number).
+    const customerPhone = data.contactPhone || '—';
 
     // Compute grand total from the hotel + service rows so it matches what
     // the tables visibly add up to. (data.totalPrice may be stale on legacy
@@ -1394,7 +1409,6 @@ function buildOfferHtml(data: OfferPdfData): string {
       <div class="meta-name">${escapeHtml(customerName)}</div>
       ${metaRow(t.emailAddress, data.contactEmail || '—')}
       ${metaRow(t.phoneNumber, customerPhone)}
-      ${metaRow(t.address, customerAddress)}
     </div>
   </div>
 
