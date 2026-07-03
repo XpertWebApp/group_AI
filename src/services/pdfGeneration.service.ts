@@ -690,9 +690,11 @@ function buildOfferHtml(data: OfferPdfData): string {
     const customerName = data.contactName?.trim()
         || data.companyNameClient?.trim()
         || '—';
-    // Show the customer phone exactly as entered — no country-code prefix —
-    // to match the on-screen Offer Preview (which shows the bare number).
-    const customerPhone = data.contactPhone || '—';
+    // Show the customer phone WITH its country-code prefix (e.g. "+44 7876…")
+    // so the PDF matches the on-screen Offer Preview.
+    const customerPhone = data.contactPhoneCountryCode
+        ? `${data.contactPhoneCountryCode} ${data.contactPhone}`
+        : (data.contactPhone || '—');
 
     // Compute grand total from the hotel + service rows so it matches what
     // the tables visibly add up to. (data.totalPrice may be stale on legacy
