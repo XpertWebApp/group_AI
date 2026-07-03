@@ -2,6 +2,25 @@ import { Request, Response, NextFunction } from 'express';
 import proposalsService from '../services/proposals.service';
 import { sendResponse } from '../utils/response';
 
+/**
+ * Pull the viewer's IANA timezone from the request so PDF generation can
+ * render the free-cancellation deadline in the same zone the frontend used
+ * for the on-screen Offer Preview. Checked in order: `?timezone=` query,
+ * `timezone` body field, then the `x-timezone` header. Returns undefined when
+ * absent — the PDF service falls back to UTC in that case.
+ */
+function pickTimezone(req: Request): string | undefined {
+    const q = (req as any).validated?.query ?? req.query ?? {};
+    const b = (req as any).validated?.body ?? req.body ?? {};
+    const raw =
+        (typeof q.timezone === 'string' && q.timezone) ||
+        (typeof b.timezone === 'string' && b.timezone) ||
+        (typeof req.headers['x-timezone'] === 'string' && req.headers['x-timezone']) ||
+        '';
+    const tz = String(raw).trim();
+    return tz.length ? tz : undefined;
+}
+
 export class ProposalsController {
     async list(req: Request, res: Response, next: NextFunction) {
         try {
@@ -292,7 +311,8 @@ export class ProposalsController {
     async previewPdf(req: Request, res: Response, next: NextFunction) {
         try {
             const body = (req as any).validated?.body ?? req.body;
-            const result = await proposalsService.previewPdf(req.params['id'] as string, body.language);
+            const timezone = pickTimezone(req);
+            const result = await proposalsService.previewPdf(req.params['id'] as string, body.language, timezone);
             if (result.pdfBuffer) {
                 res.setHeader('Content-Type', 'application/pdf');
                 res.setHeader('Content-Disposition', 'inline; filename="offer-preview.pdf"');
@@ -311,6 +331,7 @@ export class ProposalsController {
             const { pdfBuffer, filename } = await proposalsService.downloadPdf(
                 req.params['id'] as string,
                 language,
+                pickTimezone(req),
             );
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -341,6 +362,7 @@ export class ProposalsController {
                 proposalId,
                 offerId,
                 language,
+                pickTimezone(req),
             );
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

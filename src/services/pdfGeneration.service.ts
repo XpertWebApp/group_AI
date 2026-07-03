@@ -156,6 +156,14 @@ export interface OfferPdfData {
 
     // Language (defaults to 'en')
     language?: PdfLanguage;
+
+    /**
+     * IANA timezone of the viewer (e.g. "Asia/Kolkata", "Europe/Berlin"),
+     * forwarded by the frontend so the free-cancellation deadline in the PDF
+     * matches the date shown in the on-screen Offer Preview. Only affects the
+     * cancel-deadline badge; when omitted the deadline is formatted in UTC.
+     */
+    timezone?: string | null;
 }
 
 // ─── SETT supplier hard-codes (FE handover §6.2 / §6.7) ──────────────────────
@@ -421,19 +429,43 @@ function clampDescription(text: string | null | undefined, maxChars = 220): stri
 /**
  * Format the cancellation deadline date as EU "11.10.2026". Returns an
  * empty string when missing.
+ *
+ * Unlike checkin/checkout (date-only, end-of-day UTC), the cancel deadline
+ * carries a real time-of-day from the supplier (e.g. `2026-10-20T19:59:59Z`,
+ * which is 23:59:59 on the 20th in Dubai / UTC+4, but rolls to the 21st in
+ * UTC+5 and later). To keep the PDF's badge in sync with the on-screen Offer
+ * Preview — which the frontend renders in the *viewer's browser timezone* —
+ * we format in `timezone` (an IANA name the FE passes through). When no
+ * timezone is supplied (or it's invalid) we fall back to UTC, preserving the
+ * previous behaviour for any caller that doesn't send one.
  */
-function formatCancelDeadlineEU(iso: string | null | undefined): string {
+function formatCancelDeadlineEU(iso: string | null | undefined, timezone?: string | null): string {
     if (!iso) return '';
-    try {
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return '';
-        const dd = String(d.getUTCDate()).padStart(2, '0');
-        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const yyyy = d.getUTCFullYear();
-        return `${dd}.${mm}.${yyyy}`;
-    } catch {
-        return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+
+    if (timezone) {
+        try {
+            const parts = new Intl.DateTimeFormat('en-GB', {
+                timeZone: timezone,
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            }).formatToParts(d);
+            const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+            const dd = get('day');
+            const mm = get('month');
+            const yyyy = get('year');
+            if (dd && mm && yyyy) return `${dd}.${mm}.${yyyy}`;
+        } catch {
+            // Invalid IANA timezone string — fall through to UTC below.
+        }
     }
+
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    return `${dd}.${mm}.${yyyy}`;
 }
 
 /**
@@ -458,6 +490,7 @@ function renderHotelBlock(
     rows: OfferHotel[],
     t: PdfTranslations,
     currency: string,
+    timezone?: string | null,
 ): string {
     const symbol = currency === 'EUR' ? '€' : currency + ' ';
     const ref = h.hotelRef ?? null;
@@ -509,7 +542,7 @@ function renderHotelBlock(
 
     // Free-cancellation badge — top-right of the card header, matches FE
     // Hotel Card. Only renders when ProposalHotel.freeCancellation is true.
-    const cancelDate = formatCancelDeadlineEU(h.cancelDeadline);
+    const cancelDate = formatCancelDeadlineEU(h.cancelDeadline, timezone);
     const cxlBadgeHtml = h.freeCancellation
         ? `<div class="cxl-badge" aria-label="${escapeHtml(t.freeCancellation)}">
                 <div class="cxl-badge-title">✓ ${escapeHtml(t.freeCancellation)}</div>
@@ -557,6 +590,7 @@ function renderHotelDetails(
     hotels: OfferHotel[],
     t: PdfTranslations,
     currency: string,
+    timezone?: string | null,
 ): string {
     if (!hotels?.length) return '';
 
@@ -571,7 +605,7 @@ function renderHotelDetails(
     }
 
     const blocks = Array.from(groups.values())
-        .map((rows) => renderHotelBlock(rows[0], rows, t, currency))
+        .map((rows) => renderHotelBlock(rows[0], rows, t, currency, timezone))
         .join('');
 
     return `
@@ -699,7 +733,7 @@ function buildOfferHtml(data: OfferPdfData): string {
 
     const logoSrc = getInlineLogoDataUri();
     const footerLogoSrc = getInlineFooterLogoDataUri();
-    const hotelDetailsHtml = renderHotelDetails(data.hotels, t, data.currency);
+    const hotelDetailsHtml = renderHotelDetails(data.hotels, t, data.currency, data.timezone);
     const serviceDetailsHtml = renderServiceDetails(data.services, t, data.currency);
 
     // ── Policy blocks ───────────────────────────────────────────────────
@@ -1588,16 +1622,28 @@ export async function generateOfferPdf(data: OfferPdfData): Promise<Buffer> {
         // that and renders reliably across single-page and multi-page
         // documents.
         //
-        // bottom: '110px' reserves vertical room so body content doesn't
+        // bottom: '140px' reserves vertical room so body content doesn't
         // bleed under the footer band when content reaches the page
-        // edge. The footer template's painted height is ~96px (2px
-        // divider + ~94px navy band); 110px gives a small visual gap.
+        // edge.
+        //
+        // Sizing math:
+        //   - Green divider:               2px
+        //   - Navy band padding (top+bot): 32px
+        //   - Content inside (logo 32px + gap 8px + 2-line legal ~25px): ~65px
+        //   → Total painted footer height: ~99px
+        //
+        // The previous value of 110px sometimes let the last content row
+        // (e.g. "Reservation Ref: SETT-XXX-YYY") render UNDER the navy
+        // band because Chromium's print engine paints the
+        // `displayHeaderFooter` slot on top of any body that spills into
+        // the reserved margin. 140px gives ~40px of safety gap between
+        // the last body row and the top of the footer band.
         const t = getPdfTranslations(data.language === 'de' ? 'de' : 'en');
         const footerLogoSrc = getInlineFooterLogoDataUri();
         const pdf = await page.pdf({
             format: 'A4',
             printBackground: true,
-            margin: { top: 0, right: 0, bottom: '110px', left: 0 },
+            margin: { top: 0, right: 0, bottom: '140px', left: 0 },
             preferCSSPageSize: true,
             displayHeaderFooter: true,
             // Empty header (Puppeteer requires both templates when

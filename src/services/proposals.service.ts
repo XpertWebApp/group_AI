@@ -944,12 +944,12 @@ export class ProposalService {
         };
     }
 
-    async previewPdf(id: string, language?: PdfLanguage) {
+    async previewPdf(id: string, language?: PdfLanguage, timezone?: string | null) {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
         const lang = language ?? 'en';
-        const pdfData = await this.buildPdfData(existing, lang);
+        const pdfData = await this.buildPdfData(existing, lang, timezone);
         const pdfBuffer = await generateOfferPdf(pdfData);
 
         return { pdfBuffer, note: 'Preview PDF generated' };
@@ -993,6 +993,7 @@ export class ProposalService {
         proposalId: string,
         offerId: string,
         language?: PdfLanguage,
+        timezone?: string | null,
     ): Promise<{ pdfBuffer: Buffer; filename: string }> {
         const offer = await proposalRepository.getOfferById(offerId);
         if (!offer || offer.proposalId !== proposalId) {
@@ -1006,7 +1007,7 @@ export class ProposalService {
         if (language) {
             const proposal = await proposalRepository.findById(proposalId);
             if (!proposal) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
-            const pdfData = await this.buildPdfData(proposal, language);
+            const pdfData = await this.buildPdfData(proposal, language, timezone);
             const pdfBuffer = await generateOfferPdf(pdfData);
             return { pdfBuffer, filename };
         }
@@ -1234,7 +1235,11 @@ export class ProposalService {
     /**
      * Build PDF data from a proposal + its booking request.
      */
-    private async buildPdfData(proposal: any, language: PdfLanguage = 'en'): Promise<OfferPdfData> {
+    private async buildPdfData(
+        proposal: any,
+        language: PdfLanguage = 'en',
+        timezone?: string | null,
+    ): Promise<OfferPdfData> {
         const request = proposal.bookingRequest;
 
         // ── Company details from settings ────────────────────────────────
@@ -1521,6 +1526,10 @@ export class ProposalService {
 
             // Language
             language,
+
+            // Viewer timezone — keeps the cancel-deadline badge in the PDF in
+            // sync with the on-screen Offer Preview (see OfferPdfData.timezone).
+            timezone: timezone ?? null,
         };
     }
 
@@ -1541,6 +1550,7 @@ export class ProposalService {
     async downloadPdf(
         id: string,
         language?: PdfLanguage,
+        timezone?: string | null,
     ): Promise<{ pdfBuffer: Buffer; filename: string }> {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
@@ -1552,7 +1562,7 @@ export class ProposalService {
         // reflects those edits. Documented in the plan as a known
         // trade-off (a snapshot-aware re-render would need a follow-up).
         if (language) {
-            const pdfData = await this.buildPdfData(existing, language);
+            const pdfData = await this.buildPdfData(existing, language, timezone);
             const pdfBuffer = await generateOfferPdf(pdfData);
             return { pdfBuffer, filename: `offer-${id}-${language}.pdf` };
         }
