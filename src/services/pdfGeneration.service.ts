@@ -795,7 +795,13 @@ function buildOfferHtml(data: OfferPdfData): string {
     --row-alt:#F8F9FA;
     --pill:#F5F9E8;
   }
-  @page { size: A4 portrait; margin: 0; }
+  /* Full-bleed left/right/top (navy header + green bands run edge-to-edge),
+     but reserve 140px at the BOTTOM for the running footerTemplate. Without
+     this, Chrome lets body content flow into the footer band and the footer
+     paints ON TOP of it — clipping whatever lands there (e.g. the IBAN /
+     SWIFT rows of the payment table). A bare margin:0 here silently overrides
+     the margin.bottom passed to page.pdf(), so the reserve MUST be on @page. */
+  @page { size: A4 portrait; margin: 0 0 140px 0; }
   html, body {
     margin: 0;
     padding: 0;
