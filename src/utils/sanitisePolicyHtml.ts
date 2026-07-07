@@ -53,6 +53,7 @@ const POLICY_HTML_OPTIONS: IOptions = {
             tagName: 'a',
             attribs: {
                 ...attribs,
+                target: '_blank',
                 rel: 'noopener noreferrer',
             },
         }),

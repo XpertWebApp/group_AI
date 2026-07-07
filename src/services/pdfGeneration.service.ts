@@ -96,6 +96,9 @@ export interface OfferService {
     days: number;
     unitPrice: number;
     totalPrice: number;
+    /** ISO service date range, rendered in the DATE column (dateFrom — dateTo). */
+    dateFrom?: string | null;
+    dateTo?: string | null;
 }
 
 export interface OfferPdfData {
@@ -291,6 +294,21 @@ function formatDateEU(dateStr: string | null | undefined): string {
     } catch {
         return '—';
     }
+}
+
+/**
+ * Service DATE column: "27.11.2026 — 28.11.2026". Falls back to a single date
+ * when only one bound is set, or "—" when neither is. Reuses formatDateEU so
+ * the value matches the on-screen preview and the trip-details date style.
+ */
+function formatServiceDateRange(
+    from: string | null | undefined,
+    to: string | null | undefined,
+): string {
+    const f = from ? formatDateEU(from) : '';
+    const tt = to ? formatDateEU(to) : '';
+    if (f && tt) return `${f} — ${tt}`;
+    return f || tt || '—';
 }
 
 /** EU style: 2.484,00 (period thousands, comma decimal). */
@@ -635,12 +653,14 @@ function renderServiceDetails(
     let subtotal = 0;
     const rowsHtml = services
         .map((s) => {
-            const total = (s.unitPrice ?? 0) * (s.quantity ?? 0) * (s.days ?? 1);
+            // Service total = sell × qty (matches the on-screen preview).
+            // NOTE: do NOT multiply by `days` — it is unrelated to the price.
+            const total = (s.unitPrice ?? 0) * (s.quantity ?? 0);
             subtotal += total;
             return `
                 <div class="row">
                     <div class="col flex">${escapeHtml(s.serviceName || '—')}</div>
-                    <div class="col w130 grey">—</div>
+                    <div class="col w130 grey">${escapeHtml(formatServiceDateRange(s.dateFrom, s.dateTo))}</div>
                     <div class="col w55">${s.quantity ?? 0}</div>
                     <div class="col w80">${symbol}${formatPriceEU(s.unitPrice)}</div>
                     <div class="col w100 bold">${symbol}${formatPriceEU(total)}</div>
@@ -718,7 +738,7 @@ function buildOfferHtml(data: OfferPdfData): string {
         0,
     );
     const servicesTotal = (data.services ?? []).reduce(
-        (acc, s) => acc + ((s.unitPrice ?? 0) * (s.quantity ?? 0) * (s.days ?? 1)),
+        (acc, s) => acc + ((s.unitPrice ?? 0) * (s.quantity ?? 0)),
         0,
     );
     const grandTotal = hotelsTotal + servicesTotal;

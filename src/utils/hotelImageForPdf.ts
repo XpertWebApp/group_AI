@@ -27,6 +27,7 @@
  */
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { Jimp } from 'jimp';
 import logger from './logger';
 import wbeClientService from '../services/wbe.client.service';
 import giataClientService from '../services/giata.client.service';
@@ -35,12 +36,21 @@ import { sortGiataImagesByPriority } from '../config/imagePriority';
 const prisma = new PrismaClient();
 
 /**
- * Cap a single inlined thumbnail at ~200 KB raw (≈ 270 KB after base64).
- * For a 5-hotel proposal that's ~1.3 MB of inlined images — comfortably
- * under any email-attachment limit. Larger originals get rejected so a
- * 4K hero shot can't blow up the PDF.
+ * Thumbnail sizing for inlined PDF images. The hotel card renders the
+ * image at ~160 px wide, so we downscale any large original to at most
+ * THUMBNAIL_MAX_WIDTH px (crisp for print) and re-encode as JPEG before
+ * embedding. This keeps the PDF small AND guarantees an image is never
+ * DROPPED just for being large — hotels whose WBE/GIATA photos are 3–5 MB
+ * full-res JPEGs (e.g. Hotel Gracery Seoul) now still show a photo.
  */
-const MAX_THUMBNAIL_BYTES = 200_000;
+const THUMBNAIL_MAX_WIDTH = 500;
+/** Only pay the resize cost for images bigger than this (small ones pass through). */
+const DOWNSCALE_OVER_BYTES = 120_000;
+/**
+ * Hard sanity ceiling — reject a response bigger than this outright (before
+ * handing it to Jimp) so a broken/huge payload can't OOM the resize step.
+ */
+const HARD_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /**
  * Known WBE placeholder SHA-256 hashes. When the WBE CDN can't serve a
@@ -194,15 +204,37 @@ function isJpegMagic(buf: Buffer): boolean {
 function validateImage(buf: Buffer): ImageReject {
     if (!buf || buf.byteLength === 0) return 'empty';
     if (!isPngMagic(buf) && !isJpegMagic(buf)) return 'not-image';
-    if (buf.byteLength > MAX_THUMBNAIL_BYTES * 4) return 'oversize';
+    // Only reject absurdly huge payloads (Jimp OOM guard). Normal large
+    // photos (3–5 MB) are accepted and downscaled in toDataUri so the image
+    // is never dropped for being big.
+    if (buf.byteLength > HARD_MAX_BYTES) return 'oversize';
     const hash = crypto.createHash('sha256').update(buf).digest('hex');
     if (KNOWN_WBE_PLACEHOLDER_HASHES.has(hash)) return 'placeholder';
     return null;
 }
 
-function toDataUri(result: { data: Buffer; contentType: string }): string {
-    const contentType = result.contentType || 'image/jpeg';
-    return `data:${contentType};base64,${result.data.toString('base64')}`;
+/**
+ * Convert a fetched image to a base64 data URI, downscaling large originals
+ * to a THUMBNAIL_MAX_WIDTH-px JPEG first. Small images pass through as-is.
+ * On any resize error we fall back to embedding the original bytes — better
+ * a big image than no image (the whole point of this path).
+ */
+async function toDataUri(result: { data: Buffer; contentType: string }): Promise<string> {
+    let buf = result.data;
+    let contentType = result.contentType || 'image/jpeg';
+    if (buf.byteLength > DOWNSCALE_OVER_BYTES) {
+        try {
+            const img = await Jimp.read(buf);
+            if (img.width > THUMBNAIL_MAX_WIDTH) {
+                img.resize({ w: THUMBNAIL_MAX_WIDTH }); // keeps aspect ratio
+            }
+            buf = await img.getBuffer('image/jpeg');
+            contentType = 'image/jpeg';
+        } catch (err: any) {
+            logger.warn({ err: err?.message }, 'thumbnail downscale failed — embedding original');
+        }
+    }
+    return `data:${contentType};base64,${buf.toString('base64')}`;
 }
 
 /**
@@ -220,7 +252,7 @@ async function tryGiata(urls: string[]): Promise<string | null> {
                 logger.debug({ reject, url }, 'GIATA image rejected');
                 continue;
             }
-            return toDataUri(result);
+            return await toDataUri(result);
         } catch (err: any) {
             logger.warn(
                 { err: err?.message, url },
@@ -266,7 +298,7 @@ async function tryWbe(keys: string[]): Promise<string | null> {
 
             const reject = validateImage(result.data);
             if (reject === null) {
-                return toDataUri(result);
+                return await toDataUri(result);
             }
 
             if (reject === 'placeholder') {

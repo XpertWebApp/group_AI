@@ -135,6 +135,7 @@ export class ProposalService {
         const enrichedHotels = hotels.map((h: any) => {
             const enrichment = enrichmentByCode.get(h.hotelCode) ?? {
                 imageUrl: null,
+                imageUrls: [],
                 description: null,
                 facilities: [],
             };
@@ -149,6 +150,7 @@ export class ProposalService {
             return {
                 ...h,
                 imageUrl: enrichment.imageUrl,
+                imageUrls: enrichment.imageUrls,
                 description: enrichment.description,
                 facilities: enrichment.facilities,
                 effectiveCancelDeadline,
@@ -1407,7 +1409,12 @@ export class ProposalService {
                 quantity: s.quantity ?? 1,
                 days: s.days ?? 1,
                 unitPrice: Number(s.sellPrice ?? 0),
-                totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1) * (s.days ?? 1),
+                // Total = sell × qty (matches the preview). `days` is NOT a
+                // price multiplier — it's unrelated to the service total.
+                totalPrice: Number(s.sellPrice ?? 0) * (s.quantity ?? 1),
+                // Service date range for the PDF DATE column.
+                dateFrom: s.dateFrom ? new Date(s.dateFrom).toISOString() : null,
+                dateTo: s.dateTo ? new Date(s.dateTo).toISOString() : null,
             }));
 
         // ── Terms & Cancellation: live settings, snapshot fallback ──────

@@ -40,6 +40,15 @@ export interface FeHotelEnrichment {
      *   WBE   → `/api/v1/hotels/image?key=<url-encoded-wbe-key>`
      */
     imageUrl: string | null;
+    /**
+     * FULL ordered fallback chain of proxy image URLs for this hotel —
+     * GIATA (exterior-first priority) followed by every WBE `displayOrder`
+     * key. Same chain the Add-Hotel search card uses, so the FE can
+     * `<img onError>` cascade through it and land on a working photo even
+     * when the GIATA "primary" is a broken placeholder. `imageUrl` is just
+     * `imageUrls[0]` (kept for backward compatibility).
+     */
+    imageUrls: string[];
     /** Short hotel description in the requested language (EN/DE). */
     description: string | null;
     /** Brand-priority facility chip list (already capped + ordered). */
@@ -47,16 +56,21 @@ export interface FeHotelEnrichment {
 }
 
 /**
- * Build the primary image URL for a hotel — GIATA first, WBE fallback.
- * Mirrors the priority chain used in `hotelProbe.worker.ts:1132–1145`
- * so the FE proposal card shows the same image as the FE Add-Hotel card.
+ * Build the FULL ordered image-URL chain for a hotel — every GIATA image
+ * (exterior-first priority) followed by every WBE `displayOrder` key.
+ * Mirrors the search-card chain (`hotelProbe.worker.ts:1132–1145`) so the
+ * proposal card can fall back through the same list and never gets stuck on
+ * a single broken GIATA "primary".
  *
- * Returns the proxy URL string, or null when the hotel has no images.
+ * Returns the ordered proxy-URL list (empty when the hotel has no images).
+ * `imageUrls[0]` is the legacy single `imageUrl`.
  */
-async function buildImageUrl(hotelCode: string): Promise<string | null> {
+async function buildImageUrls(hotelCode: string): Promise<string[]> {
     try {
-        // GIATA preferred — exterior-first priority, smallest size variant
-        // first (the FE will use ~160×120 max, no need for 4K).
+        const urls: string[] = [];
+
+        // GIATA first — exterior-first priority. One URL per image row
+        // (medium size; the FE thumbnail is ~160×120, no need for 4K).
         const giataRows = await prisma.hotelGiataImage.findMany({
             where: { hotelCode },
             select: {
@@ -69,47 +83,44 @@ async function buildImageUrl(hotelCode: string): Promise<string | null> {
                 urlOriginal: true,
             },
         });
-        if (giataRows.length > 0) {
-            const sorted = sortGiataImagesByPriority(giataRows);
-            for (const row of sorted) {
-                const url =
-                    row.urlMedium ??
-                    row.urlLarge ??
-                    row.urlSmall ??
-                    row.urlFullHd ??
-                    row.urlOriginal ??
-                    null;
-                if (url) {
-                    return `/api/v1/hotels/giata-image?url=${encodeURIComponent(url)}`;
-                }
-            }
+        for (const row of sortGiataImagesByPriority(giataRows)) {
+            const url =
+                row.urlMedium ??
+                row.urlLarge ??
+                row.urlSmall ??
+                row.urlFullHd ??
+                row.urlOriginal ??
+                null;
+            if (url) urls.push(`/api/v1/hotels/giata-image?url=${encodeURIComponent(url)}`);
         }
 
-        // WBE fallback — pick the lowest-displayOrder non-empty imageKey.
+        // WBE fallback tail — EVERY non-empty imageKey, displayOrder ASC.
         // CRITICAL: decode the stored key once before encoding for the
         // proxy. The DB stores `…Fes%3D`; the WBE CDN treats encoded vs
         // decoded as different lookups (encoded returns a placeholder).
-        // The proxy route at /api/v1/hotels/image?key=… already decodes
-        // via Express query parsing, so we want our URL to carry the
-        // decoded form once-encoded — same pattern as hotelProbe worker.
-        const wbeRow = await prisma.hotelImage.findFirst({
+        // The proxy route at /api/v1/hotels/image?key=… decodes via Express
+        // query parsing, so we carry the decoded-then-once-encoded form —
+        // same pattern as the hotelProbe worker.
+        const wbeRows = await prisma.hotelImage.findMany({
             where: { hotelCode },
             select: { imageKey: true },
             orderBy: { displayOrder: 'asc' },
         });
-        if (wbeRow?.imageKey) {
-            let decoded = wbeRow.imageKey;
-            try { decoded = decodeURIComponent(wbeRow.imageKey); } catch { /* use as-is */ }
-            return `/api/v1/hotels/image?key=${encodeURIComponent(decoded)}`;
+        for (const wbeRow of wbeRows) {
+            const key = wbeRow.imageKey?.trim();
+            if (!key) continue;
+            let decoded = key;
+            try { decoded = decodeURIComponent(key); } catch { /* use as-is */ }
+            urls.push(`/api/v1/hotels/image?key=${encodeURIComponent(decoded)}`);
         }
 
-        return null;
+        return urls;
     } catch (err: any) {
         logger.warn(
             { err: err?.message, hotelCode },
-            'buildImageUrl failed — FE will render placeholder',
+            'buildImageUrls failed — FE will render placeholder',
         );
-        return null;
+        return [];
     }
 }
 
@@ -131,23 +142,24 @@ export async function resolveHotelEnrichmentForFe(
 
     const deduped = Array.from(new Set(hotelCodes.filter(Boolean)));
     for (const code of deduped) {
-        result.set(code, { imageUrl: null, description: null, facilities: [] });
+        result.set(code, { imageUrl: null, imageUrls: [], description: null, facilities: [] });
     }
 
     // Reuse the PDF enrichment helper for description + facilities — same
-    // queries, same brand-priority ordering. Then build image URLs in
+    // queries, same brand-priority ordering. Then build image URL chains in
     // parallel since each one is a small focused query of its own.
-    const [pdfEnrichment, imageUrls] = await Promise.all([
+    const [pdfEnrichment, imageChains] = await Promise.all([
         resolveHotelEnrichmentForPdf(deduped, language),
-        Promise.all(deduped.map(async (code) => [code, await buildImageUrl(code)] as const)),
+        Promise.all(deduped.map(async (code) => [code, await buildImageUrls(code)] as const)),
     ]);
 
     for (const code of deduped) {
         const pdf = pdfEnrichment.get(code) ?? { description: null, facilities: [] };
-        const urlEntry = imageUrls.find(([c]) => c === code);
-        const imageUrl = urlEntry ? urlEntry[1] : null;
+        const chainEntry = imageChains.find(([c]) => c === code);
+        const imageUrls = chainEntry ? chainEntry[1] : [];
         result.set(code, {
-            imageUrl,
+            imageUrl: imageUrls[0] ?? null,
+            imageUrls,
             description: pdf.description,
             facilities: pdf.facilities,
         });
