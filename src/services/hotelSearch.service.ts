@@ -238,6 +238,12 @@ export interface HotelResult {
     supplierSplit: SupplierSplit[];
     /** Human-readable note for operators. */
     note?: string;
+    /**
+     * WBE "Important Information" (check-in/out times, parking, etc.) from the
+     * supplier's OptionDetailsV2 DayPrices.EssentialInfo. Raw HTML string — the
+     * FE should sanitise/strip before rendering. Null when the supplier gave none.
+     */
+    essentialInfo?: string | null;
 }
 
 export interface HotelSearchResponse {

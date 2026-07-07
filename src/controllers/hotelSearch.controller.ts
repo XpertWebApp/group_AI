@@ -159,6 +159,10 @@ export class HotelSearchController {
     async probeStatus(req: Request, res: Response, next: NextFunction) {
         try {
             const requestId = req.params['id'] as string;
+            // Optional ?language=de — kept for backward compat with FE code that
+            // reads `essentialInfo` directly. The preferred path is `essentialInfoDe`
+            // (always present) which lets the FE switch instantly with no re-fetch.
+            const language: 'en' | 'de' = req.query['language'] === 'de' ? 'de' : 'en';
             const [jobs, storedPhase, paginationCursor] = await Promise.all([
                 hotelProbeJobRepository.findBySearchRequest(requestId),
                 requestRepository.getSearchPhase(requestId),
@@ -200,11 +204,36 @@ export class HotelSearchController {
                 ...new Set(completedJobs.map((j: any) => j.resultJson.hotelCode as string)),
             ];
             const hotelMap = await hotelSearchRepository.getHotelsByCode(hotelCodes);
+            // Re-hydrate "Important Information" (check-in/out, parking) from the
+            // option-detail cache so jobs persisted before essentialInfo was added
+            // to the worker output still surface it (same idea as images below).
+            // Return "Important Information" in BOTH languages so the FE can switch
+            // instantly on the EN/DE toggle (like `descriptions`) WITHOUT re-fetching
+            // or reloading. `essentialInfo` = English, `essentialInfoDe` = German.
+            const [essentialInfoEnMap, essentialInfoDeMap] = await Promise.all([
+                hotelSearchRepository.getEssentialInfoByHotelCodes(hotelCodes, 'en'),
+                hotelSearchRepository.getEssentialInfoByHotelCodes(hotelCodes, 'de'),
+            ]);
             const enrichedJobs = jobs.map((j: any) => {
                 const code = j.resultJson?.hotelCode;
                 if (!code) return j;
+
+                // essentialInfo comes from the option-detail cache / worker output,
+                // NOT the master.Hotel row — resolve up-front so it's ALWAYS present
+                // (string or null) even for hotels with no master row. Both languages
+                // are returned so the FE toggle is instant.
+                const essentialInfoEn = essentialInfoEnMap.get(code) ?? j.resultJson?.essentialInfo ?? null;
+                const essentialInfoDe = essentialInfoDeMap.get(code) ?? null;
+                // `essentialInfo` honors ?language= (backward compat); `essentialInfoDe`
+                // is ALWAYS German so the FE toggle is instant (preferred).
+                const essentialInfo = language === 'de' ? (essentialInfoDe ?? essentialInfoEn) : essentialInfoEn;
+
                 const row = hotelMap.get(code);
-                if (!row) return j;
+                if (!row) {
+                    // No master row → keep persisted images/descriptions, but still
+                    // surface essentialInfo (this was the gap: it used to be dropped).
+                    return { ...j, resultJson: { ...j.resultJson, essentialInfo, essentialInfoDe } };
+                }
 
                 // Mirror the worker's imageUrl chain so jobs persisted before
                 // today's fix retroactively get the full fallback list:
@@ -228,6 +257,8 @@ export class HotelSearchController {
                         ...(row.descriptions ? { descriptions: row.descriptions } : {}),
                         imageUrl: refreshedImageUrl,
                         imageUrls: refreshedImageUrls,
+                        essentialInfo,
+                        essentialInfoDe,
                     },
                 };
             });

@@ -41,6 +41,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "fast-xml-parser": "^5.5.12",
+    "google-translate-api-x": "^10.7.2",
     "googleapis": "^171.4.0",
     "helmet": "^8.1.0",
     "jimp": "^1.6.1",

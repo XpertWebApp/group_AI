@@ -10,8 +10,19 @@ import {
     type SupportedLang,
     type MultiLangDescriptions,
 } from '../utils/hotelDescription';
+import { translateTextsFree } from '../utils/freeTranslate';
 
 const prisma = new PrismaClient();
+
+/**
+ * In-process cache of German translations of the WBE "Important Information"
+ * (EssentialInfo) text, keyed by the source English string. WBE serves this
+ * field only in English and the same boilerplate repeats across thousands of
+ * hotels, so we translate each UNIQUE string once (via the free
+ * google-translate-api-x — NOT DeepL) and reuse it, avoiding a translate call
+ * on every status poll. Cleared on process restart.
+ */
+const ESSENTIAL_INFO_DE_CACHE = new Map<string, string>();
 
 export interface HotelCodeRow {
     hotelCode: string;
@@ -593,6 +604,76 @@ export class HotelSearchRepository {
         return prisma.hotelOptionDetail.findUnique({
             where: { tid },
         });
+    }
+
+    /**
+     * Batched lookup of the "Important Information" (WBE EssentialInfo) for a set
+     * of hotels, from the option-detail cache. Returns hotelCode -> essentialInfo
+     * for the most-recently-fetched cached option that HAS a non-empty value.
+     *
+     * Used by the hotel-search status endpoint to re-hydrate `essentialInfo`
+     * onto jobs whose `resultJson` was persisted before the field was added to
+     * the worker output — mirrors how images/descriptions are re-resolved.
+     */
+    async getEssentialInfoByHotelCodes(
+        hotelCodes: string[],
+        language: 'en' | 'de' = 'en',
+    ): Promise<Map<string, string>> {
+        const out = new Map<string, string>();
+        const codes = Array.from(new Set(hotelCodes.filter(Boolean)));
+        if (codes.length === 0) return out;
+        const rows = await prisma.hotelOptionDetail.findMany({
+            where: { hotelCode: { in: codes }, essentialInfo: { not: null } },
+            select: { hotelCode: true, essentialInfo: true },
+            orderBy: { fetchedAt: 'desc' },
+        });
+        for (const r of rows) {
+            const code = r.hotelCode;
+            const info = r.essentialInfo?.trim();
+            if (code && info && !out.has(code)) out.set(code, info); // first = most recent
+        }
+        // WBE serves EssentialInfo only in English — translate to German on demand
+        // (deduped + cached, via the free google-translate-api-x, NOT DeepL).
+        // Translation failures fall back to the original English.
+        if (language === 'de') await this.translateEssentialInfoMapToDe(out);
+        return out;
+    }
+
+    /** Translate the values of a hotelCode→EssentialInfo map to German in place. */
+    private async translateEssentialInfoMapToDe(map: Map<string, string>): Promise<void> {
+        const uncached = Array.from(new Set(
+            Array.from(map.values()).filter((v) => !ESSENTIAL_INFO_DE_CACHE.has(v)),
+        ));
+        // Small chunks keep each request light AND limit the blast radius of a
+        // single failed request (fewer hotels affected). Cap by count + chars.
+        const MAX_TEXTS = 8;
+        const MAX_CHARS = 12_000;
+        let i = 0;
+        while (i < uncached.length) {
+            const chunk: string[] = [];
+            let chars = 0;
+            while (
+                i < uncached.length
+                && chunk.length < MAX_TEXTS
+                && (chunk.length === 0 || chars + uncached[i].length <= MAX_CHARS)
+            ) {
+                chars += uncached[i].length;
+                chunk.push(uncached[i]);
+                i++;
+            }
+            const translated = await translateTextsFree(chunk, 'en', 'de');
+            chunk.forEach((src, k) => {
+                const de = translated[k];
+                // CRITICAL: only cache a REAL translation. If it equals the source
+                // the translate call fell back to English (failure/rate-limit) —
+                // do NOT cache it, so the next poll retries instead of pinning the
+                // hotel to English forever.
+                if (de && de.trim() && de !== src) ESSENTIAL_INFO_DE_CACHE.set(src, de);
+            });
+        }
+        for (const [code, en] of map) {
+            map.set(code, ESSENTIAL_INFO_DE_CACHE.get(en) ?? en);
+        }
     }
 
     /**

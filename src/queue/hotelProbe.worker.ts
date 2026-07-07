@@ -936,6 +936,9 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
     const validatedSplit: any[] = [];
     const cxlDeadlines: string[] = [];
+    // WBE "Important Information" (check-in/out times, parking, etc.) from
+    // OptionDetailsV2 DayPrices.EssentialInfo — collected so the card can show it.
+    const essentialInfos: string[] = [];
     const OPTION_DETAIL_TTL_HOURS = 2;
 
     for (const entry of allTypeSplitEntries) {
@@ -990,6 +993,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             const detailMealType = field<string>(dayPricesObj, 'MealType', 'mealType');
             const detailMealName = field<string>(dayPricesObj, 'MealName', 'mealName');
             const essentialInfo = field<string>(dayPricesObj, 'EssentialInfo', 'essentialInfo') ?? undefined;
+            if (essentialInfo && essentialInfo.trim()) essentialInfos.push(essentialInfo.trim());
             const supplements = field<any[]>(dayPricesObj, 'Supplements', 'supplements') ?? undefined;
             const detailProviderPrice = field<number>(dayPricesObj, 'ProviderPrice', 'providerPrice');
             const detailProviderCurrency = field<string>(dayPricesObj, 'ProviderCurrency', 'providerCurrency');
@@ -1119,6 +1123,9 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     const earliestCxlDeadline = cxlDeadlines.length > 0
         ? cxlDeadlines.sort()[0]  // ISO strings sort chronologically
         : null;
+
+    // First supplier's "Important Information" (check-in/out, parking, …) for the card.
+    const firstEssentialInfo = essentialInfos.find(Boolean) ?? null;
 
     console.log(`[Step 3.4] PASS ${hotelCode}: validatedRooms=${validatedRoomsAllocated}, suppliers=${validatedSplit.length}, earliestCxlDeadline=${earliestCxlDeadline}`);
 
@@ -1298,6 +1305,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         totalSupplierClaim,
         physicalCapacity,
         cxlDeadline: earliestCxlDeadline,
+        essentialInfo: firstEssentialInfo,
         highestMidRangePrice: buyingPriceBase,
         sellingPricePerRoomPerNight: sellingPrice,
         currency: allOptions[0]?.currency ?? currencyCode,
