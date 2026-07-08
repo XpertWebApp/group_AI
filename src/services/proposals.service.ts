@@ -1417,45 +1417,46 @@ export class ProposalService {
                 dateTo: s.dateTo ? new Date(s.dateTo).toISOString() : null,
             }));
 
-        // ── Terms & Cancellation: live settings, snapshot fallback ──────
-        // Source precedence (per Neha + FE alignment 2026-06-02,
-        // `policies-rich-text-handover.md` §8):
-        //   1. /settings/policies in the requested language (live admin edit)
-        //   2. /settings/policies in the OTHER language (when only one
-        //      translation exists)
-        //   3. The per-request BookingRequest snapshot
-        //      (`termsAndConditions` / `cancellationConditions`) for legacy
-        //      requests created before settings was populated
+        // ── Terms & Cancellation: per-offer edit wins, settings fallback ──
+        // Source precedence (FE alignment 2026-07-08, `pdf-per-offer-policies`
+        // handover). Mirrors ContractPreviewModal:
+        //   1. The per-offer BookingRequest policy
+        //      (`termsAndConditions` / `cancellationConditions`) when staff
+        //      have edited/saved it — a single, language-agnostic text field,
+        //      rendered as-is for BOTH EN and DE.
+        //   2. Otherwise /settings/policies in the requested language (live
+        //      admin edit), then the OTHER language when only one exists.
         //
-        // This matches the FE preview pixel-for-pixel: what staff see in
-        // ContractPreviewModal is what gets sent. Trade-off: editing
-        // /settings/policies AFTER an offer was sent will change what a
-        // re-download shows. Acceptable per product decision; the snapshot
-        // exists only to keep the old data path working.
-        let finalTerms: string | null = null;
-        let finalCxl: string | null = null;
+        // This matches the FE preview: what staff see in ContractPreviewModal
+        // is what the PDF shows. A per-offer edit overrides the global
+        // Settings policy for that offer only.
+        let settingsTerms: string | null = null;
+        let settingsCxl: string | null = null;
 
         try {
             const policies = await settingsService.getPolicies() as Record<string, string>;
             if (language === 'de') {
-                finalTerms = policies?.termsConditionsDe || policies?.termsConditionsEn || null;
-                finalCxl  = policies?.cancellationConditionsDe || policies?.cancellationConditionsEn || null;
+                settingsTerms = policies?.termsConditionsDe || policies?.termsConditionsEn || null;
+                settingsCxl  = policies?.cancellationConditionsDe || policies?.cancellationConditionsEn || null;
             } else {
-                finalTerms = policies?.termsConditionsEn || policies?.termsConditionsDe || null;
-                finalCxl  = policies?.cancellationConditionsEn || policies?.cancellationConditionsDe || null;
+                settingsTerms = policies?.termsConditionsEn || policies?.termsConditionsDe || null;
+                settingsCxl  = policies?.cancellationConditionsEn || policies?.cancellationConditionsDe || null;
             }
         } catch (err) {
-            logger.warn({ err, language }, 'Failed to load /settings/policies — falling back to per-request snapshot');
-            finalTerms = null;
-            finalCxl = null;
+            logger.warn({ err, language }, 'Failed to load /settings/policies — using per-offer policy only');
+            settingsTerms = null;
+            settingsCxl = null;
         }
 
-        // Legacy snapshot fallback — only used when settings is empty for
-        // both languages, OR when the settings call errored. The snapshot is
-        // language-agnostic (pre-bilingual data); we use it as-is regardless
-        // of the requested PDF language.
-        if (!finalTerms && termsAndConditions) finalTerms = termsAndConditions;
-        if (!finalCxl && cancellationConditions) finalCxl = cancellationConditions;
+        // Per-offer policy takes precedence when non-empty; else global settings.
+        // The per-offer field is language-agnostic (same text for EN & DE) and is
+        // intentionally NOT translated below.
+        const finalTerms: string | null = (termsAndConditions && termsAndConditions.trim())
+            ? termsAndConditions
+            : settingsTerms;
+        const finalCxl: string | null = (cancellationConditions && cancellationConditions.trim())
+            ? cancellationConditions
+            : settingsCxl;
 
         // ── Translate dynamic user-entered text if target language ≠ source ─
         // Source is assumed English (staff/webhook input). Only translate when
@@ -1569,34 +1570,18 @@ export class ProposalService {
         const existing = await proposalRepository.findById(id);
         if (!existing) throw { status: 404, message: 'Proposal not found', code: 'NOT_FOUND' };
 
-        // ── Re-generate on language request ─────────────────────────────
-        // Build PdfData from the live proposal state and render fresh.
-        // Note: this reads CURRENT proposal data, not a frozen snapshot.
-        // If the proposal was edited after send, the re-rendered PDF
-        // reflects those edits. Documented in the plan as a known
-        // trade-off (a snapshot-aware re-render would need a follow-up).
-        if (language) {
-            const pdfData = await this.buildPdfData(existing, language, timezone);
-            const pdfBuffer = await generateOfferPdf(pdfData);
-            return { pdfBuffer, filename: `offer-${id}-${language}.pdf` };
-        }
-
-        if (!existing.pdfUrl) {
-            throw { status: 404, message: 'No PDF available for this proposal', code: 'PDF_NOT_FOUND' };
-        }
-
-        // Legacy base64 data URI (backward compatibility)
-        if (existing.pdfUrl.startsWith('data:')) {
-            const base64Data = existing.pdfUrl.split(',')[1];
-            return {
-                pdfBuffer: Buffer.from(base64Data, 'base64'),
-                filename: `offer-${id}.pdf`,
-            };
-        }
-
-        // S3 key — download from object storage
-        const pdfBuffer = await storageService.download(existing.pdfUrl);
-        return { pdfBuffer, filename: `offer-${id}.pdf` };
+        // ── Always regenerate from live proposal state ──────────────────
+        // Build PdfData fresh so the download ALWAYS reflects current data —
+        // including per-offer Terms/Cancellation edits (see buildPdfData
+        // policy precedence). Previously a call without `language` served the
+        // cached `pdfUrl` (generated at draft/send time), which showed
+        // pre-edit policy text and diverged from the on-screen preview.
+        // Regenerating keeps download and preview identical. The frozen
+        // sent-offer snapshot is served separately by downloadOfferPdf.
+        const lang = language ?? 'en';
+        const pdfData = await this.buildPdfData(existing, lang, timezone);
+        const pdfBuffer = await generateOfferPdf(pdfData);
+        return { pdfBuffer, filename: `offer-${id}-${lang}.pdf` };
     }
 }
 
