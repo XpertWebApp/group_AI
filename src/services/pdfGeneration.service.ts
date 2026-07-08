@@ -843,13 +843,14 @@ function buildOfferHtml(data: OfferPdfData): string {
   }
   .doc-header .logo {
     /* Brand-spec 24H Group Offer logo (Brand Guidelines v2 §4.2).
-       Multi-tone artwork (green "SETT" + olive band + white tagline);
-       NO colour filter — the logo's own palette is correct against the
-       navy header. Height tuned so the integrated "-24 H GROUP OFFER"
-       band reads clearly without dominating the navy bar. */
+       Multi-tone artwork (green "SETT" + olive band + white tagline).
+       Brightened to match the Offer Preview (FE uses the same values) so the
+       "-24 H GROUP OFFER" badge reads clearly against the navy header band.
+       Height tuned so the band reads clearly without dominating the navy bar. */
     height: 56px;
     width: auto;
     display: block;
+    filter: brightness(1.7) contrast(1.1);
   }
   .doc-header .meta { text-align: right; }
   .doc-header .meta .label {
