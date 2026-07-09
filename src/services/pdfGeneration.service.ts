@@ -234,7 +234,7 @@ function resolveAsset(filename: string): string | null {
  * missing.
  */
 function getInlineLogoDataUri(): string {
-    const transparent = resolveAsset('group-offer-header-transparent.png');
+    const transparent = resolveAsset('s-e-t-t-groups-logo-black-font (3).png');
     const fallback = resolveAsset('group-offer-header.png');
     const p = transparent ?? fallback;
     if (!p) {
