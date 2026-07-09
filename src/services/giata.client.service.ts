@@ -456,7 +456,10 @@ class GiataClientService {
                     password: config.giata.password!,
                 },
                 responseType: 'arraybuffer',
-                timeout: 15000,
+                // 5s (was 15s): the offer PDF blocks on these fetches, so a
+                // dead/slow candidate URL must fail fast enough for tryGiata to
+                // move on within the caller's per-hotel image budget.
+                timeout: 5000,
             });
             return {
                 data: Buffer.from(response.data),

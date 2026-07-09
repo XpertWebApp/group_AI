@@ -53,6 +53,37 @@ const DOWNSCALE_OVER_BYTES = 120_000;
 const HARD_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /**
+ * Cross-request in-memory cache of resolved thumbnails, keyed by hotelCode.
+ * A hotel's photo is effectively static, but it was re-fetched on EVERY PDF
+ * generation (preview + download + re-download). Those network round-trips to
+ * the flaky WBE/GIATA hosts are the dominant cost of PDF generation (observed
+ * 15–23 s for a handful of hotels). Caching — including negative results —
+ * makes repeat renders instant. In-memory by design: shared across requests
+ * in the process, cleared on restart.
+ */
+const IMAGE_CACHE_OK_TTL_MS = 6 * 60 * 60 * 1000; // 6 h for a resolved image
+const IMAGE_CACHE_MISS_TTL_MS = 10 * 60 * 1000;   // 10 min for a null (lets transient WBE/GIATA outages recover)
+const imageCache = new Map<string, { uri: string | null; expires: number }>();
+
+/**
+ * Per-hotel wall-clock cap so one slow/hanging host can never stall the whole
+ * PDF. A hotel that can't resolve an image in time simply renders without a
+ * thumbnail (images are non-essential) and is cached as a short-lived miss.
+ */
+const PER_HOTEL_IMAGE_BUDGET_MS = 6000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+    return new Promise<T>((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (!settled) { settled = true; resolve(fallback); }
+        }, ms);
+        p.then((v) => { if (!settled) { settled = true; clearTimeout(timer); resolve(v); } })
+            .catch(() => { if (!settled) { settled = true; clearTimeout(timer); resolve(fallback); } });
+    });
+}
+
+/**
  * Known WBE placeholder SHA-256 hashes. When the WBE CDN can't serve a
  * given imageKey (e.g. unauthenticated UAT requests), it returns the
  * same generic "HOTEL" stock image for every request. Embedding that
@@ -354,39 +385,60 @@ export async function resolveHotelImagesForPdf(
     if (hotelCodes.length === 0) return result;
 
     const dedupedCodes = Array.from(new Set(hotelCodes.filter(Boolean)));
-    const candidatesByCode = await loadCandidates(dedupedCodes);
+    const now = Date.now();
+
+    // Serve fresh cache hits immediately; only hit the network for misses.
+    const toFetch: string[] = [];
+    for (const code of dedupedCodes) {
+        const hit = imageCache.get(code);
+        if (hit && hit.expires > now) {
+            result.set(code, hit.uri);
+        } else {
+            toFetch.push(code);
+        }
+    }
+    if (toFetch.length === 0) return result;
+
+    const candidatesByCode = await loadCandidates(toFetch);
 
     await Promise.all(
-        dedupedCodes.map(async (code) => {
-            const candidates = candidatesByCode.get(code);
-            if (!candidates) {
-                result.set(code, null);
-                return;
-            }
-
-            // GIATA first — that's what the FE shows. If every GIATA URL
-            // fails or auth isn't configured, fall through to WBE.
-            const fromGiata = await tryGiata(candidates.giataUrls);
-            if (fromGiata) {
-                result.set(code, fromGiata);
-                return;
-            }
-
-            const fromWbe = await tryWbe(candidates.wbeKeys);
-            if (fromWbe) {
-                result.set(code, fromWbe);
-                return;
-            }
-
-            // Neither source produced a real image — block renders
-            // without a thumbnail.
-            logger.debug(
-                { hotelCode: code, giataCount: candidates.giataUrls.length, wbeCount: candidates.wbeKeys.length },
-                'No usable hotel image after GIATA + WBE fallback',
+        toFetch.map(async (code) => {
+            // Per-hotel budget: a slow/hanging host can never stall the PDF.
+            const uri = await withTimeout(
+                resolveOneHotelImage(code, candidatesByCode.get(code)),
+                PER_HOTEL_IMAGE_BUDGET_MS,
+                null,
             );
-            result.set(code, null);
+            imageCache.set(code, {
+                uri,
+                expires: Date.now() + (uri ? IMAGE_CACHE_OK_TTL_MS : IMAGE_CACHE_MISS_TTL_MS),
+            });
+            result.set(code, uri);
         }),
     );
 
     return result;
+}
+
+/**
+ * Resolve a single hotel's thumbnail: GIATA first (what the FE shows), then
+ * WBE fallback. Returns null if neither source yields a usable image.
+ */
+async function resolveOneHotelImage(
+    code: string,
+    candidates: HotelImageCandidates | undefined,
+): Promise<string | null> {
+    if (!candidates) return null;
+
+    const fromGiata = await tryGiata(candidates.giataUrls);
+    if (fromGiata) return fromGiata;
+
+    const fromWbe = await tryWbe(candidates.wbeKeys);
+    if (fromWbe) return fromWbe;
+
+    logger.debug(
+        { hotelCode: code, giataCount: candidates.giataUrls.length, wbeCount: candidates.wbeKeys.length },
+        'No usable hotel image after GIATA + WBE fallback',
+    );
+    return null;
 }
