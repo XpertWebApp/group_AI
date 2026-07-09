@@ -5,6 +5,39 @@ import { logAuditEvent } from '../utils/audit';
 import logger from '../utils/logger';
 import { BookingRequestStatus } from '@prisma/client';
 import type { ListRequestsOptions } from '../repositories/request.repository';
+import { translateTextsFree } from '../utils/freeTranslate';
+
+/**
+ * Auto-translate the per-offer policy overrides (rich-text HTML) to German via
+ * the free translator, so the FE/PDF can show them under the DE locale without
+ * manual authoring. Empty base → null (FE falls back to the base field).
+ * Both fields go through a single batched call. On translator failure the
+ * helper returns the originals; we treat an unchanged string as "no German
+ * available" and store null so the FE degrades cleanly to English.
+ */
+async function translatePoliciesToDe(
+    terms: string | null | undefined,
+    cancellation: string | null | undefined,
+): Promise<{ termsAndConditionsDe: string | null; cancellationConditionsDe: string | null }> {
+    const t = terms?.trim() ? terms : null;
+    const c = cancellation?.trim() ? cancellation : null;
+    if (!t && !c) return { termsAndConditionsDe: null, cancellationConditionsDe: null };
+
+    const inputs: string[] = [];
+    if (t) inputs.push(t);
+    if (c) inputs.push(c);
+    const out = await translateTextsFree(inputs, 'en', 'de');
+
+    let i = 0;
+    const pick = (src: string | null): string | null => {
+        if (!src) return null;
+        const translated = out[i++];
+        // Unchanged === translator failed/returned original → store null so the
+        // FE shows the English base rather than a stale duplicate.
+        return translated && translated !== src ? translated : null;
+    };
+    return { termsAndConditionsDe: pick(t), cancellationConditionsDe: pick(c) };
+}
 
 /**
  * Comma-separated list of BookingRequestStatus transitions that fire a status-change
@@ -119,9 +152,10 @@ export class RequestService {
             // created on/after config.odoo.gateActiveSince.
             odooContactId: data.odooContactId ?? null,
 
-            // Step 4 – Policies
+            // Step 4 – Policies (+ free German auto-translation)
             termsAndConditions: data.termsAndConditions ?? null,
             cancellationConditions: data.cancellationConditions ?? null,
+            ...(await translatePoliciesToDe(data.termsAndConditions, data.cancellationConditions)),
 
             // Ownership starts unassigned — creating a request is not an owning action.
             // Ownership is claimed on the first add/remove hotel, add/remove service,
@@ -242,9 +276,19 @@ export class RequestService {
             updateData.contactName = data.contactName;
         }
 
-        // Step 4 – Policies
+        // Step 4 – Policies. Regenerate the German auto-translation whenever a
+        // base policy field is edited (cleared → De also cleared).
         for (const f of ['termsAndConditions', 'cancellationConditions']) {
             if (data[f] !== undefined) updateData[f] = data[f];
+        }
+        if (data.termsAndConditions !== undefined || data.cancellationConditions !== undefined) {
+            const nextTerms = data.termsAndConditions !== undefined
+                ? data.termsAndConditions : (existing as any).termsAndConditions;
+            const nextCxl = data.cancellationConditions !== undefined
+                ? data.cancellationConditions : (existing as any).cancellationConditions;
+            const de = await translatePoliciesToDe(nextTerms, nextCxl);
+            if (data.termsAndConditions !== undefined) updateData.termsAndConditionsDe = de.termsAndConditionsDe;
+            if (data.cancellationConditions !== undefined) updateData.cancellationConditionsDe = de.cancellationConditionsDe;
         }
 
         if (data.status) updateData.status = data.status as BookingRequestStatus;

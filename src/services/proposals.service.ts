@@ -1448,14 +1448,21 @@ export class ProposalService {
             settingsCxl = null;
         }
 
-        // Per-offer policy takes precedence when non-empty; else global settings.
-        // The per-offer field is language-agnostic (same text for EN & DE) and is
-        // intentionally NOT translated below.
-        const finalTerms: string | null = (termsAndConditions && termsAndConditions.trim())
-            ? termsAndConditions
+        // When a per-offer override exists, use it (mirrors the FE
+        // `policyForLocale`): for DE, prefer its German auto-translation
+        // (`*ConditionsDe`) and fall back to the English base when the
+        // translation is missing. No per-offer override → global Settings
+        // policy for the active language. The per-offer text is NOT run
+        // through the dynamic-text translator below.
+        const termsAndConditionsDe = (request as any)?.termsAndConditionsDe ?? null;
+        const cancellationConditionsDe = (request as any)?.cancellationConditionsDe ?? null;
+        const perOfferTerms = termsAndConditions && termsAndConditions.trim() ? termsAndConditions : null;
+        const perOfferCxl = cancellationConditions && cancellationConditions.trim() ? cancellationConditions : null;
+        const finalTerms: string | null = perOfferTerms
+            ? (language === 'de' && termsAndConditionsDe?.trim() ? termsAndConditionsDe : perOfferTerms)
             : settingsTerms;
-        const finalCxl: string | null = (cancellationConditions && cancellationConditions.trim())
-            ? cancellationConditions
+        const finalCxl: string | null = perOfferCxl
+            ? (language === 'de' && cancellationConditionsDe?.trim() ? cancellationConditionsDe : perOfferCxl)
             : settingsCxl;
 
         // ── Translate dynamic user-entered text if target language ≠ source ─

@@ -338,6 +338,11 @@ model BookingRequest {
   customerNotes          String?                    @map("customer_notes")
   termsAndConditions     String?                    @map("terms_and_conditions")
   cancellationConditions String?                    @map("cancellation_conditions")
+  /// German (HTML) auto-translation of the per-offer policy overrides, produced
+  /// via the free translator at save time and refreshed when the base field
+  /// changes. NULL = not translated yet; FE/PDF fall back to the base field.
+  termsAndConditionsDe     String?                  @map("terms_and_conditions_de")
+  cancellationConditionsDe String?                  @map("cancellation_conditions_de")
   assignedUserId         String?                    @map("assigned_user_id") @db.Uuid
   assignedUser           User?                      @relation("BookingRequestAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
   /// Terminal-detection signal for the polling frontend.

@@ -59,9 +59,11 @@ const FULL_SELECT = {
     guestListFileKey: true,
     customerNotes: true,
     odooContactId: true,
-    // Step 4 – Policies
+    // Step 4 – Policies (+ German auto-translations)
     termsAndConditions: true,
     cancellationConditions: true,
+    termsAndConditionsDe: true,
+    cancellationConditionsDe: true,
     // System
     source: true,
     status: true,
