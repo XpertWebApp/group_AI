@@ -292,10 +292,29 @@ export class HotelSearchController {
     async calculatePrice(req: Request, res: Response, next: NextFunction) {
         try {
             const body = (req as any).validated?.body ?? req.body;
-            const { buyingPrice, markupPercent } = body;
+            const { buyingPrice, markupPercent, perType } = body;
 
+            // Per-type mode: return one calculation trail per room type
+            // plus the shared markup %. FE "Show calculation" panel reads
+            // this. When both `perType` and `buyingPrice` are given,
+            // we return both — the legacy single value for backwards
+            // compatibility, and the array so the caller can pick.
+            if (Array.isArray(perType) && perType.length > 0) {
+                const byType = hotelSearchService.calculateSellPricesByType(perType, markupPercent);
+                const response: any = {
+                    markupPercent: byType.markupPercent,
+                    perType: byType.results,
+                };
+                if (typeof buyingPrice === 'number') {
+                    const single = hotelSearchService.calculateSellPrice(buyingPrice, markupPercent);
+                    response.buyingPrice = single.buyingPrice;
+                    response.sellPrice = single.sellPrice;
+                }
+                return sendResponse(res, 200, response, 'Prices calculated');
+            }
+
+            // Legacy single-price mode — unchanged shape for existing callers.
             const result = hotelSearchService.calculateSellPrice(buyingPrice, markupPercent);
-
             return sendResponse(res, 200, result, 'Price calculated');
         } catch (error) {
             next(error);

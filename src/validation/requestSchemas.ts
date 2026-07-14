@@ -543,9 +543,30 @@ export const OptionDetailsRequestSchema = z.object({
 
 // ── Price Calculation (Step 7) ────────────────────────────────────────────
 export const PriceCalculationSchema = z.object({
-    buyingPrice: z.number().positive(),
+    /**
+     * Legacy single-price input. When present alone, the endpoint returns
+     * one { buyingPrice, sellPrice, markupPercent } object — same as
+     * before, no behaviour change for existing callers.
+     */
+    buyingPrice: z.number().positive().optional(),
     markupPercent: z.number().min(0).max(100).optional(),
-});
+    /**
+     * Per-type input (2026-07-14). When present, the endpoint returns
+     * a per-type breakdown with the full calculation trail. Used by the
+     * "Show calculation" panel on the staff Add-Hotel / Added-Hotels
+     * views. At least one of `buyingPrice` or `perType` must be provided.
+     */
+    perType: z
+        .array(z.object({
+            roomType: z.string().min(1).max(40),
+            buyingPrice: z.number().positive(),
+        }))
+        .min(1)
+        .optional(),
+}).refine(
+    (v) => v.buyingPrice !== undefined || (v.perType !== undefined && v.perType.length > 0),
+    { message: 'Either `buyingPrice` or `perType` (non-empty) is required.' },
+);
 
 // ── Settings: Staff Management ─────────────────────────────────────────────
 export const ListStaffQuerySchema = z.object({

@@ -83,6 +83,48 @@ function resolveNationalityCode(
 }
 
 /**
+ * Resolve the meal-type filter for a WBE probe.
+ *
+ * Precedence:
+ *   1. Caller-supplied override (`params.mealType`) — this is what the FE
+ *      normally passes on the search API call, mapped from the request's
+ *      stored `breakfastPreference`.
+ *   2. Server-side fallback to `request.breakfastPreference` — a safety
+ *      net for the case where the FE (or an alternate caller like Postman
+ *      / a script / an untested new call site) forgets to pass mealType.
+ *      When the fallback fires, we log a warning so a future FE regression
+ *      surfaces in monitoring instead of silently selling RO rates for BB
+ *      requests. That failure mode caused request #522's Savoy Crest offer
+ *      to be built on RO rates instead of BB (2026-07-14 04:30 UTC window
+ *      — see incident notes).
+ *   3. `undefined` if the request itself has no breakfast preference set.
+ *      With `undefined`, the worker's meal filter is deliberately dropped
+ *      (search returns all meal plans). This preserves the existing
+ *      "relaxation past meal_dropped" behaviour and the very rare case
+ *      where a request row has no preference at all.
+ *
+ * Callers should read this once and pass the result down. Do NOT re-derive
+ * inside a hot loop.
+ */
+function resolveMealType(
+    paramOverride: string | null | undefined,
+    request: { id: string; breakfastPreference?: string | null },
+): string | undefined {
+    if (paramOverride) return paramOverride;
+
+    const stored = request.breakfastPreference;
+    if (stored) {
+        logger.warn(
+            { requestId: request.id, breakfastPreference: stored },
+            'Meal-type absent from search params — falling back to request.breakfastPreference. Check the FE is passing mealType on the /hotel-search call.',
+        );
+        return stored;
+    }
+
+    return undefined;
+}
+
+/**
  * Read the requested star categories from a BookingRequest row.
  *
  * Strategy: prefer the new multi-select `starRatings` array. If it's
@@ -175,7 +217,37 @@ export interface SupplierSplit {
     supplierCode: string;
     tid: string;
     rooms: number;
+    /** Net (buying) price per room per night from the supplier. */
     pricePerRoomPerNight: number;
+    /**
+     * Room type this split covers (single, twin, triple, quadruple,
+     * standardDoubleBeds, quadruple__sub_double, etc.). Populated by
+     * the probe worker's per-type allocation step. Optional for
+     * backwards-compat with older cached rows.
+     */
+    roomType?: string;
+    /**
+     * Customer-facing sell price per room per night for this specific
+     * room type. Computed by the worker as:
+     *   sell = psych(ceil(net × (1 + markup% / 100)))
+     * Same formula as the hotel-level `sellingPricePerRoomPerNight`,
+     * applied per row. Optional because legacy cached rows may not have
+     * this field.
+     */
+    sellPricePerRoomPerNight?: number;
+    /**
+     * Full calculation trail for the "how was this calculated" staff
+     * panel. Exposes every intermediate value so nothing is opaque.
+     * Optional for the same backwards-compat reason.
+     */
+    sellCalculation?: {
+        buyingPrice: number;      // net input (same as pricePerRoomPerNight)
+        markupPercent: number;    // effective markup %
+        raw: number;              // net × (1 + markup/100), unrounded
+        ceil: number;             // Math.ceil(raw)
+        psychAdjustment: number;  // -2, -1, or 0
+        sellPrice: number;        // final ceil + psychAdjustment
+    };
     currency: string;
 }
 
@@ -1632,9 +1704,14 @@ export class HotelSearchService {
             'location_dropped',
             'facilities_dropped',
         ]);
+        // Resolve meal type via the helper so a missing params.mealType
+        // (FE regression, script/Postman call, etc.) falls back to the
+        // request's stored breakfastPreference instead of silently
+        // returning ALL meal plans (which caused the #522 incident).
+        const resolvedMealType = resolveMealType(params.mealType, request as any);
         const probeMealType = RELAXED_PAST_MEAL.has(relaxResult.appliedLevel)
             ? undefined
-            : params.mealType;
+            : resolvedMealType;
 
         for (const dbHotel of dbHotels) {
             const jobId = randomUUID();
@@ -2264,9 +2341,12 @@ export class HotelSearchService {
             'location_dropped',
             'facilities_dropped',
         ]);
+        // Same server-side meal-type fallback as searchForRequest — protects
+        // the auto-offer webhook path from silently dropping the meal filter.
+        const resolvedMealTypeAuto = resolveMealType(params.mealType, request as any);
         const probeMealType = RELAXED_PAST_MEAL_AUTO.has(relaxResult.appliedLevel)
             ? undefined
-            : params.mealType;
+            : resolvedMealTypeAuto;
 
         for (const dbHotel of sortedHotels) {
             const jobId = randomUUID();
@@ -2433,6 +2513,12 @@ export class HotelSearchService {
         const alreadyProbed = new Set(existingJobs.map((j) => j.hotelCode));
         const freshHotels = batch.filter((h) => !alreadyProbed.has(h.hotelCode));
 
+        // Same server-side meal-type fallback as the main search flow.
+        // Paginated follow-up batches otherwise pass through `params.mealType`
+        // raw — a missing value here would silently drop the meal filter for
+        // every additional batch, causing the same #522-style incident.
+        const resolvedMealTypeAdditional = resolveMealType(params.mealType, request as any);
+
         for (const dbHotel of freshHotels) {
             const jobId = randomUUID();
             await hotelProbeJobRepository.create({
@@ -2453,7 +2539,7 @@ export class HotelSearchService {
                 currencyCode,
                 nationalityCode,
                 waitSeconds,
-                mealType: params.mealType,
+                mealType: resolvedMealTypeAdditional,
                 markupPercent,
                 expandedRooms,
                 dominantRoomType,
@@ -2736,6 +2822,69 @@ export class HotelSearchService {
         else if (rounded % 5 === 0) psychPrice = rounded - 1; // €195 → €194
 
         return { buyingPrice, sellPrice: psychPrice, markupPercent: effectiveMarkup };
+    }
+
+    /**
+     * Per-room-type sell-price calculator.
+     *
+     * Requested by the client (2026-07-14): "The system should calculate
+     * separate selling prices for each room type based on that room type's
+     * supplier prices." Previously we took a single mid-range net price
+     * and applied it to every room type, causing single rooms and
+     * quadruples to be quoted at the same rate — which is wrong for
+     * both parties (undercharges on the expensive types, overcharges on
+     * the cheap ones).
+     *
+     * This is the formula (Option A — direct per-type):
+     *
+     *   raw    = net × (1 + markup% / 100)         ← same markup for all types
+     *   ceil   = Math.ceil(raw)                     ← never round DOWN
+     *   psych  = ceil - 2  if ceil % 10 == 0        ← €200 → €198
+     *          | ceil - 1  if ceil % 5 == 0         ← €195 → €194
+     *          | ceil      otherwise
+     *   sell   = psych
+     *
+     * We return the FULL calculation trail per row so the FE can show
+     * the "how was this calculated" panel the client asked for:
+     *   { roomType, buyingPrice, markupPercent, raw, ceil, psychAdjustment, sellPrice }
+     *
+     * @param entries per-type net prices, one per row
+     * @param markupPercent optional override; falls back to Settings value
+     */
+    calculateSellPricesByType(
+        entries: Array<{ roomType: string; buyingPrice: number }>,
+        markupPercent?: number,
+    ): {
+        markupPercent: number;
+        results: Array<{
+            roomType: string;
+            buyingPrice: number;
+            markupPercent: number;
+            raw: number;              // net × (1 + markup%) — the pre-rounding value
+            ceil: number;             // Math.ceil(raw)
+            psychAdjustment: number;  // -2, -1, or 0 depending on ceil
+            sellPrice: number;        // final customer-facing price
+        }>;
+    } {
+        const effectiveMarkup = markupPercent ?? getDefaultMarkupPercentSync();
+        const results = entries.map((e) => {
+            const raw = e.buyingPrice * (1 + effectiveMarkup / 100);
+            const ceil = Math.ceil(raw);
+            let psychAdjustment = 0;
+            if (ceil % 10 === 0) psychAdjustment = -2;
+            else if (ceil % 5 === 0) psychAdjustment = -1;
+            const sellPrice = ceil + psychAdjustment;
+            return {
+                roomType: e.roomType,
+                buyingPrice: e.buyingPrice,
+                markupPercent: effectiveMarkup,
+                raw,
+                ceil,
+                psychAdjustment,
+                sellPrice,
+            };
+        });
+        return { markupPercent: effectiveMarkup, results };
     }
 
     /**

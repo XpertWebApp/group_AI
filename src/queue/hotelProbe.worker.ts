@@ -1167,6 +1167,49 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
     if (rounded % 10 === 0) sellingPrice = rounded - 2;
     else if (rounded % 5 === 0) sellingPrice = rounded - 1;
 
+    // ── Per-room-type sell prices (2026-07-14 client request) ─────────────
+    // "The system should calculate separate selling prices for each room
+    // type based on that room type's supplier prices." — we compute a full
+    // calculation trail per row (net → raw → ceil → psychology → sell)
+    // right here so downstream consumers (FE search card, FE calculation
+    // panel, "add to proposal" flow) can display and reuse it without
+    // re-deriving.
+    //
+    // Rule matches the hotel-level formula above exactly, applied per row:
+    //   raw   = net × (1 + markup% / 100)
+    //   ceil  = Math.ceil(raw)
+    //   psych = -2 if ceil%10==0, -1 if ceil%5==0, 0 otherwise
+    //   sell  = ceil + psych
+    //
+    // We MUTATE validatedSplit in place, adding two fields per entry:
+    //   sellPricePerRoomPerNight: number
+    //   sellCalculation: { buyingPrice, markupPercent, raw, ceil, psychAdjustment, sellPrice }
+    //
+    // The mutation is safe here because validatedSplit is a locally-built
+    // array not yet written anywhere. Nothing downstream depends on the
+    // narrower shape.
+    for (const entry of validatedSplit as any[]) {
+        const netForType = typeof entry.detailPricePerRoomPerNight === 'number' && entry.detailPricePerRoomPerNight > 0
+            ? entry.detailPricePerRoomPerNight
+            : (typeof entry.pricePerRoomPerNight === 'number' ? entry.pricePerRoomPerNight : 0);
+        if (netForType <= 0) continue;
+        const rawEntry = netForType * (1 + markupPercent / 100);
+        const ceilEntry = Math.ceil(rawEntry);
+        let psychEntry = 0;
+        if (ceilEntry % 10 === 0) psychEntry = -2;
+        else if (ceilEntry % 5 === 0) psychEntry = -1;
+        const sellEntry = ceilEntry + psychEntry;
+        entry.sellPricePerRoomPerNight = sellEntry;
+        entry.sellCalculation = {
+            buyingPrice: netForType,
+            markupPercent,
+            raw: rawEntry,
+            ceil: ceilEntry,
+            psychAdjustment: psychEntry,
+            sellPrice: sellEntry,
+        };
+    }
+
     // Build note with overlap/unverified context
     const noteLines: string[] = [];
     if (overlapDetected) {
