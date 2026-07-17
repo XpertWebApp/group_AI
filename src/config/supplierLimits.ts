@@ -23,24 +23,37 @@ export interface SupplierLimit {
 }
 
 // ── Static fallback (used before DB cache is loaded) ────────────────────────
+// Kept in sync with the official WBE Supplier list (see migration
+// 20260717000000_update_supplier_limits_wbe_list). The DB table
+// `app.supplier_limits` is the source of truth at runtime; this map is only the
+// startup/failover fallback.
 const SUPPLIER_LIMITS_FALLBACK: Record<string, SupplierLimit> = {
-    BMMX: { code: 'BMMX', name: 'BookMe Maldives', maxRooms: 9, groupsAllowed: true },
+    'AIC (XTG)': { code: 'AIC (XTG)', name: 'AIC Travel Group', maxRooms: 9, groupsAllowed: true },
+    BMMX: { code: 'BMMX', name: 'BookMe Maldives (XTG)', maxRooms: 9, groupsAllowed: true },
     DDT: { code: 'DDT', name: 'Dida Travel', maxRooms: 9, groupsAllowed: true },
     DOTW: { code: 'DOTW', name: 'DOTW', maxRooms: 9, groupsAllowed: true },
+    // Expedia: WBE lists PKG Rates + SA Rates; both use supplier code EANRP.
+    EANRP: { code: 'EANRP', name: 'Expedia Group', maxRooms: 9, groupsAllowed: true },
     GG: { code: 'GG', name: 'GoGlobal', maxRooms: 9, groupsAllowed: true },
-    HBA: { code: 'HBA', name: 'HotelBeds', maxRooms: 6, groupsAllowed: true, notes: 'Problems above 6 rooms' },
+    'GTS (XTG)': { code: 'GTS (XTG)', name: 'GTS (XTG)', maxRooms: 9, groupsAllowed: true },
+    HBA: { code: 'HBA', name: 'HotelBeds ApiTude', maxRooms: 6, groupsAllowed: true, notes: 'Problems above 6 rooms' },
     HTS: { code: 'HTS', name: 'Hotelston', maxRooms: 9, groupsAllowed: true },
+    'HTS 1': { code: 'HTS 1', name: 'Hotelston 1', maxRooms: 9, groupsAllowed: true },
     HPC: { code: 'HPC', name: 'HP Coral', maxRooms: 9, groupsAllowed: true },
     HPG: { code: 'HPG', name: 'HyperGuest', maxRooms: null, groupsAllowed: true, notes: 'No limit' },
-    WRW_ILSX: { code: 'WRW_ILSX', name: 'Illusions (XTG-WRW)', maxRooms: 9, groupsAllowed: true },
     ILSX: { code: 'ILSX', name: 'Illusions (XTG)', maxRooms: 9, groupsAllowed: true },
+    ILS3X: { code: 'ILS3X', name: 'Illusions X3 (XTG)', maxRooms: 9, groupsAllowed: true },
     MK7: { code: 'MK7', name: 'Miki V7', maxRooms: 9, groupsAllowed: true },
+    NBDX: { code: 'NBDX', name: 'Nordbeds', maxRooms: 9, groupsAllowed: true },
     POW_S: { code: 'POW_S', name: 'POW_S', maxRooms: 0, groupsAllowed: false, notes: 'Not for groups' },
     RS: { code: 'RS', name: 'Restel', maxRooms: 9, groupsAllowed: true },
+    RBSX: { code: 'RBSX', name: 'Roibos (XTG)', maxRooms: 9, groupsAllowed: true },
     RMXML: { code: 'RMXML', name: 'RoomsXML', maxRooms: 7, groupsAllowed: true, notes: 'Many problems' },
-    SETT: { code: 'SETT', name: 'Extranet', maxRooms: 9, groupsAllowed: true, notes: 'Internal' },
+    SETT: { code: 'SETT', name: 'SETT Extranet', maxRooms: 9, groupsAllowed: true, notes: 'Internal' },
+    SMYX: { code: 'SMYX', name: 'Smyrooms (XTC)', maxRooms: 9, groupsAllowed: true },
     SNH: { code: 'SNH', name: 'Sun Hotels', maxRooms: 9, groupsAllowed: true },
-    TLE_S: { code: 'TLE_S', name: 'TLE_S', maxRooms: 0, groupsAllowed: false, notes: 'Not for groups' },
+    TBX_S: { code: 'TBX_S', name: 'Mideast Travel', maxRooms: 9, groupsAllowed: true },
+    TLE_S: { code: 'TLE_S', name: 'TALE TRAVEL', maxRooms: 0, groupsAllowed: false, notes: 'Not for groups' },
     YLG: { code: 'YLG', name: 'Yalago', maxRooms: 9, groupsAllowed: true },
 };
 
@@ -57,15 +70,30 @@ export async function refreshSupplierLimitsCache(): Promise<void> {
         const rows = await prisma.supplierLimit.findMany();
         await prisma.$disconnect();
 
-        const map: Record<string, SupplierLimit> = {};
+        // Supplier codes are no longer unique (e.g. Expedia PKG + SA both use
+        // EANRP). Group rows by code and collapse each group to ONE effective
+        // limit — the MOST RESTRICTIVE: min rooms, and groups allowed only if
+        // every row for that code allows groups.
+        const grouped: Record<string, typeof rows> = {};
         for (const row of rows) {
-            map[row.supplierCode] = {
-                code: row.supplierCode,
-                name: row.providerName,
-                // DB stores 0 for unlimited (HPG), convert to null for backward compat
-                maxRooms: row.maxRooms === 0 && row.groupsAllowed ? null : row.maxRooms,
-                groupsAllowed: row.groupsAllowed,
-                notes: row.notes ?? undefined,
+            (grouped[row.supplierCode] ??= []).push(row);
+        }
+
+        const map: Record<string, SupplierLimit> = {};
+        for (const [code, group] of Object.entries(grouped)) {
+            const groupsAllowed = group.every((r) => r.groupsAllowed);
+            // Per-row effective max: 0 rooms + groups allowed = unlimited (HPG).
+            const effectiveMax = group.map((r) =>
+                r.maxRooms === 0 && r.groupsAllowed ? Infinity : r.maxRooms,
+            );
+            const minMax = Math.min(...effectiveMax);
+            const first = group[0]!;
+            map[code] = {
+                code,
+                name: first.providerName,
+                maxRooms: minMax === Infinity ? null : minMax,
+                groupsAllowed,
+                notes: first.notes ?? undefined,
             };
         }
         cachedLimits = map;

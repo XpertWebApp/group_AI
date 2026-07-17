@@ -358,15 +358,55 @@ export class SettingsService {
         return supplierLimitsRepository.findAll(opts);
     }
 
-    async updateSupplierLimit(supplierCode: string, data: { maxRooms?: number; groupsAllowed?: boolean; notes?: string }) {
-        const existing = await supplierLimitsRepository.findByCode(supplierCode);
-        if (!existing) {
-            throw new Error(`Supplier limit not found for code: ${supplierCode}`);
-        }
-        const result = await supplierLimitsRepository.update(supplierCode, data);
-        // Refresh the in-memory cache so hotelSearch picks up changes immediately
+    async createSupplierLimit(data: {
+        supplierCode: string;
+        providerName: string;
+        accCode?: string | null;
+        maxRooms?: number;
+        groupsAllowed?: boolean;
+        notes?: string | null;
+    }) {
+        // supplier_code is not unique — duplicates are allowed by design.
+        const result = await supplierLimitsRepository.create(data);
+        // Refresh the in-memory cache so hotelSearch picks up the new supplier.
         await refreshSupplierLimitsCache();
         return result;
+    }
+
+    /**
+     * Update a supplier limit. `idOrCode` is the row's UUID (preferred) or, for
+     * backward compatibility, its supplier code.
+     */
+    async updateSupplierLimit(
+        idOrCode: string,
+        data: {
+            supplierCode?: string;
+            providerName?: string;
+            accCode?: string | null;
+            maxRooms?: number;
+            groupsAllowed?: boolean;
+            notes?: string | null;
+        },
+    ) {
+        const existing = await supplierLimitsRepository.findByIdOrCode(idOrCode);
+        if (!existing) {
+            throw new Error(`Supplier limit not found: ${idOrCode}`);
+        }
+        const result = await supplierLimitsRepository.update(existing.id, data);
+        // Refresh the in-memory cache so hotelSearch picks up changes immediately.
+        await refreshSupplierLimitsCache();
+        return result;
+    }
+
+    /** Delete a supplier limit by row UUID (or, for compat, supplier code). */
+    async deleteSupplierLimit(idOrCode: string) {
+        const existing = await supplierLimitsRepository.findByIdOrCode(idOrCode);
+        if (!existing) {
+            throw new Error(`Supplier limit not found: ${idOrCode}`);
+        }
+        await supplierLimitsRepository.delete(existing.id);
+        await refreshSupplierLimitsCache();
+        return { id: existing.id };
     }
 }
 

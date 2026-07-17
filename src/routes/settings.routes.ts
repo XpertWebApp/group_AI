@@ -13,6 +13,7 @@ import {
     UpdateCompanyDetailsSchema,
     UpdatePoliciesSchema,
     UpdateSupplierLimitSchema,
+    CreateSupplierLimitSchema,
     SupplierLimitsQuerySchema,
     ListStaffQuerySchema,
     AddStaffSchema,
@@ -75,7 +76,9 @@ router.put('/policies', validate(UpdatePoliciesSchema), settingsController.updat
 
 // Supplier Limits
 router.get('/supplier-limits', validate(SupplierLimitsQuerySchema, 'query'), settingsController.getSupplierLimits);
-router.patch('/supplier-limits/:supplierCode', validate(UpdateSupplierLimitSchema), settingsController.updateSupplierLimit);
+router.post('/supplier-limits', validate(CreateSupplierLimitSchema), settingsController.createSupplierLimit);
+router.patch('/supplier-limits/:id', validate(UpdateSupplierLimitSchema), settingsController.updateSupplierLimit);
+router.delete('/supplier-limits/:id', settingsController.deleteSupplierLimit);
 
 // Staff Management
 router.get('/staff', validate(ListStaffQuerySchema, 'query'), staffController.list);

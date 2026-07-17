@@ -193,14 +193,41 @@ export class SettingsController {
     }
 
     /**
-     * PATCH /api/v1/settings/supplier-limits/:supplierCode
+     * POST /api/v1/settings/supplier-limits
+     */
+    async createSupplierLimit(req: Request, res: Response, next: NextFunction) {
+        try {
+            const data = (req as any).validated.body;
+            const result = await settingsService.createSupplierLimit(data);
+            return sendResponse(res, 201, result, 'Supplier created');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * PATCH /api/v1/settings/supplier-limits/:id
+     * `:id` is the row UUID (or, for compat, the supplier code).
      */
     async updateSupplierLimit(req: Request, res: Response, next: NextFunction) {
         try {
-            const { supplierCode } = req.params;
+            const { id } = req.params;
             const data = (req as any).validated.body;
-            const result = await settingsService.updateSupplierLimit(supplierCode as string, data);
+            const result = await settingsService.updateSupplierLimit(id as string, data);
             return sendResponse(res, 200, result, 'Supplier limit updated');
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/settings/supplier-limits/:id
+     */
+    async deleteSupplierLimit(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { id } = req.params;
+            const result = await settingsService.deleteSupplierLimit(id as string);
+            return sendResponse(res, 200, result, 'Supplier deleted');
         } catch (error) {
             next(error);
         }

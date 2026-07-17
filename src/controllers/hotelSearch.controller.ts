@@ -3,6 +3,7 @@ import hotelSearchService from '../services/hotelSearch.service';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import requestRepository from '../repositories/request.repository';
+import supplierLimitsRepository from '../repositories/supplierLimits.repository';
 import { subscribe } from '../services/sseManager';
 import { sendResponse } from '../utils/response';
 
@@ -214,6 +215,18 @@ export class HotelSearchController {
                 hotelSearchRepository.getEssentialInfoByHotelCodes(hotelCodes, 'en'),
                 hotelSearchRepository.getEssentialInfoByHotelCodes(hotelCodes, 'de'),
             ]);
+
+            // Supplier code -> human provider name, so each supplierSplit entry can
+            // carry the readable name per room type (FE shows "Supplier" per room type).
+            const supplierNameMap = await supplierLimitsRepository.getAllAsMap();
+            const enrichSplit = (split: any) =>
+                Array.isArray(split)
+                    ? split.map((s: any) => ({
+                          ...s,
+                          providerName: supplierNameMap[s.supplierCode]?.providerName ?? s.supplierCode ?? null,
+                      }))
+                    : split;
+
             const enrichedJobs = jobs.map((j: any) => {
                 const code = j.resultJson?.hotelCode;
                 if (!code) return j;
@@ -232,7 +245,15 @@ export class HotelSearchController {
                 if (!row) {
                     // No master row → keep persisted images/descriptions, but still
                     // surface essentialInfo (this was the gap: it used to be dropped).
-                    return { ...j, resultJson: { ...j.resultJson, essentialInfo, essentialInfoDe } };
+                    return {
+                        ...j,
+                        resultJson: {
+                            ...j.resultJson,
+                            essentialInfo,
+                            essentialInfoDe,
+                            supplierSplit: enrichSplit(j.resultJson?.supplierSplit),
+                        },
+                    };
                 }
 
                 // Mirror the worker's imageUrl chain so jobs persisted before
@@ -259,6 +280,7 @@ export class HotelSearchController {
                         imageUrls: refreshedImageUrls,
                         essentialInfo,
                         essentialInfoDe,
+                        supplierSplit: enrichSplit(j.resultJson?.supplierSplit),
                     },
                 };
             });

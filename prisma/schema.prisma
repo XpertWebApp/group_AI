@@ -695,7 +695,7 @@ model HotelProbeJob {
 
 model SupplierLimit {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  supplierCode  String   @unique @map("supplier_code") @db.VarChar(50)
+  supplierCode  String   @map("supplier_code") @db.VarChar(50)
   providerName  String   @map("provider_name") @db.VarChar(255)
   accCode       String?  @map("acc_code") @db.VarChar(50)
   maxRooms      Int      @default(9) @map("max_rooms")

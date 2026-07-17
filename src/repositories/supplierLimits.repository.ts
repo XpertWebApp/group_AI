@@ -50,24 +50,59 @@ export class SupplierLimitsRepository {
         return { data, total, page, limit };
     }
 
-    /**
-     * Get a single supplier limit by supplier code.
-     */
-    async findByCode(supplierCode: string) {
-        return prisma.supplierLimit.findUnique({ where: { supplierCode } });
+    /** UUID v4-ish check to tell an id apart from a supplier code. */
+    private isUuid(value: string): boolean {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    }
+
+    /** Get a single row by primary-key id. */
+    async findById(id: string) {
+        return prisma.supplierLimit.findUnique({ where: { id } });
     }
 
     /**
-     * Update a supplier limit's maxRooms (and optionally other fields).
+     * Get a single row by supplier code. Codes are no longer unique, so this
+     * returns the first match (used for legacy lookups / matching).
      */
+    async findByCode(supplierCode: string) {
+        return prisma.supplierLimit.findFirst({ where: { supplierCode } });
+    }
+
+    /** Resolve a row by id (if the value looks like a UUID) or by supplier code. */
+    async findByIdOrCode(idOrCode: string) {
+        return this.isUuid(idOrCode) ? this.findById(idOrCode) : this.findByCode(idOrCode);
+    }
+
+    /** Create a new supplier limit row. */
+    async create(data: {
+        supplierCode: string;
+        providerName: string;
+        accCode?: string | null;
+        maxRooms?: number;
+        groupsAllowed?: boolean;
+        notes?: string | null;
+    }) {
+        return prisma.supplierLimit.create({ data });
+    }
+
+    /** Update a supplier limit row by its primary-key id. */
     async update(
-        supplierCode: string,
-        data: { maxRooms?: number; groupsAllowed?: boolean; providerName?: string; accCode?: string; notes?: string },
+        id: string,
+        data: {
+            supplierCode?: string;
+            maxRooms?: number;
+            groupsAllowed?: boolean;
+            providerName?: string;
+            accCode?: string | null;
+            notes?: string | null;
+        },
     ) {
-        return prisma.supplierLimit.update({
-            where: { supplierCode },
-            data,
-        });
+        return prisma.supplierLimit.update({ where: { id }, data });
+    }
+
+    /** Delete a supplier limit row by its primary-key id. */
+    async delete(id: string) {
+        return prisma.supplierLimit.delete({ where: { id } });
     }
 
     /**

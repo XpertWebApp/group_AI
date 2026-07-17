@@ -473,7 +473,22 @@ export const UpdatePoliciesSchema = z.object({
 });
 
 // ── Settings: Supplier Limits ───────────────────────────────────────────────
+export const CreateSupplierLimitSchema = z.object({
+    // supplierCode is NOT unique — duplicates allowed (e.g. Expedia PKG + SA both EANRP).
+    supplierCode: z.string().trim().min(1).max(50),
+    providerName: z.string().trim().min(1).max(255),
+    accCode: z.string().trim().max(50).nullable().optional(),
+    maxRooms: z.number().int().min(0).optional(),
+    groupsAllowed: z.boolean().optional(),
+    notes: z.string().max(500).nullable().optional(),
+});
+
 export const UpdateSupplierLimitSchema = z.object({
+    // supplierCode is the WBE matching key. It can be renamed here, but it must
+    // always match the code WBE returns or the supplier's room cap stops applying.
+    supplierCode: z.string().trim().min(1).max(50).optional(),
+    providerName: z.string().trim().min(1).max(255).optional(),
+    accCode: z.string().trim().max(50).nullable().optional(),
     maxRooms: z.number().int().min(0).optional(),
     groupsAllowed: z.boolean().optional(),
     notes: z.string().max(500).nullable().optional(),
