@@ -2,7 +2,7 @@ import { SettingCategory } from '@prisma/client';
 import settingsRepository from '../repositories/settings.repository';
 import supplierLimitsRepository from '../repositories/supplierLimits.repository';
 import staffRepository from '../repositories/staff.repository';
-import { refreshSupplierLimitsCache } from '../config/supplierLimits';
+import { refreshSupplierLimitsCache, type SupplierPriority } from '../config/supplierLimits';
 import { sanitisePolicyHtml, isFullyStrippedByPolicy } from '../utils/sanitisePolicyHtml';
 import {
     EMAIL_SENDER_KEYS,
@@ -364,6 +364,7 @@ export class SettingsService {
         accCode?: string | null;
         maxRooms?: number;
         groupsAllowed?: boolean;
+        priority?: SupplierPriority;
         notes?: string | null;
     }) {
         // supplier_code is not unique — duplicates are allowed by design.
@@ -385,6 +386,7 @@ export class SettingsService {
             accCode?: string | null;
             maxRooms?: number;
             groupsAllowed?: boolean;
+            priority?: SupplierPriority;
             notes?: string | null;
         },
     ) {

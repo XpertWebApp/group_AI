@@ -11,7 +11,7 @@ import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import wbeClientService from '../services/wbe.client.service';
 import { broadcast } from '../services/sseManager';
-import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
+import { getSupplierMaxRooms, isGroupAllowed, getCappedMax, getSupplierPriority, SUPPLIER_PRIORITY_RANK } from '../config/supplierLimits';
 import { isYouthFriendlyName } from '../config/youthFriendlyPatterns';
 import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
@@ -69,7 +69,24 @@ function matchesRoomType(roomDescriptions: string[], requestedType: string | nul
 }
 
 function buildSupplierSplit(options: any[], targetRooms: number, totalRoomsNeeded: number) {
-    const sorted = [...options].sort((a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight);
+    // Priority-first, cheapest-first tie-break.
+    //
+    // Client rule (Oliver, 2026-07-XX): allocate from higher-priority
+    // suppliers first, regardless of price. Within the same priority tier,
+    // fall back to cheapest-first. AVOID suppliers are still eligible but
+    // come last — they're only used if higher tiers can't fulfil the room.
+    //
+    // Priority tiers (see SUPPLIER_PRIORITY_RANK):
+    //   HIGH   (0) — HyperGuest, Roibos
+    //   MEDIUM (1) — Expedia, Sun Hotels, DOTW, etc.
+    //   LOW    (2) — HotelBeds, GoGlobal, RoomsXML
+    //   AVOID  (3) — TALE, Mideast, POW
+    const sorted = [...options].sort((a, b) => {
+        const rankA = SUPPLIER_PRIORITY_RANK[getSupplierPriority(a.supplierCode)];
+        const rankB = SUPPLIER_PRIORITY_RANK[getSupplierPriority(b.supplierCode)];
+        if (rankA !== rankB) return rankA - rankB;         // higher priority first
+        return a.pricePerRoomPerNight - b.pricePerRoomPerNight; // then cheapest first
+    });
     const split: any[] = [];
     let remaining = targetRooms;
     for (const opt of sorted) {

@@ -443,10 +443,31 @@ export class ProposalRepository {
         data: { rooms?: any; totalPrice?: number; currency?: string },
     ) {
         return prisma.$transaction(async (tx) => {
+            // Merge incoming rooms into the existing rooms JSON instead of
+            // wholesale-replacing. This preserves fields the FE didn't send
+            // — specifically `maxQty` and `supplierBreakdown` (set once at
+            // add-hotel time), plus any other keys the FE sends a partial
+            // update for. Prevents the qty-stepper (which sends
+            // `{ qty: N }` only) from wiping supplier metadata.
+            let mergedRooms: any = undefined;
+            if (data.rooms !== undefined) {
+                const existing = await tx.proposalHotel.findUnique({
+                    where: { id: hotelId },
+                    select: { rooms: true },
+                });
+                const existingRooms = (existing?.rooms ?? {}) as Record<string, any>;
+                const incoming = (data.rooms ?? {}) as Record<string, any>;
+                const out: Record<string, any> = { ...existingRooms };
+                for (const [roomType, patch] of Object.entries(incoming)) {
+                    out[roomType] = { ...(existingRooms[roomType] ?? {}), ...(patch as any) };
+                }
+                mergedRooms = out;
+            }
+
             const hotel = await tx.proposalHotel.update({
                 where: { id: hotelId },
                 data: {
-                    ...(data.rooms !== undefined && { rooms: data.rooms }),
+                    ...(mergedRooms !== undefined && { rooms: mergedRooms }),
                     ...(data.totalPrice !== undefined && { totalPrice: new Decimal(data.totalPrice).toFixed(2) }),
                     ...(data.currency !== undefined && { currency: data.currency }),
                 },

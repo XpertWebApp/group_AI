@@ -9,6 +9,13 @@ export interface SupplierLimitRow {
     accCode: string | null;
     maxRooms: number;
     groupsAllowed: boolean;
+    /**
+     * Allocation priority tier. Controls the order in which suppliers are
+     * picked during hotel search — HIGH first, AVOID last, cheapest-first
+     * tie-break within the same tier. See src/config/supplierLimits.ts
+     * SupplierPriority type for the full mapping to Oliver's language.
+     */
+    priority: 'HIGH' | 'MEDIUM' | 'LOW' | 'AVOID';
     notes: string | null;
     updatedAt: Date;
     createdAt: Date;
@@ -40,6 +47,11 @@ export class SupplierLimitsRepository {
         const [data, total] = await Promise.all([
             prisma.supplierLimit.findMany({
                 where,
+                // Alphabetical by code as before — priority sorting is a
+                // display concern the FE can toggle if needed (via a
+                // "Group by priority" table view). Keeping the DB order
+                // stable prevents pagination surprises when priorities
+                // change.
                 orderBy: { supplierCode: 'asc' },
                 skip,
                 take: limit,
@@ -80,6 +92,7 @@ export class SupplierLimitsRepository {
         accCode?: string | null;
         maxRooms?: number;
         groupsAllowed?: boolean;
+        priority?: 'HIGH' | 'MEDIUM' | 'LOW' | 'AVOID';
         notes?: string | null;
     }) {
         return prisma.supplierLimit.create({ data });
@@ -92,6 +105,7 @@ export class SupplierLimitsRepository {
             supplierCode?: string;
             maxRooms?: number;
             groupsAllowed?: boolean;
+            priority?: 'HIGH' | 'MEDIUM' | 'LOW' | 'AVOID';
             providerName?: string;
             accCode?: string | null;
             notes?: string | null;

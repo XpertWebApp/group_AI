@@ -8,7 +8,7 @@ import wbeClientService from './wbe.client.service';
 import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
-import { getSupplierMaxRooms, isGroupAllowed, getCappedMax } from '../config/supplierLimits';
+import { getSupplierMaxRooms, isGroupAllowed, getCappedMax, getSupplierPriority, SUPPLIER_PRIORITY_RANK } from '../config/supplierLimits';
 import { loadDefaultMarkupPercent, getDefaultMarkupPercentSync } from './settings.service';
 import {
     PROBE_BATCH_SIZE,
@@ -666,7 +666,16 @@ function buildSupplierSplit(
     targetContribution: number,
     totalRoomsNeeded: number,
 ): SupplierSplit[] {
-    const sorted = [...midBandOptions].sort((a, b) => a.pricePerRoomPerNight - b.pricePerRoomPerNight);
+    // Priority-first, cheapest-first tie-break — see hotelProbe.worker.ts
+    // buildSupplierSplit for the full rationale. Must stay in sync with
+    // that copy: the two functions differ in call-site details but share
+    // the same allocation rule.
+    const sorted = [...midBandOptions].sort((a, b) => {
+        const rankA = SUPPLIER_PRIORITY_RANK[getSupplierPriority(a.supplierCode)];
+        const rankB = SUPPLIER_PRIORITY_RANK[getSupplierPriority(b.supplierCode)];
+        if (rankA !== rankB) return rankA - rankB;         // higher priority first
+        return a.pricePerRoomPerNight - b.pricePerRoomPerNight; // then cheapest first
+    });
     const split: SupplierSplit[] = [];
     let remaining = targetContribution;
 

@@ -239,6 +239,25 @@ const RoomDetailSchema = z.object({
     sell: z.number().nonnegative(),
     qty: z.number().int().nonnegative(),
     nights: z.number().int().nonnegative(),
+    /**
+     * Maximum quantity the supplier(s) can actually deliver for this
+     * room type at this hotel. Populated by the BE at add-hotel time
+     * from the search response's supplierSplit[]. Used by the FE
+     * qty-stepper to cap increments. Optional so legacy proposals
+     * without the field still work.
+     */
+    maxQty: z.number().int().nonnegative().optional(),
+    /**
+     * Per-supplier breakdown for this room type. Same source and
+     * purpose as maxQty. Optional; empty array or missing = FE falls
+     * back to hotel-level supplierCode.
+     */
+    supplierBreakdown: z
+        .array(z.object({
+            supplierCode: z.string().min(1).max(50),
+            rooms: z.number().int().nonnegative(),
+        }))
+        .optional(),
 });
 
 export const AddProposalHotelSchema = z.object({
@@ -246,6 +265,32 @@ export const AddProposalHotelSchema = z.object({
     hotelName: z.string().max(500).optional(),
     tid: z.string().optional(),
     rooms: z.record(z.string(), RoomDetailSchema).optional(),
+    /**
+     * Per-type supplier breakdown from the hotel-search response. When
+     * present, the BE enriches `rooms.<type>.supplierBreakdown` and
+     * `rooms.<type>.maxQty` before saving — used by the FE's qty-stepper
+     * hint ("HBA 4 · EANRP 2 · max 6") and by the manual room-split
+     * feature to cap increments at supplier-verified availability.
+     *
+     * Each entry represents one supplier fulfilling one room type at
+     * this hotel. The FE sources it from `HotelResult.supplierSplit[]`
+     * — see hotelSearch.service.ts SupplierSplit interface.
+     *
+     * Optional and additive: legacy FE callers that don't send this
+     * still work (the rooms JSON just won't have the enrichment
+     * fields, and the FE falls back to the hotel-level supplierCode).
+     */
+    supplierSplit: z
+        .array(z.object({
+            supplierCode: z.string().min(1).max(50),
+            tid: z.string().optional(),
+            rooms: z.number().int().nonnegative(),
+            roomType: z.string().min(1).max(40),
+            pricePerRoomPerNight: z.number().nonnegative().optional(),
+            sellPricePerRoomPerNight: z.number().nonnegative().optional(),
+            currency: z.string().min(2).max(10).optional(),
+        }))
+        .optional(),
     currency: z.string().min(2).max(10),
     totalPrice: z.number().nonnegative(),
     freeCancellation: z.boolean().optional(),
@@ -473,6 +518,11 @@ export const UpdatePoliciesSchema = z.object({
 });
 
 // ── Settings: Supplier Limits ───────────────────────────────────────────────
+// Priority tier (2026-07-XX, per Oliver's ask). Controls the allocation
+// order during hotel search — HIGH picked first, AVOID last. Within the
+// same tier, cheapest-first is the tie-breaker. Default is MEDIUM.
+const SupplierPriorityEnum = z.enum(['HIGH', 'MEDIUM', 'LOW', 'AVOID']);
+
 export const CreateSupplierLimitSchema = z.object({
     // supplierCode is NOT unique — duplicates allowed (e.g. Expedia PKG + SA both EANRP).
     supplierCode: z.string().trim().min(1).max(50),
@@ -480,6 +530,7 @@ export const CreateSupplierLimitSchema = z.object({
     accCode: z.string().trim().max(50).nullable().optional(),
     maxRooms: z.number().int().min(0).optional(),
     groupsAllowed: z.boolean().optional(),
+    priority: SupplierPriorityEnum.optional(),
     notes: z.string().max(500).nullable().optional(),
 });
 
@@ -491,6 +542,7 @@ export const UpdateSupplierLimitSchema = z.object({
     accCode: z.string().trim().max(50).nullable().optional(),
     maxRooms: z.number().int().min(0).optional(),
     groupsAllowed: z.boolean().optional(),
+    priority: SupplierPriorityEnum.optional(),
     notes: z.string().max(500).nullable().optional(),
 });
 

@@ -48,6 +48,97 @@ const DECLINABLE_STATUSES: ProposalStatus[] = [
     ProposalStatus.sent,
 ];
 
+/**
+ * Enrich the `rooms` JSON on an add-hotel payload with per-type
+ * `supplierBreakdown` and `maxQty`, sourced from the supplierSplit[]
+ * the FE forwarded from the hotel-search response.
+ *
+ * Input shape (what the FE POSTs today):
+ *   {
+ *     rooms: { single: { qty, sell, net, nights }, ... },
+ *     supplierSplit: [
+ *       { roomType: "single", supplierCode: "HBA",   rooms: 4 },
+ *       { roomType: "single", supplierCode: "EANRP", rooms: 2 },
+ *       { roomType: "triple", supplierCode: "HBA",   rooms: 3 },
+ *     ]
+ *   }
+ *
+ * Output shape (what we persist):
+ *   {
+ *     rooms: {
+ *       single: {
+ *         qty: 6, sell: ..., net: ..., nights: ...,
+ *         maxQty: 6,                       ← sum of supplierBreakdown rooms
+ *         supplierBreakdown: [
+ *           { supplierCode: "HBA",   rooms: 4 },
+ *           { supplierCode: "EANRP", rooms: 2 },
+ *         ]
+ *       },
+ *       triple: {
+ *         qty: 3, ...,
+ *         maxQty: 3,
+ *         supplierBreakdown: [
+ *           { supplierCode: "HBA", rooms: 3 },
+ *         ]
+ *       }
+ *     }
+ *   }
+ *
+ * Rules:
+ *  - If `supplierSplit` is missing/empty, return input unchanged
+ *    (legacy FE callers still work).
+ *  - If a room type appears in `rooms` but has no matching supplierSplit
+ *    entries, leave it as-is (don't fabricate a breakdown).
+ *  - If a room type appears in supplierSplit but NOT in `rooms`, skip it
+ *    (FE didn't ask us to persist that type — respect the FE's shape).
+ *  - Preserve any pre-existing `maxQty` or `supplierBreakdown` the FE
+ *    might have set explicitly (defensive: never overwrite user intent).
+ */
+function enrichRoomsWithSupplierBreakdown(hotelData: any): any {
+    const rooms = hotelData?.rooms;
+    const split = hotelData?.supplierSplit;
+    if (!rooms || typeof rooms !== 'object') return hotelData;
+    if (!Array.isArray(split) || split.length === 0) return hotelData;
+
+    // Group supplierSplit entries by roomType, dropping any with missing
+    // fields (defensive — Zod already validated, but this runs after
+    // spread/serialisation so the check is cheap insurance).
+    const byRoomType: Record<string, Array<{ supplierCode: string; rooms: number }>> = {};
+    for (const entry of split) {
+        if (!entry || typeof entry !== 'object') continue;
+        const rt = String(entry.roomType ?? '').trim();
+        const sc = String(entry.supplierCode ?? '').trim();
+        const rms = Number(entry.rooms ?? 0);
+        if (!rt || !sc || !Number.isFinite(rms) || rms < 0) continue;
+        (byRoomType[rt] ??= []).push({ supplierCode: sc, rooms: rms });
+    }
+
+    // Build the enriched rooms object. Only mutate types that appear in
+    // both `rooms` (FE-supplied) and `byRoomType` (supplierSplit).
+    const enrichedRooms: Record<string, any> = {};
+    for (const [roomType, detail] of Object.entries(rooms as Record<string, any>)) {
+        const breakdown = byRoomType[roomType];
+        if (!breakdown || breakdown.length === 0) {
+            // No supplier data for this type — pass through unchanged.
+            enrichedRooms[roomType] = detail;
+            continue;
+        }
+        const maxQty = breakdown.reduce((s, b) => s + b.rooms, 0);
+        enrichedRooms[roomType] = {
+            ...detail,
+            // Never overwrite explicit FE-supplied values.
+            maxQty: detail?.maxQty ?? maxQty,
+            supplierBreakdown: detail?.supplierBreakdown ?? breakdown,
+        };
+    }
+
+    // Return a new hotelData object with the enriched rooms; drop the
+    // supplierSplit field so it doesn't reach the DB writer (which
+    // doesn't know about it — Prisma would error on an unknown key).
+    const { supplierSplit: _unused, ...rest } = hotelData;
+    return { ...rest, rooms: enrichedRooms };
+}
+
 function assertModifiable(proposal: any) {
     if (!MODIFIABLE_STATUSES.includes(proposal.status)) {
         throw {
@@ -205,9 +296,17 @@ export class ProposalService {
         assertNotLocked(existing, userId);
         this.claimForRequest(existing.requestId, userId, ip);
 
+        // Enrich the rooms JSON with per-type supplier breakdown + maxQty
+        // when the FE forwarded the hotel-search supplierSplit. Purely
+        // additive — legacy FE callers that don't send supplierSplit still
+        // work, the rooms JSON just lacks the enrichment fields and the
+        // FE falls back to hotel-level supplierCode. See FE handover
+        // 2026-07-15 (manual room split qty stepper hint).
+        const enrichedHotelData = enrichRoomsWithSupplierBreakdown(hotelData);
+
         const result = await proposalRepository.addHotelTx(
             id,
-            hotelData,
+            enrichedHotelData,
             (existing.markupSettings as any) ?? undefined,
         );
 

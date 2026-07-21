@@ -664,6 +664,30 @@ enum HotelProbeJobStatus {
   @@schema("app")
 }
 
+/// Priority tier for supplier selection during hotel search allocation.
+/// Higher tiers are allocated first; within the same tier, cheapest-first
+/// is the tie-breaker.
+///
+/// Mapping to Oliver's own words (2026-07-XX):
+///   HIGH   = "push"     — HyperGuest, Roibos (unlimited rooms)
+///   MEDIUM = "preferred" — Expedia (PKG + SA), SNH, DOTW
+///   LOW    = "careful"   — HBA, GG, RMXML, ABR, TBO (max 5-6 rooms)
+///   AVOID  = "avoid"     — TLE, TBX, POW (only used if nothing else can fulfil)
+///
+/// Notes:
+///   - AVOID is NOT the same as groupsAllowed=false. AVOID suppliers are
+///     still eligible if no higher-priority supplier can fulfil the room;
+///     groupsAllowed=false excludes them entirely.
+///   - New / unknown suppliers default to MEDIUM (see refreshSupplierLimitsCache).
+enum SupplierPriority {
+  HIGH
+  MEDIUM
+  LOW
+  AVOID
+
+  @@schema("app")
+}
+
 model HotelProbeJob {
   id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   searchRequestId String              @map("search_request_id") @db.Uuid
@@ -700,6 +724,11 @@ model SupplierLimit {
   accCode       String?  @map("acc_code") @db.VarChar(50)
   maxRooms      Int      @default(9) @map("max_rooms")
   groupsAllowed Boolean  @default(true) @map("groups_allowed")
+  /// Priority tier for allocation sorting during hotel search.
+  /// HIGH suppliers are picked first, cheapest-first within the same tier.
+  /// AVOID is a last-resort tier — used only when no other supplier can fulfil
+  /// a hotel's room-type demand. Default is MEDIUM for new/unknown suppliers.
+  priority      SupplierPriority @default(MEDIUM)
   notes         String?
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
   createdAt     DateTime @default(now()) @map("created_at")
