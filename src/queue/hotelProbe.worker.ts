@@ -1,4 +1,4 @@
-import { getChannel, HOTEL_PROBE_QUEUE } from './rabbitmq.client';
+import { getChannel, HOTEL_PROBE_QUEUE, onReconnect } from './rabbitmq.client';
 import {
     HotelProbeJobPayload,
     HotelProbeCompletedEvent,
@@ -1397,10 +1397,30 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 // ─── Worker startup ───────────────────────────────────────────────────────────
 
 export async function startHotelProbeWorker(): Promise<void> {
+    // Register the consumer setup as a reconnect callback FIRST so any
+    // future channel drop triggers auto-recovery. The callback is a
+    // no-op if the channel isn't ready yet — that's fine, the initial
+    // registerConsumer() call below handles the boot path.
+    onReconnect(registerConsumer);
+
+    // Initial boot registration. If this fails (RabbitMQ genuinely down at
+    // boot), the reconnect loop in rabbitmq.client will keep retrying and
+    // re-run our callback once it succeeds.
+    await registerConsumer();
+}
+
+/**
+ * Wire the ch.consume() handler on the current channel. Called once at
+ * boot AND on every successful reconnect (via the onReconnect callback
+ * registered above). Must be idempotent — calling it multiple times on
+ * the SAME channel would double-consume every message, but each call
+ * gets a fresh channel so that's fine in practice.
+ */
+async function registerConsumer(): Promise<void> {
     const ch = await getChannel();
 
     if (!ch) {
-        logger.warn('Hotel probe worker skipped — RabbitMQ not available');
+        logger.warn('Hotel probe worker skipped — RabbitMQ not available (will retry on reconnect)');
         return;
     }
 
