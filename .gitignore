@@ -52,3 +52,5 @@ Thumbs.db
 
 # Public files (docs, images, Figma assets)
 src/publicfiles/
+
+docs
