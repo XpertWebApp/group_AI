@@ -119,6 +119,12 @@ interface ScenarioResult {
     currency?: string;
     nonRefundable?: boolean | null;
     cancelledAfterwards?: boolean;
+    /**
+     * WBE accepted the cancellation but the supplier has not settled it yet
+     * (status PNDC). Distinct from cancelledAfterwards=false, which means the
+     * booking is genuinely still live and someone has to act on it.
+     */
+    cancellationPending?: boolean;
     optionsFound?: number;
     error?: string;
     durationMs: number;
@@ -512,10 +518,14 @@ async function attemptOption(
         try {
             const cancelled = await wbeBookingService.cancel(booking.id);
             partial.cancelledAfterwards = cancelled.status === 'cancelled';
+            // PNDC: WBE took the request and is waiting on the supplier. The
+            // booking is on its way out, so it does not belong in the
+            // still-open warning at the end of the run.
+            partial.cancellationPending = cancelled.status === 'pending_cancellation';
             log.ok(
                 cancelled.status === 'cancelled'
                     ? `Cancelled (charge: ${cancelled.cancellationCharge ?? 0})`
-                    : `Cancellation pending manual confirmation at WBE`,
+                    : `Cancellation accepted by WBE, awaiting supplier settlement (PNDC)`,
             );
         } catch (err: any) {
             log.warn(`Cancellation failed — booking left open, cancel manually: ${err.message}`);
@@ -665,7 +675,9 @@ async function main() {
     // Leaving a confirmed booking open costs money at its deadline. The filter
     // keeps rows whose nonRefundable is null as well as false — an unknown
     // flag is exactly the case that needs a human to look.
-    const openBookings = booked.filter((r) => r.cancelledAfterwards === false && !r.nonRefundable);
+    const openBookings = booked.filter(
+        (r) => r.cancelledAfterwards === false && !r.cancellationPending && !r.nonRefundable,
+    );
     if (openBookings.length > 0) {
         console.log('\n  \x1b[33mWARNING — these bookings are still open and will be charged at deadline:\x1b[0m');
         openBookings.forEach((r) =>
@@ -674,6 +686,14 @@ async function main() {
                     (r.nonRefundable == null ? '  (refundability unknown)' : ''),
             ),
         );
+    }
+
+    // Accepted by WBE but not settled by the supplier. No action needed, but
+    // worth stating so the run does not look like it left something behind.
+    const pending = booked.filter((r) => r.cancellationPending);
+    if (pending.length > 0) {
+        console.log('\n  Cancellation accepted, awaiting supplier settlement (no action needed):');
+        pending.forEach((r) => console.log(`    Scenario ${r.scenarioId}: ${r.bookingReference}`));
     }
 
     await prisma.$disconnect();
