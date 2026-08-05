@@ -196,13 +196,18 @@ function addNights(iso: string, nights: number): string {
 // ── Search with destination fallback ─────────────────────────────────────────
 
 /**
- * Search each candidate destination until one yields options.
+ * Yield each candidate destination that returns options, in order.
  *
  * UAT suppliers answer inconsistently, so a destination returning nothing is
  * expected rather than a failure — WBE says as much in the certification notes.
  * Only exhausting every candidate counts as a real miss.
+ *
+ * A generator rather than a single result: a destination can return plenty of
+ * options and still have none that are refundable, and the caller cannot know
+ * that until it has prebooked them. Yielding lets it move to the next city
+ * instead of giving up on the first one that answered.
  */
-async function searchWithFallback(scenario: CertificationScenario, checkIn: string) {
+async function* searchWithFallback(scenario: CertificationScenario, checkIn: string) {
     for (const dest of cfg.DESTINATION_CANDIDATES) {
         try {
             const result = await certificationSearchService.search({
@@ -219,9 +224,10 @@ async function searchWithFallback(scenario: CertificationScenario, checkIn: stri
 
             if (result.totalOptions > 0) {
                 log.ok(`${dest.name}: ${result.totalOptions} option(s) across ${result.hotels.length} hotel(s)`);
-                return { result, destination: dest };
+                yield { result, destination: dest };
+            } else {
+                log.info(`${dest.name}: no options, trying next destination`);
             }
-            log.info(`${dest.name}: no options, trying next destination`);
         } catch (err: any) {
             log.warn(`${dest.name}: search failed — ${err.message}`);
         }
@@ -300,44 +306,56 @@ async function runScenario(
     }
 
     const checkIn = checkInDate();
-    const found = await searchWithFallback(scenario, checkIn);
-    if (!found) {
-        log.fail('No options at any candidate destination');
-        return done({ error: 'No availability at any candidate destination', optionsFound: 0 });
-    }
-
-    const { result, destination } = found;
-    const candidates = rankOptions(result.hotels);
-    if (candidates.length === 0) {
-        log.fail('Search returned hotels but no usable option');
-        return done({ destination: destination.name, error: 'No usable option', optionsFound: 0 });
-    }
+    let searched = false;
+    let lastError: string | undefined;
+    let lastDestination: string | undefined;
+    let lastOptionCount = 0;
 
     // Refundability is only known after prebook, so when a candidate comes back
     // nonrefundable for a refundable scenario we prebook the next one instead
     // of giving up. Prebook holds inventory briefly but creates no reservation,
-    // so an abandoned attempt costs nothing. Bounded so a destination whose
-    // every option is nonrefundable cannot loop through hundreds of them.
-    const maxAttempts = Math.min(candidates.length, cfg.MAX_OPTION_ATTEMPTS);
-    let lastError: string | undefined;
+    // so an abandoned attempt costs nothing. Bounded per destination so a city
+    // whose entire inventory is nonrefundable cannot work through all of it,
+    // and the search then moves on to the next city rather than stopping.
+    for await (const { result, destination } of searchWithFallback(scenario, checkIn)) {
+        searched = true;
+        lastDestination = destination.name;
+        lastOptionCount = result.totalOptions;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const outcome = await attemptOption(
-            scenario,
-            opts,
-            candidates[attempt]!,
-            { result, destination, checkIn },
-            attempt,
-            maxAttempts,
+        const candidates = rankOptions(result.hotels);
+        if (candidates.length === 0) {
+            log.info(`${destination.name}: no usable option, trying next destination`);
+            continue;
+        }
+
+        const maxAttempts = Math.min(candidates.length, cfg.MAX_OPTION_ATTEMPTS);
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const outcome = await attemptOption(
+                scenario,
+                opts,
+                candidates[attempt]!,
+                { result, destination, checkIn },
+                attempt,
+                maxAttempts,
+            );
+            if (outcome.done) return outcome.done;
+            lastError = outcome.retryReason;
+        }
+
+        log.warn(
+            `${destination.name}: no refundable option in ${maxAttempts} attempt(s) — trying next destination`,
         );
-        if (outcome.done) return outcome.done;
-        lastError = outcome.retryReason;
     }
 
-    log.fail(`No refundable option found after ${maxAttempts} attempt(s)`);
+    if (!searched) {
+        log.fail('No options at any candidate destination');
+        return done({ error: 'No availability at any candidate destination', optionsFound: 0 });
+    }
+
+    log.fail('No refundable option at any candidate destination');
     return done({
-        destination: destination.name,
-        optionsFound: result.totalOptions,
+        destination: lastDestination,
+        optionsFound: lastOptionCount,
         status: 'skipped',
         error: lastError ?? 'No refundable option available',
     });
@@ -457,8 +475,13 @@ async function attemptOption(
         }
     } catch (err: any) {
         const code = err instanceof BookingFlowError ? ` [${err.code}]` : '';
-        log.fail(`Prebook failed${code}: ${err.message}`);
-        return { done: done({ ...partial, error: `prebook failed: ${err.message}` }) };
+        // A prebook rejection is about this option, not the scenario: WBE
+        // refuses individual rates for reasons we cannot see from the search
+        // response (CancellationPolicy Error is the common one). Nothing has
+        // been reserved, so the sensible response is the next candidate rather
+        // than failing a scenario that other options could still satisfy.
+        log.warn(`Prebook rejected${code}: ${err.message} — trying another option`);
+        return { retryReason: `prebook failed: ${err.message}` };
     }
 
     if (!opts.book) {
