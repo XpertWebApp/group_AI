@@ -433,6 +433,15 @@ async function runScenario(
     } else if (booking.nonRefundable) {
         log.warn('Nonrefundable — left in place (cancelling would incur a charge)');
         partial.cancelledAfterwards = false;
+    } else if (opts.cancelAfter) {
+        // nonRefundable is nullable and WBE does not always return the field.
+        // Neither branch above matches when it is null, so without this the
+        // booking stays open silently and is charged at its deadline.
+        log.warn(
+            'Refundability unknown (WBE returned no NonRefundable flag) — ' +
+                'not cancelled automatically. Check this booking and cancel it manually.',
+        );
+        partial.cancelledAfterwards = false;
     }
 
     return done({ ...partial, status: 'booked' });
@@ -534,11 +543,18 @@ async function main() {
         failed.forEach((r) => console.log(`    Scenario ${String(r.scenarioId).padStart(2)}: ${r.error}`));
     }
 
-    // Leaving a confirmed booking open costs money at its deadline.
+    // Leaving a confirmed booking open costs money at its deadline. The filter
+    // keeps rows whose nonRefundable is null as well as false — an unknown
+    // flag is exactly the case that needs a human to look.
     const openBookings = booked.filter((r) => r.cancelledAfterwards === false && !r.nonRefundable);
     if (openBookings.length > 0) {
-        console.log('\n  \x1b[33mWARNING — these refundable bookings are still open and will be charged at deadline:\x1b[0m');
-        openBookings.forEach((r) => console.log(`    Scenario ${r.scenarioId}: ${r.bookingReference}`));
+        console.log('\n  \x1b[33mWARNING — these bookings are still open and will be charged at deadline:\x1b[0m');
+        openBookings.forEach((r) =>
+            console.log(
+                `    Scenario ${r.scenarioId}: ${r.bookingReference}` +
+                    (r.nonRefundable == null ? '  (refundability unknown)' : ''),
+            ),
+        );
     }
 
     await prisma.$disconnect();

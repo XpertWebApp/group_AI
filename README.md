@@ -40,6 +40,29 @@ npm run dev
 npm test
 ```
 
+Unit and API tests. Fast (~15s), no server or live WBE calls — safe to run on
+every change.
+
+The end-to-end suite is excluded from `npm test` and run separately:
+
+```bash
+npm run test:e2e
+```
+
+It drives the real pipeline against a running server and live WBE UAT, and
+takes roughly 15 minutes: a search queues ~200 probe jobs, the worker runs
+`WORKER_JOB_CONCURRENCY` (default 2) at a time, and each job is a live
+supplier call.
+
+Two things it needs:
+
+- **A server on `TEST_BASE_URL`** (see `.env.test`) and the seeded test
+  account — create or repair it with `npm run seed:test-user`.
+- **Exclusive use of the machine.** Running it alongside `npm test` or a
+  second e2e run produces spurious failures: both compete for the same worker,
+  database and WBE rate budget. Symptoms look like unrelated assertion
+  failures rather than a timeout, so it is worth ruling out first.
+
 ### 6. Type-check
 ```bash
 npx tsc --noEmit

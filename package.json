@@ -10,6 +10,7 @@
     "prisma:generate": "npx prisma generate",
     "lint": "eslint src/**/*.ts",
     "test": "jest",
+    "test:ci": "jest --ci --runInBand",
     "test:e2e": "jest src/tests/e2e-hotel-search.test.ts --testPathIgnorePatterns=/node_modules/ --runInBand --forceExit --testTimeout=1200000",
     "format": "prettier --write \"src/**/*.ts\"",
     "seed": "ts-node prisma/seed.ts",
