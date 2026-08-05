@@ -534,10 +534,19 @@ async function attemptOption(
         }
     }
 
-    // Cancel refundable test bookings: a confirmed booking left open is
-    // charged at its deadline. The reference is already captured above and
-    // remains valid for the certification document after cancellation.
-    if (opts.cancelAfter && booking.nonRefundable === false) {
+    // Cancel test bookings once their reference is captured: a booking left
+    // open is charged at its deadline, and the reference stays valid for the
+    // certification document after cancellation.
+    //
+    // Nonrefundable bookings are cancelled too when --allow-nonrefundable was
+    // passed. That flag is the operator's decision to create them in the first
+    // place, and leaving them open is worse than cancelling: wbe.travel's
+    // instruction for these scenarios is to book and then cancel.
+    const mayCancel =
+        booking.nonRefundable === false ||
+        (booking.nonRefundable === true && opts.allowNonRefundable);
+
+    if (opts.cancelAfter && mayCancel) {
         try {
             const cancelled = await wbeBookingService.cancel(booking.id);
             partial.cancelledAfterwards = cancelled.status === 'cancelled';
@@ -555,7 +564,9 @@ async function attemptOption(
             partial.cancelledAfterwards = false;
         }
     } else if (booking.nonRefundable) {
-        log.warn('Nonrefundable — left in place (cancelling would incur a charge)');
+        // Reached only without --allow-nonrefundable, i.e. the booking was
+        // created before that decision was made.
+        log.warn('Nonrefundable and not authorised for cancellation — left in place');
         partial.cancelledAfterwards = false;
     } else if (opts.cancelAfter) {
         // nonRefundable is nullable and WBE does not always return the field.
