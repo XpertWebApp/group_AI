@@ -551,14 +551,37 @@ async function writeOutputs(results: ScenarioResult[], opts: RunOptions) {
         );
     }
 
+    // Summarise every scenario file on disk, not just the ones this run
+    // touched. Scenarios are executed one or a few at a time, so a summary
+    // built from `results` alone would list the latest run and drop every
+    // reference captured before it — and those references are the deliverable.
+    const summarised: ScenarioResult[] = [];
+    for (const scenario of CERTIFICATION_SCENARIOS) {
+        const fresh = results.find((r) => r.scenarioId === scenario.id);
+        if (fresh) {
+            summarised.push(fresh);
+            continue;
+        }
+        try {
+            const raw = await fs.readFile(path.join(dir, `scenario-${scenario.id}.json`), 'utf8');
+            summarised.push(JSON.parse(raw) as ScenarioResult);
+        } catch {
+            // Never run, or the file was removed — omitted from the table.
+        }
+    }
+
     const generatedAt = new Date().toISOString();
     await fs.writeFile(
         path.join(dir, 'summary.json'),
-        JSON.stringify({ generatedAt, mode: opts.book ? 'live' : 'dry-run', results }, null, 2),
+        JSON.stringify(
+            { generatedAt, mode: opts.book ? 'live' : 'dry-run', results: summarised },
+            null,
+            2,
+        ),
     );
 
     // Markdown table mirroring WBE's document, ready to transcribe.
-    const rows = results
+    const rows = summarised
         .map((r) => {
             const ref = r.bookingReference ?? (r.status === 'prebooked' ? '_(dry run)_' : '—');
             return `| ${r.scenarioId} | ${r.description} | ${r.status} | ${ref} |`;
@@ -569,7 +592,12 @@ async function writeOutputs(results: ScenarioResult[], opts: RunOptions) {
         path.join(dir, 'summary.md'),
         `# WBE Certification — Booking References\n\n` +
         `Generated: ${generatedAt}\n` +
-        `Mode: **${opts.book ? 'LIVE (real bookings)' : 'DRY RUN (no bookings created)'}**\n\n` +
+        // The table spans every scenario run so far, so it describes the file
+        // as a whole rather than the run that last wrote it — labelling it
+        // from `opts.book` would mark a table full of live references as a
+        // dry run whenever the most recent run happened to be one.
+        `Last run: **${opts.book ? 'LIVE (real bookings)' : 'DRY RUN (no bookings created)'}**\n` +
+        `Booked so far: **${summarised.filter((r) => r.bookingReference).length} of ${CERTIFICATION_SCENARIOS.length}**\n\n` +
         `| # | Scenario | Status | Booking Reference |\n|---|---|---|---|\n${rows}\n`,
     );
 
