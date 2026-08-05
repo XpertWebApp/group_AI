@@ -44,6 +44,16 @@ export const NATIONALITY_CODE = 'DE';
 export const SEARCH_WAIT_SECONDS = 15;
 
 /**
+ * How many options a refundable scenario may prebook before giving up.
+ *
+ * Refundability only comes back from prebook, so finding a refundable option
+ * means trying them one at a time. Each attempt is a WBE round trip that holds
+ * inventory briefly but creates no reservation. The cap stops a destination
+ * whose entire inventory is nonrefundable from working through every option.
+ */
+export const MAX_OPTION_ATTEMPTS = 5;
+
+/**
  * Master switch for creating real reservations.
  *
  * Default false: the runner searches and prebooks but never calls BookV2, so

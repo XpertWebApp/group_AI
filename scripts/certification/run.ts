@@ -233,15 +233,37 @@ async function searchWithFallback(scenario: CertificationScenario, checkIn: stri
 function pickOption(
     hotels: Awaited<ReturnType<typeof certificationSearchService.search>>['hotels'],
 ): { hotelCode: string; hotelName?: string; option: CertificationOption } | null {
+    return rankOptions(hotels)[0] ?? null;
+}
+
+/**
+ * Every option worth attempting, best first.
+ *
+ * Refundability is not in the search response — it only comes back from
+ * prebook — so a caller that needs a refundable option cannot filter here and
+ * has to walk this list, prebooking until one qualifies. Instantly
+ * confirmable options come first for the reason above; within each group the
+ * search order (cheapest first) is preserved.
+ *
+ * One entry per hotel per pass, so successive attempts move to a different
+ * property rather than trying every rate at the same one.
+ */
+function rankOptions(
+    hotels: Awaited<ReturnType<typeof certificationSearchService.search>>['hotels'],
+): Array<{ hotelCode: string; hotelName?: string; option: CertificationOption }> {
+    const ranked: Array<{ hotelCode: string; hotelName?: string; option: CertificationOption }> = [];
+    const seen = new Set<string>();
+
     for (const preferInstant of [true, false]) {
         for (const hotel of hotels) {
             const option = hotel.options.find((o) => (preferInstant ? !o.onRequest : true));
-            if (option) {
-                return { hotelCode: hotel.hotelCode, hotelName: hotel.hotelName, option };
+            if (option && !seen.has(option.tid)) {
+                seen.add(option.tid);
+                ranked.push({ hotelCode: hotel.hotelCode, hotelName: hotel.hotelName, option });
             }
         }
     }
-    return null;
+    return ranked;
 }
 
 // ── Scenario execution ───────────────────────────────────────────────────────
@@ -279,13 +301,71 @@ async function runScenario(
     }
 
     const { result, destination } = found;
-    const picked = pickOption(result.hotels);
-    if (!picked) {
+    const candidates = rankOptions(result.hotels);
+    if (candidates.length === 0) {
         log.fail('Search returned hotels but no usable option');
         return done({ destination: destination.name, error: 'No usable option', optionsFound: 0 });
     }
 
+    // Refundability is only known after prebook, so when a candidate comes back
+    // nonrefundable for a refundable scenario we prebook the next one instead
+    // of giving up. Prebook holds inventory briefly but creates no reservation,
+    // so an abandoned attempt costs nothing. Bounded so a destination whose
+    // every option is nonrefundable cannot loop through hundreds of them.
+    const maxAttempts = Math.min(candidates.length, cfg.MAX_OPTION_ATTEMPTS);
+    let lastError: string | undefined;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const outcome = await attemptOption(
+            scenario,
+            opts,
+            candidates[attempt]!,
+            { result, destination, checkIn },
+            attempt,
+            maxAttempts,
+        );
+        if (outcome.done) return outcome.done;
+        lastError = outcome.retryReason;
+    }
+
+    log.fail(`No refundable option found after ${maxAttempts} attempt(s)`);
+    return done({
+        destination: destination.name,
+        optionsFound: result.totalOptions,
+        status: 'skipped',
+        error: lastError ?? 'No refundable option available',
+    });
+}
+
+/**
+ * Take one candidate option as far as it will go.
+ *
+ * Returns `done` with a final result, or `retryReason` when the caller should
+ * move on to the next candidate. Only a nonrefundable prebook is retryable —
+ * every other failure is reported as-is, since retrying would repeat it.
+ */
+async function attemptOption(
+    scenario: CertificationScenario,
+    opts: RunOptions,
+    picked: { hotelCode: string; hotelName?: string; option: CertificationOption },
+    ctx: {
+        result: Awaited<ReturnType<typeof certificationSearchService.search>>;
+        destination: (typeof cfg.DESTINATION_CANDIDATES)[number];
+        checkIn: string;
+    },
+    attempt: number,
+    maxAttempts: number,
+): Promise<{ done?: ScenarioResult; retryReason?: string }> {
+    const { result, destination, checkIn } = ctx;
+    const done = (partial: Partial<ScenarioResult>): ScenarioResult => ({
+        scenarioId: scenario.id,
+        description: scenario.description,
+        status: 'failed',
+        ...partial,
+    } as ScenarioResult);
+
     let { hotelCode, hotelName, option } = picked;
+    if (attempt > 0) log.info(`Attempt ${attempt + 1}/${maxAttempts} — trying another option`);
     log.info(`Hotel: ${hotelName ?? hotelCode}`);
     log.info(`Option: ${option.totalPrice} ${option.currency}${option.onRequest ? ' (on request)' : ''}`);
 
@@ -343,7 +423,7 @@ async function runScenario(
         log.ok(`Draft created — agency ref ${booking.agencyReference}`);
     } catch (err: any) {
         log.fail(`Could not create draft: ${err.message}`);
-        return done({ ...partial, error: `selectOption failed: ${err.message}` });
+        return { done: done({ ...partial, error: `selectOption failed: ${err.message}` }) };
     }
 
     partial.agencyReference = booking.agencyReference;
@@ -372,12 +452,12 @@ async function runScenario(
     } catch (err: any) {
         const code = err instanceof BookingFlowError ? ` [${err.code}]` : '';
         log.fail(`Prebook failed${code}: ${err.message}`);
-        return done({ ...partial, error: `prebook failed: ${err.message}` });
+        return { done: done({ ...partial, error: `prebook failed: ${err.message}` }) };
     }
 
     if (!opts.book) {
         log.warn('Dry run — BookV2 not called (pass --book to create a real reservation)');
-        return done({ ...partial, status: 'prebooked' });
+        return { done: done({ ...partial, status: 'prebooked' }) };
     }
 
     // A scenario marked refundable says what WBE's document asks for, not what
@@ -387,12 +467,8 @@ async function runScenario(
     // be cancelled afterwards and would be charged in full. Stop instead — no
     // reservation exists yet at this point.
     if (scenario.refundable && booking.nonRefundable === true) {
-        log.fail('Prebook came back nonrefundable for a refundable scenario — not booking');
-        return done({
-            ...partial,
-            status: 'skipped',
-            error: 'Selected option is nonrefundable; refundable scenario left unbooked',
-        });
+        log.warn('Prebook came back nonrefundable for a refundable scenario — trying another option');
+        return { retryReason: 'Every option attempted came back nonrefundable' };
     }
 
     // BookV2 — the point at which a real reservation exists.
@@ -417,15 +493,15 @@ async function runScenario(
                     partial.wbeStatus = booking.wbeStatus;
                 } else {
                     log.fail('Reconciliation found no booking at WBE');
-                    return done({ ...partial, error: 'Ambiguous dispatch; no upstream booking found' });
+                    return { done: done({ ...partial, error: 'Ambiguous dispatch; no upstream booking found' }) };
                 }
             } catch (recErr: any) {
                 log.fail(`Reconciliation failed: ${recErr.message}`);
-                return done({ ...partial, error: `Reconciliation failed: ${recErr.message}` });
+                return { done: done({ ...partial, error: `Reconciliation failed: ${recErr.message}` }) };
             }
         } else {
             log.fail(`Booking failed${code ? ` [${code}]` : ''}: ${err.message}`);
-            return done({ ...partial, error: `book failed: ${err.message}` });
+            return { done: done({ ...partial, error: `book failed: ${err.message}` }) };
         }
     }
 
@@ -459,7 +535,7 @@ async function runScenario(
         partial.cancelledAfterwards = false;
     }
 
-    return done({ ...partial, status: 'booked' });
+    return { done: done({ ...partial, status: 'booked' }) };
 }
 
 // ── Reporting ────────────────────────────────────────────────────────────────
