@@ -514,9 +514,11 @@ export class WbeClientService {
      */
     async issueVoucher(bookingReference: string) {
         try {
+            // `{}` rather than null for the same reason as cancelBookingV2:
+            // axios omits Content-Type on a null body and WBE returns 415.
             const response = await axios.post(
                 `${this.searchUrl}/hotel/issueVoucher`,
-                null,
+                {},
                 {
                     params: { bookingReference, apiKey: this.apiKey },
                     auth: this.getAuth(),
@@ -545,11 +547,18 @@ export class WbeClientService {
      */
     async cancelBookingV2(bookingReference: string) {
         try {
+            // An empty object, not null: axios sends no Content-Type for a null
+            // body and WBE answers 415. The endpoint takes its arguments from
+            // the query string (see swagger: bookingReference, no requestBody),
+            // so the body only has to be present, not populated.
             const response = await axios.post(
                 `${this.searchUrl}/hotel/CancelBookingV2`,
-                null,
+                {},
                 {
-                    params: { bookingReference, apikey: this.apiKey, apiKey: this.apiKey },
+                    // `apiKey` only. Sending the lowercase `apikey` alongside it
+                    // makes WBE reject the request with 401 — every other call
+                    // here passes the camelCase spelling on its own.
+                    params: { bookingReference, apiKey: this.apiKey },
                     auth: this.getAuth(),
                     headers: this.getDefaultHeaders(),
                 }

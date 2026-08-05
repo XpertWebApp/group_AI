@@ -380,6 +380,21 @@ async function runScenario(
         return done({ ...partial, status: 'prebooked' });
     }
 
+    // A scenario marked refundable says what WBE's document asks for, not what
+    // the option we happened to pick actually is: refundability is absent from
+    // the search response and only known once prebook returns. Booking a
+    // nonrefundable option here would voucher it immediately, so it could not
+    // be cancelled afterwards and would be charged in full. Stop instead — no
+    // reservation exists yet at this point.
+    if (scenario.refundable && booking.nonRefundable === true) {
+        log.fail('Prebook came back nonrefundable for a refundable scenario — not booking');
+        return done({
+            ...partial,
+            status: 'skipped',
+            error: 'Selected option is nonrefundable; refundable scenario left unbooked',
+        });
+    }
+
     // BookV2 — the point at which a real reservation exists.
     try {
         booking = await wbeBookingService.book(booking.id);
