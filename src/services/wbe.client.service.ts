@@ -333,7 +333,16 @@ export class WbeClientService {
 
     /**
      * Matches docs: POST /hotel/optionDetailsV2?apiKey=...
-     * Body: { SessionID, TID, HotelCode, OptionalExtras? }
+     * Body: { SessionID, TID, HotelCode, Prebook?, OptionalExtras? }
+     *
+     * `Prebook` is passed straight through from `body`:
+     *   - omitted / false → repeatable read of the option details.
+     *   - true            → revalidates the option and RESERVES it upstream.
+     *                       Mandatory exactly once before bookV2, and WBE
+     *                       rejects a second Prebook=true for the same flow.
+     *
+     * Callers must not set Prebook=true speculatively — go through
+     * wbeBooking.service, which owns the once-only guard.
      */
     async optionDetailsV2(body: any) {
         try {
@@ -395,6 +404,164 @@ export class WbeClientService {
                 return response.data;
             }
             logger.error({ msg: 'WBE API GetUpdatedOptionsV2 Error', error: error.message, body });
+            throw error;
+        }
+    }
+
+    // ── Booking operations (XMLOUT) ──────────────────────────────────────────
+    // These mutate real reservations and, on a LIVE account, real money.
+    //
+    // Deliberate difference from the search calls above: bookV2 does NOT retry
+    // on 404. The other endpoints fall back to the legacy `/api/Hotel/...`
+    // path on 404, which is safe for reads but not for a write — a request
+    // that timed out or returned an ambiguous error may still have created a
+    // reservation upstream, and a blind retry would double-book. Recovery is
+    // handled by bookingDetailsByAgencyReference() instead, which is why
+    // AgencyReference must be unique and generated before dispatch.
+
+    /**
+     * Matches docs: POST /hotel/bookV2?apiKey=...
+     * Body: { SessionID, TID, HotelCode, PaymentOption, AgencyReference,
+     *         HotelNotes?, CarbonCopyMail?, IssueVoucher?, Rooms[], OptionalExtras? }
+     *
+     * Requires optionDetailsV2 to have been called once with Prebook=true for
+     * this option. A response without Data.BookingReference means no booking
+     * was made; the reason is in `Messages`.
+     *
+     * NOT retried on failure — see the note above.
+     */
+    async bookV2(body: any) {
+        try {
+            const response = await axios.post(
+                `${this.searchUrl}/hotel/bookV2`,
+                body,
+                {
+                    params: { apiKey: this.apiKey },
+                    auth: this.getAuth(),
+                    headers: this.getDefaultHeaders(),
+                }
+            );
+            return response.data;
+        } catch (error: any) {
+            // Log the agency reference so an ambiguous failure can be
+            // reconciled against WBE via bookingDetailsByAgencyReference().
+            logger.error({
+                msg: 'WBE API BookV2 Error',
+                error: error.message,
+                status: error.response?.status,
+                agencyReference: body?.AgencyReference,
+                tid: body?.TID,
+                hotelCode: body?.HotelCode,
+                wbeResponse: error.response?.data,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Matches docs: GET /hotel/bookingDetails?bookingReference=...&apiKey=...
+     * Read-only status sync; safe to call repeatedly.
+     */
+    async bookingDetails(bookingReference: string) {
+        try {
+            const response = await axios.get(
+                `${this.searchUrl}/hotel/bookingDetails`,
+                {
+                    params: { bookingReference, apiKey: this.apiKey },
+                    auth: this.getAuth(),
+                    headers: this.getDefaultHeaders(),
+                }
+            );
+            return response.data;
+        } catch (error: any) {
+            logger.error({ msg: 'WBE API BookingDetails Error', error: error.message, bookingReference });
+            throw error;
+        }
+    }
+
+    /**
+     * Same endpoint as bookingDetails but looked up by our own AgencyReference.
+     *
+     * This is the crash-recovery path: if bookV2 times out or errors after WBE
+     * has already created the reservation, we hold no bookingReference. Since
+     * AgencyReference is ours and generated before dispatch, it is the only
+     * handle we have to find out whether the booking actually exists.
+     */
+    async bookingDetailsByAgencyReference(agencyReference: string) {
+        try {
+            const response = await axios.get(
+                `${this.searchUrl}/hotel/bookingDetails`,
+                {
+                    params: { agencyReference, apiKey: this.apiKey },
+                    auth: this.getAuth(),
+                    headers: this.getDefaultHeaders(),
+                }
+            );
+            return response.data;
+        } catch (error: any) {
+            logger.error({
+                msg: 'WBE API BookingDetails (by agencyReference) Error',
+                error: error.message,
+                agencyReference,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Matches docs: POST /hotel/issueVoucher?bookingReference=...&apiKey=...
+     * Empty body. Valid only for a Confirmed booking; result is Vouchered.
+     */
+    async issueVoucher(bookingReference: string) {
+        try {
+            const response = await axios.post(
+                `${this.searchUrl}/hotel/issueVoucher`,
+                null,
+                {
+                    params: { bookingReference, apiKey: this.apiKey },
+                    auth: this.getAuth(),
+                    headers: this.getDefaultHeaders(),
+                }
+            );
+            return response.data;
+        } catch (error: any) {
+            logger.error({ msg: 'WBE API IssueVoucher Error', error: error.message, bookingReference });
+            throw error;
+        }
+    }
+
+    /**
+     * Matches docs: POST /hotel/CancelBookingV2?bookingReference=...&apikey=...
+     * Empty body.
+     *
+     * Note the lowercase `apikey` — CancelBookingV2 is documented with a
+     * different casing to every other endpoint. Both spellings are sent so the
+     * call works whichever one WBE's router actually honours.
+     *
+     * Outcomes (per docs): CLX with Price 0 = cancelled free of charge;
+     * CLX with a Price = cancelled with an agency charge; PNDC = could not be
+     * settled automatically and needs manual confirmation on WBE's side.
+     * A failed cancellation also lands in PNDC rather than staying booked.
+     */
+    async cancelBookingV2(bookingReference: string) {
+        try {
+            const response = await axios.post(
+                `${this.searchUrl}/hotel/CancelBookingV2`,
+                null,
+                {
+                    params: { bookingReference, apikey: this.apiKey, apiKey: this.apiKey },
+                    auth: this.getAuth(),
+                    headers: this.getDefaultHeaders(),
+                }
+            );
+            return response.data;
+        } catch (error: any) {
+            logger.error({
+                msg: 'WBE API CancelBookingV2 Error',
+                error: error.message,
+                bookingReference,
+                wbeResponse: error.response?.data,
+            });
             throw error;
         }
     }

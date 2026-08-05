@@ -10,6 +10,7 @@ import nationalitiesRoutes from './nationalities.routes';
 import dashboardRoutes from './dashboard.routes';
 import settingsRoutes from './settings.routes';
 import odooRoutes from './odoo.routes';
+import bookingsRoutes from './bookings.routes';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/hotels', hotelsRoutes);
 router.use('/destinations', destinationsRoutes);
 router.use('/nationalities', nationalitiesRoutes);
 router.use('/odoo', odooRoutes);
+router.use('/bookings', bookingsRoutes);
 
 export default router;

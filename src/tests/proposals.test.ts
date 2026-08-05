@@ -17,6 +17,9 @@ jest.mock('@prisma/client', () => {
         sentToEmail: null,
         lockedBy: null,
         lockedAt: null,
+        // Proposals created after the payment-gate cutover cannot be sent
+        // without a deadline — the PDF and email both render "Payment due by".
+        paymentDeadline: new Date('2026-03-01'),
         createdAt: new Date(),
         updatedAt: null,
         hotels: [],
@@ -82,18 +85,44 @@ jest.mock('@prisma/client', () => {
         auditEvent: {
             create: jest.fn().mockResolvedValue({}),
         },
+        // sendProposal counts prior offers to derive the next version number.
+        proposalOffer: {
+            count: jest.fn().mockResolvedValue(0),
+            create: jest.fn().mockResolvedValue({ id: 'offer-uuid-1', proposalId: 'proposal-uuid-1', version: 1 }),
+            findMany: jest.fn().mockResolvedValue([]),
+            findFirst: jest.fn().mockResolvedValue(null),
+        },
+        // authMiddleware re-checks the token's user against the database on
+        // every request, so a signed JWT alone is not enough — without this
+        // the lookup returns undefined and every route answers 401.
+        user: {
+            findUnique: jest.fn().mockResolvedValue({
+                id: 'test-user-uuid-1',
+                email: 'agent@test.com',
+                isActive: true,
+                role: { name: 'ADMIN' },
+            }),
+        },
         $transaction: jest.fn().mockImplementation(async (fn: any) => {
             return fn({
                 proposalHotel: {
                     create: jest.fn().mockResolvedValue(mHotel),
                     update: jest.fn().mockResolvedValue({ ...mHotel, deletedAt: new Date() }),
                     aggregate: jest.fn().mockResolvedValue({ _sum: { totalPrice: '30000' } }),
+                    // addHotelTx counts existing hotels inside the transaction;
+                    // the mock predates that call.
+                    count: jest.fn().mockResolvedValue(0),
+                    findMany: jest.fn().mockResolvedValue([mHotel]),
+                    findFirst: jest.fn().mockResolvedValue(null),
                 },
                 proposalService: {
                     create: jest.fn().mockResolvedValue({ id: 'svc-1', proposalId: 'proposal-uuid-1', serviceName: 'Transfer' }),
                     findMany: jest.fn().mockResolvedValue([]),
                 },
                 hotelOptionDetail: { findUnique: jest.fn().mockResolvedValue(null) },
+                // addHotelTx enriches the hotel from master data inside the
+                // transaction; absent from the mock, the lookup throws.
+                hotel: { findUnique: jest.fn().mockResolvedValue(null) },
                 proposal: {
                     findUnique: jest.fn().mockResolvedValue(mProposal),
                     update: jest.fn().mockResolvedValue(mProposal),
@@ -144,6 +173,9 @@ describe('Integration: BookingRequest → Proposal → Hotel → Send', () => {
                     contactEmail: 'john@company.com',
                     contactPhone: '+1234567890',
                     currencyCode: 'EUR',
+                    // Required since 2026-06-26; without it the request is
+                    // rejected before it reaches the controller.
+                    nationalityCode: 'DE',
                     destinationId: 123,
                     destinationName: 'Barcelona, Spain',
                     checkinDate: '2026-03-15',
@@ -229,12 +261,25 @@ describe('Integration: BookingRequest → Proposal → Hotel → Send', () => {
     });
 
     describe('POST /api/v1/proposals/:id/actions/preview-pdf', () => {
-        it('returns placeholder response', async () => {
+        // PDF generation was a placeholder when this test was written and the
+        // endpoint answered `{ previewUrl: null }`. It now renders a real PDF
+        // and streams it back, so both outcomes are valid: a PDF body, or the
+        // JSON placeholder when generation is unavailable.
+        it('returns a PDF, or the JSON placeholder when unavailable', async () => {
             const res = await request(app)
                 .post('/api/v1/proposals/proposal-uuid-1/actions/preview-pdf')
-                .set(authHeader());
+                .set(authHeader())
+                // The body is optional but must exist: supertest sends no body
+                // at all without this, and the schema rejects undefined.
+                .send({});
+
             expect(res.status).toBe(200);
-            expect(res.body.data?.previewUrl).toBeNull();
+
+            if (res.headers['content-type']?.includes('application/pdf')) {
+                expect(res.body.length).toBeGreaterThan(0);
+            } else {
+                expect(res.body.data?.previewUrl).toBeNull();
+            }
         });
     });
 });

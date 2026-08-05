@@ -25,6 +25,9 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+// Imported from the source of truth rather than duplicated here, so a change to
+// the supplier tiers updates the assertion instead of silently diverging.
+import { SUPPLIER_PRIORITY_RANK, getSupplierPriority } from '../config/supplierLimits';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -36,8 +39,20 @@ const TEST_USER = {
     password: process.env.TEST_USER_PASSWORD || 'admin123',
 };
 
-/** How long to wait for probe jobs to finish (ms). */
-const PROBE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+/**
+ * How long to wait for probe jobs to finish (ms).
+ *
+ * A search queues ~200 probe jobs and the worker runs WORKER_JOB_CONCURRENCY
+ * (default 2) at a time, each making a live WBE call. Measured runs took 657s
+ * and 687s for 200 jobs, so the previous 5-minute budget expired while the
+ * queue was still draining and every downstream step failed with it — a
+ * timing artefact, not a defect.
+ *
+ * 15 minutes leaves headroom over the observed ~11 minutes without letting a
+ * genuinely wedged queue hang the suite indefinitely. Override with
+ * PROBE_TIMEOUT_MS when running against a slower environment.
+ */
+const PROBE_TIMEOUT_MS = Number(process.env['PROBE_TIMEOUT_MS'] ?? 15 * 60 * 1000);
 const PROBE_POLL_INTERVAL_MS = 5_000;    // 5 seconds
 
 /** Supplier limits from Oliver's rules (Step 3.1 / 3.3) */
@@ -343,8 +358,15 @@ describe('E2E: Hotel Search Pipeline (Full Guide Steps 1–4.2)', () => {
                 const totalSplitRooms = r.supplierSplit.reduce((sum: number, e: any) => sum + e.rooms, 0);
                 expect(totalSplitRooms).toBe(r.roomsAllocated);
 
-                // Sorted by price ascending WITHIN each room type (EC3: different types have independent ordering)
-                // Group by roomType, then check sort within each group
+                // Ordered by supplier priority first, then price ascending, WITHIN
+                // each room type (EC3: different types have independent ordering).
+                //
+                // Price alone is NOT the ordering key. Since the supplier-priority
+                // work (2026-07-21) the allocator ranks by priority tier before
+                // price, so a MEDIUM-tier supplier is allocated ahead of a cheaper
+                // LOW-tier one — e.g. Expedia (MEDIUM) before HotelBeds (LOW) even
+                // when HotelBeds quotes less. Asserting pure price ordering here
+                // contradicts that deliberate business rule.
                 const byType: Record<string, any[]> = {};
                 for (const entry of r.supplierSplit) {
                     const key = entry.roomType ?? 'standard';
@@ -353,8 +375,19 @@ describe('E2E: Hotel Search Pipeline (Full Guide Steps 1–4.2)', () => {
                 }
                 for (const [, entries] of Object.entries(byType)) {
                     for (let i = 1; i < entries.length; i++) {
-                        expect(entries[i].pricePerRoomPerNight)
-                            .toBeGreaterThanOrEqual(entries[i - 1].pricePerRoomPerNight);
+                        const prev = entries[i - 1];
+                        const curr = entries[i];
+                        const prevRank = SUPPLIER_PRIORITY_RANK[getSupplierPriority(prev.supplierCode)];
+                        const currRank = SUPPLIER_PRIORITY_RANK[getSupplierPriority(curr.supplierCode)];
+
+                        // Priority must never regress…
+                        expect(currRank).toBeGreaterThanOrEqual(prevRank);
+
+                        // …and within one tier, cheapest comes first.
+                        if (currRank === prevRank) {
+                            expect(curr.pricePerRoomPerNight)
+                                .toBeGreaterThanOrEqual(prev.pricePerRoomPerNight);
+                        }
                     }
                 }
 

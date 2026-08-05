@@ -1,0 +1,16 @@
+{
+  "scenarioId": 12,
+  "description": "1 room — 6 adults, 1 child (8) • Room Only • 2 nights",
+  "status": "prebooked",
+  "durationMs": 2612,
+  "destination": "Rome",
+  "hotelName": "Pantheon",
+  "hotelCode": "0OtNtz78SN4=",
+  "quotedPrice": 2189.58,
+  "currency": "EUR",
+  "optionsFound": 2,
+  "agencyReference": "SETT-MSEFJVO3-Q1LEFV",
+  "prebookPrice": 2189.58,
+  "priceChanged": false,
+  "nonRefundable": true
+}

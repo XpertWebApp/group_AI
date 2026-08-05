@@ -1,0 +1,16 @@
+{
+  "scenarioId": 5,
+  "description": "2 rooms — A: 2 adults + 1 child (1) / B: 2 adults • Any meal • 7 nights",
+  "status": "prebooked",
+  "durationMs": 2739,
+  "destination": "Rome",
+  "hotelName": "de Russie",
+  "hotelCode": "1JUTxz7t4A0=",
+  "quotedPrice": 39303,
+  "currency": "EUR",
+  "optionsFound": 85,
+  "agencyReference": "SETT-MSEFJJLJ-02GN87",
+  "prebookPrice": 39303,
+  "priceChanged": false,
+  "nonRefundable": false
+}

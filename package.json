@@ -10,10 +10,14 @@
     "prisma:generate": "npx prisma generate",
     "lint": "eslint src/**/*.ts",
     "test": "jest",
-    "test:e2e": "jest src/tests/e2e-hotel-search.test.ts --runInBand --forceExit --testTimeout=360000",
+    "test:e2e": "jest src/tests/e2e-hotel-search.test.ts --testPathIgnorePatterns=/node_modules/ --runInBand --forceExit --testTimeout=1200000",
     "format": "prettier --write \"src/**/*.ts\"",
     "seed": "ts-node prisma/seed.ts",
-    "email:acceptance-test": "ts-node scripts/email-acceptance-test.ts"
+    "seed:test-user": "ts-node --transpile-only scripts/seed-test-user.ts",
+    "email:acceptance-test": "ts-node scripts/email-acceptance-test.ts",
+    "cert:dry-run": "ts-node --transpile-only scripts/certification/run.ts",
+    "cert:run": "ts-node --transpile-only scripts/certification/run.ts --book",
+    "cert:cleanup": "ts-node --transpile-only scripts/certification/cleanup.ts"
   },
   "keywords": [],
   "author": "",

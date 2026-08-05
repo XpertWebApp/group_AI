@@ -21,6 +21,9 @@ describe('Zod Validation Schemas', () => {
             contactEmail: 'john@company.com',
             contactPhone: '+1234567890',
             currencyCode: 'EUR',
+            // Required since 2026-06-26 — the schema stopped allowing a silent
+            // 'HU' default to reach WBE, so a payload without it is invalid.
+            nationalityCode: 'DE',
             destinationId: 123,
             destinationName: 'Barcelona, Spain',
             checkinDate: '2026-03-15',
