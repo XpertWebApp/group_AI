@@ -54,3 +54,7 @@ Thumbs.db
 src/publicfiles/
 
 docs
+
+# Certification run artifacts — regenerated on every run. Once live runs start
+# these hold real WBE booking references, which do not belong in version control.
+scripts/output/
