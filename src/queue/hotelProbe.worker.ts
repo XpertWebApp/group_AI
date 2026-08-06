@@ -68,7 +68,13 @@ function matchesRoomType(roomDescriptions: string[], requestedType: string | nul
     return descs.some((d) => acceptable.some((kw) => d.includes(kw)));
 }
 
-function buildSupplierSplit(options: any[], targetRooms: number, totalRoomsNeeded: number) {
+/**
+ * Exported so the group-booking service allocates rooms exactly the way the
+ * probe did when the price was quoted. Re-deriving the split independently
+ * would let the two drift, and the customer would be booked against an
+ * allocation different from the one they were priced on.
+ */
+export function buildSupplierSplit(options: any[], targetRooms: number, totalRoomsNeeded: number) {
     // Priority-first, cheapest-first tie-break.
     //
     // Client rule (Oliver, 2026-07-XX): allocate from higher-priority

@@ -72,6 +72,7 @@ model User {
   role               UserRole  @relation(fields: [roleId], references: [id])
   assignedRequests   BookingRequest[] @relation("BookingRequestAssignee")
   createdBookings    Booking[]        @relation("BookingCreatedBy")
+  createdBookingGroups BookingGroup[] @relation("BookingGroupCreatedBy")
 
   @@index([roleId])
   @@map("users")
@@ -365,6 +366,7 @@ model BookingRequest {
   attachments            BookingRequestAttachment[]
   proposals              Proposal[]
   bookings               Booking[]
+  bookingGroups          BookingGroup[]
 
   @@index([destinationId])
   @@index([assignedUserId])
@@ -430,6 +432,7 @@ model Proposal {
   hotels           ProposalHotel[]
   services         ProposalService[]
   offers           ProposalOffer[]
+  bookingGroups    BookingGroup[]
   bookingRequest   BookingRequest?   @relation(fields: [requestId], references: [id])
 
   @@index([requestId])
@@ -777,6 +780,109 @@ model FailedEmail {
 // the idempotency key used to recover such bookings via
 // `bookingDetails?agencyReference=`.
 
+/// One customer-facing reservation, which WBE almost never lets us make as a
+/// single booking.
+///
+/// A group of 15 rooms is split across suppliers because each supplier caps how
+/// many rooms it will sell at once (see config/supplierLimits.ts). Each slice of
+/// that split is its own BookV2 call and its own `Booking` row, so a request the
+/// customer thinks of as "the Hilton, 15 rooms" is several reservations that
+/// must be tracked, reported and cancelled together.
+///
+/// This model is that grouping. It exists mainly to make partial outcomes
+/// visible: when three of four slices succeed, the customer has rooms but not
+/// all of them, and someone has to be told exactly how many are short.
+model BookingGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Human-facing reference for the whole group, shown in SETT Hub and quoted
+  /// to the customer. The per-supplier `Booking.agencyReference` values stay
+  /// internal — a customer should never be handed four references for one stay.
+  groupReference String @unique @map("group_reference") @db.VarChar(64)
+
+  /// Aggregate state, derived from the child bookings rather than set directly.
+  /// `partial` is the state that matters: it means some rooms are confirmed and
+  /// some are not, and the shortfall needs a human.
+  status BookingGroupStatus @default(pending) @map("status")
+
+  /// The group request this fulfils. Unlike `Booking.requestId` this is
+  /// required: a group booking with no request behind it has nothing to fulfil.
+  requestId String         @map("request_id") @db.Uuid
+  request   BookingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  /// The proposal the customer accepted, when the booking came from one. Null
+  /// for a booking a staff member assembled directly.
+  proposalId String?   @map("proposal_id") @db.Uuid
+  proposal   Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  // ── What was promised ────────────────────────────────────────────────────
+  hotelCode String  @map("hotel_code") @db.VarChar(255)
+  hotelName String? @map("hotel_name") @db.VarChar(255)
+
+  checkInDate  DateTime @map("check_in_date") @db.Date
+  checkOutDate DateTime @map("check_out_date") @db.Date
+  nights       Int
+
+  /// Rooms the customer asked for. Compared against `roomsConfirmed` to derive
+  /// the shortfall, so it is stored rather than recomputed from the children —
+  /// a slice that never dispatched leaves no row to count.
+  roomsRequested Int @map("rooms_requested")
+
+  /// Rooms actually confirmed by WBE across all child bookings.
+  roomsConfirmed Int @default(0) @map("rooms_confirmed")
+
+  /// Price quoted to the customer, from the accepted proposal. Kept separate
+  /// from `totalBooked` so drift between quote and supplier price is visible
+  /// after the fact, not just at booking time.
+  quotedTotal Decimal? @map("quoted_total") @db.Decimal(12, 2)
+
+  /// Sum of the child bookings' confirmed prices.
+  totalBooked Decimal? @map("total_booked") @db.Decimal(12, 2)
+
+  currency String? @db.VarChar(10)
+
+  /// Set when a slice failed and the group was left part-booked. Written for
+  /// the operator, not the customer: it says which supplier refused and why, so
+  /// the remaining rooms can be sourced by hand.
+  shortfallNote String? @map("shortfall_note")
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation("BookingGroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  completedAt DateTime? @map("completed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  bookings Booking[]
+
+  @@index([requestId])
+  @@index([proposalId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("booking_groups")
+  @@schema("app")
+}
+
+/// Aggregate state of a BookingGroup. Derived from its child bookings.
+enum BookingGroupStatus {
+  /// Rows created, nothing dispatched to WBE yet.
+  pending
+  /// At least one slice is mid-flight.
+  booking
+  /// Every slice confirmed; roomsConfirmed == roomsRequested.
+  confirmed
+  /// Some slices confirmed, some did not. Rooms are held but the group is
+  /// short — the state that needs an operator.
+  partial
+  /// No slice confirmed.
+  failed
+  /// Every confirmed slice has been cancelled.
+  cancelled
+
+  @@schema("app")
+}
+
 model Booking {
   id String @id @default(uuid()) @db.Uuid
 
@@ -885,6 +991,17 @@ model Booking {
   /// made outside the request flow (e.g. certification runs).
   requestId String?         @map("request_id") @db.Uuid
   request   BookingRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  /// The group this booking is one slice of. NULL for a standalone booking —
+  /// certification runs and any single-supplier booking made directly.
+  groupId String?       @map("group_id") @db.Uuid
+  group   BookingGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  /// Rooms this slice covers. The supplier's cap is why the group was split at
+  /// all, so the number is recorded per slice rather than inferred from the
+  /// room rows — a slice that fails before its rooms are written still needs to
+  /// report what it was going to carry.
+  roomsInSlice Int? @map("rooms_in_slice")
 
   createdById String? @map("created_by_id") @db.Uuid
   createdBy   User?   @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
