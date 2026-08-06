@@ -41,6 +41,16 @@ export const SUPPLIER_PARTNER_ID = Number(process.env['ODOO_SUPPLIER_PARTNER_ID'
 export const INITIAL_STAGE_NAME = process.env['ODOO_INITIAL_STAGE'] ?? 'New Inquiry';
 
 /**
+ * Stage an order moves to once rooms are actually held.
+ *
+ * "Optioned" in the client's own pipeline: the booking exists with the
+ * supplier, but the customer has not yet given the formal confirmation that
+ * turns it into a contract. That is exactly the state a booked-but-unconfirmed
+ * group is in, so the pipeline shows it without anyone opening SETT Hub.
+ */
+export const BOOKED_STAGE_NAME = process.env['ODOO_BOOKED_STAGE'] ?? 'Optioned';
+
+/**
  * Model holding the SETT Hub reservation references.
  *
  * Prepared on the Odoo side before this integration was built — the client

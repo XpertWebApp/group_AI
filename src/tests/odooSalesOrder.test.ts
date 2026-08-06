@@ -211,6 +211,58 @@ describe('Odoo sales order', () => {
     });
 
     // ────────────────────────────────────────────────────────────────────────
+    describe('moving an order through the pipeline', () => {
+        it('writes the resolved stage id onto the order', async () => {
+            const result = await service.moveToStage(308, 'Optioned');
+
+            expect(result).toBe('Optioned');
+            expect(odoo.call).toHaveBeenCalledWith(
+                'sale.order',
+                'write',
+                [[308], { x_stage_id: 1 }],
+            );
+        });
+
+        it('reports null for a stage that does not exist', async () => {
+            // Stage names differ between Odoo databases. Guessing an id would
+            // move the order somewhere nobody is watching.
+            odoo.call.mockImplementation(async (model: string) => {
+                if (model === 'x_sett_group_stage') return [];
+                return null;
+            });
+
+            expect(await service.moveToStage(308, 'Nonexistent')).toBeNull();
+        });
+
+        it('does not write when the stage cannot be resolved', async () => {
+            odoo.call.mockImplementation(async (model: string) => {
+                if (model === 'x_sett_group_stage') return [];
+                return null;
+            });
+
+            await service.moveToStage(308, 'Nonexistent');
+
+            expect(odoo.call).not.toHaveBeenCalledWith(
+                'sale.order',
+                'write',
+                expect.anything(),
+            );
+        });
+
+        it('swallows an Odoo failure rather than failing the booking', async () => {
+            // A stage is presentational. Rooms are already held by the time
+            // this runs, and losing them over a pipeline column would be absurd.
+            odoo.call.mockImplementation(async (model: string, method: string) => {
+                if (model === 'x_sett_group_stage') return [{ id: 1 }];
+                if (method === 'write') throw new Error('Odoo unreachable');
+                return null;
+            });
+
+            await expect(service.moveToStage(308, 'Optioned')).resolves.toBeNull();
+        });
+    });
+
+    // ────────────────────────────────────────────────────────────────────────
     describe('reservation references', () => {
         it('writes one row per supplier reservation', async () => {
             const res = await service.createGroupSalesOrder(

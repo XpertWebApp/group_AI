@@ -161,6 +161,37 @@ export class OdooSalesOrderService {
     }
 
     /**
+     * Move an order to a different stage in Odoo's pipeline.
+     *
+     * The stages mirror the client's own process — New Inquiry, Offer Sent,
+     * Optioned, Confirmed — so keeping the order in step means anyone watching
+     * the pipeline sees where a group actually is without opening SETT Hub.
+     *
+     * Returns the stage name on success and null when it could not be set. A
+     * stage is presentational: failing to move one is not a reason to fail a
+     * booking that has already reserved rooms.
+     */
+    async moveToStage(orderId: number, stageName: string): Promise<string | null> {
+        try {
+            const stageId = await this.resolveStageId(stageName);
+            if (!stageId) return null;
+
+            await odooClient.call('sale.order', 'write', [[orderId], { x_stage_id: stageId }]);
+
+            logger.info({ msg: 'Odoo order stage updated', orderId, stage: stageName });
+            return stageName;
+        } catch (err: any) {
+            logger.warn({
+                msg: 'Could not move Odoo order to stage',
+                orderId,
+                stage: stageName,
+                error: err.message,
+            });
+            return null;
+        }
+    }
+
+    /**
      * Attach the supplier reservation references to an existing order.
      *
      * Separate from creation because the references arrive later: the order is

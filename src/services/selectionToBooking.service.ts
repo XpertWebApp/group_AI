@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 
 import optionSelectionService from './optionSelection.service';
 import odooSalesOrderService, { OdooSalesOrderError } from './odooSalesOrder.service';
+import * as cfg from '../config/odooSalesOrder';
 import groupBookingService, { GroupBookingError } from './groupBooking.service';
 import {
     buildPassengerManifest,
@@ -189,7 +190,40 @@ export class SelectionToBookingService {
             };
         }
 
-        // ── 3. Reservation references back to Odoo ───────────────────────────
+        // ── 3. Record which order this booking belongs to ────────────────────
+        // Written as soon as both exist. Without it the reference is lost with
+        // the response, leaving no way back to the commercial record for a
+        // later stage update, a support query, or reconciliation.
+        if (odooOrderId) {
+            // Move the order to the stage that matches reality: rooms are held,
+            // the customer has not yet formally confirmed. Only when something
+            // was actually booked — an order with no rooms behind it has not
+            // reached that stage.
+            const stage =
+                group.roomsConfirmed > 0
+                    ? await odooSalesOrderService.moveToStage(odooOrderId, cfg.BOOKED_STAGE_NAME)
+                    : null;
+
+            await prisma.bookingGroup
+                .update({
+                    where: { id: group.id },
+                    data: {
+                        odooOrderId,
+                        odooOrderName,
+                        odooStage: stage,
+                        odooSyncedAt: new Date(),
+                    },
+                })
+                .catch((err: any) => {
+                    // A link that fails to save does not undo a booking that
+                    // succeeded; it is reported so an operator can restore it.
+                    warnings.push(
+                        `Booking is not linked to Odoo order ${odooOrderName} (${err.message}).`,
+                    );
+                });
+        }
+
+        // ── 4. Reservation references back to Odoo ───────────────────────────
         if (odooOrderId) {
             const references = group.bookings
                 .map((b) => b.bookingReference)

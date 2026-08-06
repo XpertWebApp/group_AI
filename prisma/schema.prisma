@@ -938,6 +938,27 @@ model BookingGroup {
   /// the remaining rooms can be sourced by hand.
   shortfallNote String? @map("shortfall_note")
 
+  // ── Odoo sales order ─────────────────────────────────────────────────────
+  // The commercial record this booking belongs to. Held here because the
+  // reference is otherwise lost the moment the booking response is returned:
+  // nothing else records which order a group was raised against, so a later
+  // status update or a support query has no way back to it.
+
+  /// Numeric id of the sale.order in Odoo. Null when the order could not be
+  /// raised — the booking still happened and the gap is reported.
+  odooOrderId Int? @map("odoo_order_id")
+
+  /// Human-facing order number ("S00336"), which is what staff quote to each
+  /// other and search for in Odoo. Stored alongside the id rather than looked
+  /// up, so a support query needs no round trip.
+  odooOrderName String? @map("odoo_order_name") @db.VarChar(64)
+
+  /// Last stage this group was pushed to in Odoo's pipeline. Recorded so a
+  /// repeated sync does not rewrite a stage a human has since moved on.
+  odooStage String? @map("odoo_stage") @db.VarChar(64)
+
+  odooSyncedAt DateTime? @map("odoo_synced_at")
+
   createdById String? @map("created_by_id") @db.Uuid
   createdBy   User?   @relation("BookingGroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
