@@ -86,6 +86,19 @@ jest.mock('@prisma/client', () => {
             create: jest.fn().mockResolvedValue({}),
         },
         // sendProposal counts prior offers to derive the next version number.
+        // Reached by the review gate on send: an offer cannot go out while a
+        // booking made against the proposal is unreviewed. No groups here, so
+        // these proposals send as they did before the gate existed.
+        bookingGroup: {
+            findMany: jest.fn().mockResolvedValue([]),
+            findUnique: jest.fn().mockResolvedValue(null),
+            count: jest.fn().mockResolvedValue(0),
+        },
+        // The send flow issues the customer's selection-link token.
+        optionSelection: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            findUnique: jest.fn().mockResolvedValue(null),
+        },
         proposalOffer: {
             count: jest.fn().mockResolvedValue(0),
             create: jest.fn().mockResolvedValue({ id: 'offer-uuid-1', proposalId: 'proposal-uuid-1', version: 1 }),
@@ -133,8 +146,19 @@ jest.mock('@prisma/client', () => {
 
     return {
         PrismaClient: jest.fn(() => mPrismaClient),
-        ProposalStatus: { draft: 'draft', sent: 'sent', approved: 'approved', declined: 'declined' },
-        BookingRequestStatus: { pending: 'pending', draft: 'draft', processing: 'processing', ai_generated: 'ai_generated', completed: 'completed', cancelled: 'cancelled' },
+        // Every enum in the schema, not only the ones this suite asserts on.
+        // Repositories read these at module load, and app.ts pulls in more of
+        // them as routes are added — a missing enum fails the whole suite at
+        // import time, which reads as an unrelated breakage. Mirrors
+        // prisma/schema.prisma.
+        JobStatus: { IN_PROGRESS: 'IN_PROGRESS', COMPLETED: 'COMPLETED', FAILED: 'FAILED' },
+        BookingRequestStatus: { pending: 'pending', draft: 'draft', processing: 'processing', completed: 'completed', cancelled: 'cancelled', ai_generated: 'ai_generated', sent: 'sent', declined: 'declined', needs_manual_handling: 'needs_manual_handling' },
+        ProposalStatus: { draft: 'draft', pending_admin_approval: 'pending_admin_approval', sent: 'sent', approved: 'approved', declined: 'declined' },
+        SettingCategory: { general: 'general', email: 'email', company: 'company', policies: 'policies' },
+        HotelProbeJobStatus: { QUEUED: 'QUEUED', RUNNING: 'RUNNING', PROBING: 'PROBING', COMPLETED: 'COMPLETED', SKIPPED_INSUFFICIENT: 'SKIPPED_INSUFFICIENT', FAILED: 'FAILED' },
+        SupplierPriority: { HIGH: 'HIGH', MEDIUM: 'MEDIUM', LOW: 'LOW', AVOID: 'AVOID' },
+        BookingGroupStatus: { pending: 'pending', booking: 'booking', confirmed: 'confirmed', partial: 'partial', failed: 'failed', cancelled: 'cancelled' },
+        BookingFlowStatus: { draft: 'draft', prebooked: 'prebooked', price_changed: 'price_changed', booking: 'booking', booked: 'booked', vouchered: 'vouchered', cancelled: 'cancelled', pending_cancellation: 'pending_cancellation', failed: 'failed' },
         Prisma: { JsonNull: null },
     };
 });

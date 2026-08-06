@@ -1,5 +1,7 @@
 import proposalRepository from '../repositories/proposal.repository';
 import notificationService, { resolveStaffNotificationEmail } from './notification.service';
+import optionSelectionService from './optionSelection.service';
+import groupReviewService from './groupReview.service';
 import { generateOfferPdf, OfferPdfData } from './pdfGeneration.service';
 import requestRepository from '../repositories/request.repository';
 import requestsService from './requests.service';
@@ -794,6 +796,24 @@ export class ProposalService {
             };
         }
 
+        // ── Group handler review gate ───────────────────────────────────
+        // Once a booking exists for this proposal, a person has to have checked
+        // it before the customer sees an offer: "The customer-facing offer must
+        // not be sent before this review is completed."
+        //
+        // Scoped to proposals that have a booking. An offer sent before
+        // anything is booked is the ordinary Phase 1 flow and is not what the
+        // client was describing.
+        try {
+            await groupReviewService.assertProposalReviewed(id);
+        } catch (err: any) {
+            throw {
+                status: 409,
+                message: err.message,
+                code: err.code ?? 'REVIEW_REQUIRED',
+            };
+        }
+
         // ── Payment-deadline gate ───────────────────────────────────────
         // The customer-facing PDF + email both display "Payment due by
         // <date>" — that date is staff-set on the proposal. Refuse to
@@ -904,9 +924,22 @@ export class ProposalService {
         const contactName = request?.contactName ?? request?.firstName ?? 'Guest';
         const destinationName = request?.destinationName ?? 'Unknown';
 
+        // Issue the token behind the customer's selection link before the email
+        // goes out. Idempotent, so re-sending an offer keeps the link in the
+        // first email working — that is the one a customer is most likely to
+        // still have. A failure here must not stop the offer being sent: the
+        // PDF is still useful, and a staff member can record the choice.
+        let selectionToken: string | undefined;
+        try {
+            selectionToken = await optionSelectionService.ensureSelectionToken(id);
+        } catch (err) {
+            logger.error({ err, proposalId: id }, 'sendProposal: could not issue selection token');
+        }
+
         // notification.sendOfferPdfToAgent does NOT throw for normal failures — it returns
         // a discriminated union (EmailSendResult). Inspect ok/failure to decide what to do.
         const sendResult = await notificationService.sendOfferPdfToAgent({
+            selectionToken,
             agentEmail: recipientEmail,
             referenceNumber: refNum,
             contactName,

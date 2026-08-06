@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import proposalsController from '../controllers/proposals.controller';
+import optionSelectionController from '../controllers/optionSelection.controller';
+import { RecordSelectionSchema } from '../validation/optionSelectionSchemas';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
@@ -151,6 +153,19 @@ router.get(
     authMiddleware,
     validate(DownloadPdfQuerySchema, 'query'),
     proposalsController.downloadOfferPdf,
+);
+
+// ── Option selection ────────────────────────────────────────────────────────
+// The customer normally chooses through their own link; these are the staff
+// equivalents, for reading the choice and for recording one made by phone.
+
+router.get('/:id/selection', authMiddleware, optionSelectionController.getForProposal);
+
+router.post(
+    '/:id/selection',
+    authMiddleware,
+    validate(RecordSelectionSchema, 'body'),
+    optionSelectionController.recordForCustomer,
 );
 
 export default router;

@@ -782,6 +782,12 @@ export class NotificationService {
         language?: 'en' | 'de';
         /** Customer payment deadline (ISO 8601). Surfaced in the email body. */
         paymentDeadline?: string | null;
+        /**
+         * Token behind the "choose your option" link. Absent when the token
+         * could not be issued — the email still goes, carrying the PDF alone,
+         * because an offer without a link is worth more than no offer.
+         */
+        selectionToken?: string;
     }): Promise<EmailSendResult> {
         const language = opts.language ?? 'en';
         const subject = language === 'de'
@@ -793,6 +799,7 @@ export class NotificationService {
             destinationName: opts.destinationName,
             language,
             paymentDeadline: opts.paymentDeadline ?? null,
+            selectionToken: opts.selectionToken,
         });
 
         // Customer-facing — Reply-To is the group inbox (Read B rule).

@@ -154,6 +154,24 @@ class OdooClientService {
         return rows[0] ?? null;
     }
 
+    /**
+     * Run an arbitrary Odoo model method.
+     *
+     * Exposed so services that write to Odoo — sales orders, reservation
+     * references — go through the same path as the reads: one authentication
+     * cache, one rate limiter, and the single re-auth-and-retry on an expired
+     * session. A service holding its own JSON-RPC call would duplicate all
+     * three and drift from them.
+     */
+    async call<T>(
+        model: string,
+        method: string,
+        args: any[],
+        kwargs: Record<string, any> = {},
+    ): Promise<T> {
+        return this.executeKw<T>(model, method, args, kwargs);
+    }
+
     // ─── private helpers ─────────────────────────────────────────────────
 
     private async executeKw<T>(

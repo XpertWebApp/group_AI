@@ -650,6 +650,14 @@ export function buildOfferPdfEmail(opts: {
      * Offer flow blocks sending without a deadline set).
      */
     paymentDeadline?: string | null;
+    /**
+     * Token behind the "select your option" link.
+     *
+     * Optional so an offer still sends if the token could not be issued —
+     * the customer gets the PDF and a staff member records the choice by
+     * hand, which is worse than the link but better than no offer.
+     */
+    selectionToken?: string;
 }): string {
     // Small hand-translated dictionary for customer-facing strings on the
     // offer-PDF email. DeepL is intentionally NOT used here — this is a
@@ -667,9 +675,11 @@ export function buildOfferPdfEmail(opts: {
             destinationLabel: 'Reiseziel',
             paymentDueLabel: 'Zahlungsfrist',
             calloutTitle: 'Noch nicht bestätigt',
-            calloutBody: 'Die Hotelverfügbarkeit ist begrenzt und kann sich ändern — antworten Sie auf diese E-Mail, um Ihre Buchung zu bestätigen.',
-            replyLine: 'Bei Fragen oder zur Bestätigung Ihrer Buchung antworten Sie bitte auf diese E-Mail oder nutzen Sie den untenstehenden Link.',
+            calloutBody: 'Die Hotelverfügbarkeit ist begrenzt und kann sich ändern — wählen Sie unten Ihre Option, um Ihre Buchung zu sichern.',
+            replyLine: 'Bei Fragen antworten Sie bitte auf diese E-Mail.',
             cta: 'Kontakt aufnehmen',
+            selectCta: 'Option auswählen',
+            selectLine: 'Bitte wählen Sie Ihre Option über den untenstehenden Link. Die Buchung wird erst nach Ihrer Auswahl vorgenommen.',
             didYouHeadline: 'Wir vermitteln auch Sport- &amp; Event-Tickets für Gruppen.',
             didYouBody: 'Champions League, Formel 1, Wimbledon, NFL und mehr — buchbar in Gruppenvolumen zusammen mit Ihrer Unterkunft.',
             didYouCta: 'Zum Ticketshop',
@@ -684,9 +694,14 @@ export function buildOfferPdfEmail(opts: {
             destinationLabel: 'Destination',
             paymentDueLabel: 'Payment due by',
             calloutTitle: 'Not yet confirmed',
-            calloutBody: 'Hotel availability is limited and subject to change — reply to this email to confirm your booking.',
-            replyLine: 'To confirm your booking or for any questions, please reply to this email or use the link below.',
+            calloutBody: 'Hotel availability is limited and subject to change — select your option below to secure your booking.',
+            replyLine: 'For any questions, please reply to this email.',
             cta: 'Contact Us',
+            // The selection link is how a booking is made. Confirming by reply
+            // is deliberately no longer offered: the customer has to accept the
+            // stated conditions, which a free-text reply cannot record.
+            selectCta: 'Select your option',
+            selectLine: 'Please choose your option using the link below. Nothing is booked until you make that selection.',
             didYouHeadline: 'We also handle sports &amp; event tickets for group sizes.',
             didYouBody: 'Champions League, F1, Wimbledon, NFL and more — bookable in group volumes alongside your accommodation.',
             didYouCta: 'Visit the Ticket Shop',
@@ -696,6 +711,13 @@ export function buildOfferPdfEmail(opts: {
     // attached PDF uses the same formatter (formatDateEU). Matched here
     // inline to keep this module free of cross-imports from the PDF
     // service — same two-digit-day, two-digit-month, four-digit-year shape.
+    // The customer-facing app that renders the selection page. Absent in
+    // environments where no such app is deployed yet — the button is then
+    // omitted rather than pointing at a URL that does not resolve.
+    const appUrl = process.env['CUSTOMER_APP_URL']?.replace(/\/+$/, '');
+    const selectionUrl =
+        opts.selectionToken && appUrl ? `${appUrl}/select/${opts.selectionToken}` : null;
+
     let paymentDueRow: { label: string; value: string } | null = null;
     if (opts.paymentDeadline) {
         const d = new Date(opts.paymentDeadline);
@@ -725,6 +747,8 @@ export function buildOfferPdfEmail(opts: {
                 detailRows,
                 offerCallout(t.calloutTitle, t.calloutBody),
             )}
+            ${selectionUrl ? paragraph(t.selectLine) : ''}
+            ${selectionUrl ? ctaButton(t.selectCta, selectionUrl) : ''}
             ${paragraph(t.replyLine)}
             ${ctaButton(t.cta, `mailto:groups@s-e-t-t.com?subject=Offer%20%23${opts.referenceNumber}`)}
             ${signatureBlock()}
