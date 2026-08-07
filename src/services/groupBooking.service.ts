@@ -439,6 +439,82 @@ export class GroupBookingService {
     }
 
     /**
+     * Issue vouchers for every confirmed reservation in a group.
+     *
+     * Called once the customer has formally confirmed. Until then a booking is
+     * a hold: BookV2 is sent with IssueVoucher=false so that a group can be
+     * released without charge if the customer walks away.
+     *
+     * The step is not optional. WBE cancels an unvouchered booking at its
+     * deadline, so a group that reaches its deadline without this having run
+     * loses its rooms quietly — which is why the result reports what failed
+     * rather than only what worked.
+     *
+     * Each reservation is attempted independently. One supplier refusing must
+     * not leave the rest of the group unvouchered and heading for the same
+     * silent cancellation.
+     */
+    async voucherGroup(groupId: string): Promise<{
+        group: BookingGroupWithBookings;
+        vouchered: string[];
+        failed: Array<{ bookingReference: string | null; reason: string }>;
+    }> {
+        const group = await bookingGroupRepository.findById(groupId);
+        if (!group) throw new GroupBookingError('Group not found', 'PROPOSAL_NOT_BOOKABLE');
+
+        // Only confirmed reservations can be vouchered. Already-vouchered ones
+        // are skipped rather than retried: WBE treats a second issuance as an
+        // error, and the underlying service is idempotent anyway.
+        const pending = group.bookings.filter((b) => b.status === BookingFlowStatus.booked);
+
+        if (pending.length === 0) {
+            const alreadyDone = group.bookings.some(
+                (b) => b.status === BookingFlowStatus.vouchered,
+            );
+            if (!alreadyDone) {
+                throw new GroupBookingError(
+                    'This group holds no confirmed reservation to voucher',
+                    'NO_AVAILABILITY',
+                );
+            }
+        }
+
+        const vouchered: string[] = [];
+        const failed: Array<{ bookingReference: string | null; reason: string }> = [];
+
+        for (const booking of pending) {
+            try {
+                await wbeBookingService.issueVoucher(booking.id);
+                vouchered.push(booking.bookingReference ?? booking.id);
+            } catch (err: any) {
+                failed.push({
+                    bookingReference: booking.bookingReference,
+                    reason: err.message,
+                });
+                logger.error({
+                    msg: 'Voucher issuance failed for a group reservation',
+                    groupId,
+                    bookingId: booking.id,
+                    bookingReference: booking.bookingReference,
+                    error: err.message,
+                });
+            }
+        }
+
+        const settled = await bookingGroupRepository.recomputeStatus(groupId);
+
+        logger.info({
+            msg: 'Group vouchers issued',
+            groupId,
+            groupReference: group.groupReference,
+            vouchered: vouchered.length,
+            failed: failed.length,
+        });
+
+        return { group: settled, vouchered, failed };
+    }
+
+    /**
      * Cancel every confirmed slice of a group.
      *
      * Each cancellation is attempted independently so one refusal does not

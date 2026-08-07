@@ -109,6 +109,21 @@ router.post(
     bookingGroupController.rejectReview,
 );
 
+/**
+ * Issue vouchers for the group, once the customer has confirmed.
+ *
+ * Rate limited with the booking actions rather than the read endpoints: this
+ * commits the reservations, and an unvouchered booking is cancelled by WBE at
+ * its deadline — so both doing it twice and not doing it have consequences.
+ */
+router.post(
+    '/:id/voucher',
+    authMiddleware,
+    groupBookingLimiter,
+    validate(BookingGroupIdParamSchema, 'params'),
+    bookingGroupController.voucher,
+);
+
 /** Cancel every confirmed slice of the group. */
 router.post(
     '/:id/cancel',

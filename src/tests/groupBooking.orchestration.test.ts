@@ -464,6 +464,118 @@ describe('Group booking orchestration', () => {
     });
 
     // ────────────────────────────────────────────────────────────────────────
+    describe('issuing vouchers for a group', () => {
+        const groupWith = (bookings: any[]) => ({ id: 'group-1', groupReference: 'SETTG-T', bookings });
+
+        beforeEach(() => {
+            wbe.issueVoucher = jest.fn().mockResolvedValue({ status: BookingFlowStatus.vouchered });
+            groups.recomputeStatus.mockResolvedValue({ id: 'group-1', status: 'confirmed', bookings: [] });
+        });
+
+        it('vouchers every confirmed reservation', async () => {
+            groups.findById.mockResolvedValue(
+                groupWith([
+                    { id: 'b1', status: BookingFlowStatus.booked, bookingReference: 'WRW111' },
+                    { id: 'b2', status: BookingFlowStatus.booked, bookingReference: 'WRW222' },
+                ]),
+            );
+
+            const res = await groupBookingService.voucherGroup('group-1');
+
+            expect(wbe.issueVoucher).toHaveBeenCalledTimes(2);
+            expect(res.vouchered).toEqual(['WRW111', 'WRW222']);
+        });
+
+        it('skips reservations that are already vouchered', async () => {
+            // WBE treats a second issuance as an error.
+            groups.findById.mockResolvedValue(
+                groupWith([
+                    { id: 'b1', status: BookingFlowStatus.vouchered, bookingReference: 'WRW111' },
+                    { id: 'b2', status: BookingFlowStatus.booked, bookingReference: 'WRW222' },
+                ]),
+            );
+
+            await groupBookingService.voucherGroup('group-1');
+
+            expect(wbe.issueVoucher).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves unbooked reservations alone', async () => {
+            groups.findById.mockResolvedValue(
+                groupWith([
+                    { id: 'b1', status: BookingFlowStatus.booked, bookingReference: 'WRW111' },
+                    { id: 'b2', status: BookingFlowStatus.failed, bookingReference: null },
+                    { id: 'b3', status: BookingFlowStatus.draft, bookingReference: null },
+                ]),
+            );
+
+            await groupBookingService.voucherGroup('group-1');
+
+            expect(wbe.issueVoucher).toHaveBeenCalledTimes(1);
+        });
+
+        it('continues after one reservation is refused', async () => {
+            // An unvouchered booking is cancelled by WBE at its deadline, so
+            // one refusal must not leave the rest heading the same way.
+            groups.findById.mockResolvedValue(
+                groupWith([
+                    { id: 'b1', status: BookingFlowStatus.booked, bookingReference: 'WRW111' },
+                    { id: 'b2', status: BookingFlowStatus.booked, bookingReference: 'WRW222' },
+                ]),
+            );
+            wbe.issueVoucher
+                .mockRejectedValueOnce(new Error('supplier refused'))
+                .mockResolvedValueOnce({ status: BookingFlowStatus.vouchered });
+
+            const res = await groupBookingService.voucherGroup('group-1');
+
+            expect(wbe.issueVoucher).toHaveBeenCalledTimes(2);
+            expect(res.vouchered).toHaveLength(1);
+        });
+
+        it('names the reservations that failed, so they can be finished by hand', async () => {
+            groups.findById.mockResolvedValue(
+                groupWith([{ id: 'b1', status: BookingFlowStatus.booked, bookingReference: 'WRW111' }]),
+            );
+            wbe.issueVoucher.mockRejectedValue(new Error('supplier refused'));
+
+            const res = await groupBookingService.voucherGroup('group-1');
+
+            expect(res.failed).toEqual([
+                { bookingReference: 'WRW111', reason: 'supplier refused' },
+            ]);
+        });
+
+        it('refuses a group with nothing to voucher', async () => {
+            groups.findById.mockResolvedValue(
+                groupWith([{ id: 'b1', status: BookingFlowStatus.failed, bookingReference: null }]),
+            );
+
+            await expect(groupBookingService.voucherGroup('group-1')).rejects.toThrow(
+                GroupBookingError,
+            );
+        });
+
+        it('accepts a group that was already fully vouchered', async () => {
+            // Re-running must not error: an operator retrying after a partial
+            // failure should land on a no-op, not an exception.
+            groups.findById.mockResolvedValue(
+                groupWith([{ id: 'b1', status: BookingFlowStatus.vouchered, bookingReference: 'WRW111' }]),
+            );
+
+            await expect(groupBookingService.voucherGroup('group-1')).resolves.toBeDefined();
+        });
+
+        it('refuses a group that does not exist', async () => {
+            groups.findById.mockResolvedValue(null);
+
+            await expect(groupBookingService.voucherGroup('missing')).rejects.toThrow(
+                GroupBookingError,
+            );
+        });
+    });
+
+    // ────────────────────────────────────────────────────────────────────────
     describe('cancelling a group', () => {
         it('cancels every confirmed slice', async () => {
             groups.findById.mockResolvedValue({

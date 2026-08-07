@@ -45,7 +45,19 @@ jest.mock('../services/groupBooking.service', () => {
     return {
         ...actual,
         __esModule: true,
-        default: { bookGroup: jest.fn(), cancelGroup: jest.fn() },
+        default: { bookGroup: jest.fn(), cancelGroup: jest.fn(), voucherGroup: jest.fn() },
+    };
+});
+
+// The voucher endpoint is gated on the handler's review, so the gate has to be
+// controllable from here — the real error class is kept so `instanceof` still
+// selects the right status in the controller.
+jest.mock('../services/groupReview.service', () => {
+    const actual = jest.requireActual('../services/groupReview.service');
+    return {
+        ...actual,
+        __esModule: true,
+        default: { assertReviewed: jest.fn(), buildReviewSheet: jest.fn() },
     };
 });
 
@@ -66,9 +78,11 @@ jest.mock('../repositories/bookingGroup.repository', () => {
 import app from '../app';
 import groupBookingService, { GroupBookingError } from '../services/groupBooking.service';
 import bookingGroupRepository from '../repositories/bookingGroup.repository';
+import groupReviewService, { GroupReviewError } from '../services/groupReview.service';
 
 const svc = groupBookingService as jest.Mocked<any>;
 const repo = bookingGroupRepository as jest.Mocked<any>;
+const review = groupReviewService as jest.Mocked<any>;
 
 const TEST_JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-key-for-jest';
 const GROUP_ID = '11111111-2222-4333-8444-555555555555';
@@ -385,6 +399,98 @@ describe('Booking group API', () => {
 
         it('rejects a non-UUID id', async () => {
             const res = await request(app).get('/api/v1/booking-groups/12345').set(authHeader());
+            expect(res.status).toBe(400);
+        });
+    });
+
+    // ────────────────────────────────────────────────────────────────────────
+    describe('POST /api/v1/booking-groups/:id/voucher', () => {
+        beforeEach(() => {
+            review.assertReviewed.mockResolvedValue(undefined);
+            svc.voucherGroup.mockResolvedValue({
+                group: aGroup(),
+                vouchered: ['WRW111', 'WRW222'],
+                failed: [],
+            });
+        });
+
+        it('rejects an unauthenticated request', async () => {
+            const res = await request(app).post(`/api/v1/booking-groups/${GROUP_ID}/voucher`);
+            expect(res.status).toBe(401);
+        });
+
+        it('returns 200 when every reservation was vouchered', async () => {
+            const res = await request(app)
+                .post(`/api/v1/booking-groups/${GROUP_ID}/voucher`)
+                .set(authHeader());
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.vouchered).toHaveLength(2);
+        });
+
+        it('returns 207 when some reservations could not be vouchered', async () => {
+            // An unvouchered booking is cancelled by WBE at its deadline, so a
+            // partial result needs someone to finish it — not a plain success.
+            svc.voucherGroup.mockResolvedValue({
+                group: aGroup(),
+                vouchered: ['WRW111'],
+                failed: [{ bookingReference: 'WRW222', reason: 'supplier refused' }],
+            });
+
+            const res = await request(app)
+                .post(`/api/v1/booking-groups/${GROUP_ID}/voucher`)
+                .set(authHeader());
+
+            expect(res.status).toBe(207);
+        });
+
+        it('names the reservations still needing a voucher', async () => {
+            svc.voucherGroup.mockResolvedValue({
+                group: aGroup(),
+                vouchered: [],
+                failed: [{ bookingReference: 'WRW222', reason: 'supplier refused' }],
+            });
+
+            const res = await request(app)
+                .post(`/api/v1/booking-groups/${GROUP_ID}/voucher`)
+                .set(authHeader());
+
+            expect(res.body.message).toContain('WRW222');
+            expect(res.body.message).toMatch(/cancelled at its deadline/);
+        });
+
+        it('refuses to voucher a booking the handler has not reviewed', async () => {
+            // Vouchering commits the group; the client's process puts a human
+            // check before that point.
+            review.assertReviewed.mockRejectedValue(
+                new GroupReviewError('Not reviewed', 'NOT_REVIEWED'),
+            );
+
+            const res = await request(app)
+                .post(`/api/v1/booking-groups/${GROUP_ID}/voucher`)
+                .set(authHeader());
+
+            expect(res.status).toBe(409);
+            expect(svc.voucherGroup).not.toHaveBeenCalled();
+        });
+
+        it('refuses to voucher a booking that was rejected at review', async () => {
+            review.assertReviewed.mockRejectedValue(
+                new GroupReviewError('Rejected: wrong hotel', 'REVIEW_REJECTED'),
+            );
+
+            const res = await request(app)
+                .post(`/api/v1/booking-groups/${GROUP_ID}/voucher`)
+                .set(authHeader());
+
+            expect(res.status).toBe(409);
+        });
+
+        it('rejects a non-UUID group id', async () => {
+            const res = await request(app)
+                .post('/api/v1/booking-groups/not-a-uuid/voucher')
+                .set(authHeader());
+
             expect(res.status).toBe(400);
         });
     });

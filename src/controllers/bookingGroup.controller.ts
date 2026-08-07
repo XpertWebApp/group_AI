@@ -221,6 +221,47 @@ export class BookingGroupController {
     }
 
     /**
+     * POST /api/v1/booking-groups/:id/voucher
+     *
+     * Issue vouchers for every confirmed reservation. Run once the customer has
+     * formally confirmed — until then the booking is a hold that can be
+     * released without charge.
+     *
+     * Gated on the handler's review: vouchering commits the group, and the
+     * client's process puts a human check before that point.
+     *
+     * Returns 207 when some reservations were vouchered and others refused.
+     * An unvouchered reservation is cancelled by WBE at its deadline, so a
+     * partial result is something a person has to finish, not a detail.
+     */
+    async voucher(req: Request, res: Response, next: NextFunction) {
+        try {
+            const id = req.params['id'] as string;
+
+            await groupReviewService.assertReviewed(id);
+            const result = await groupBookingService.voucherGroup(id);
+
+            const complete = result.failed.length === 0;
+
+            return sendResponse(
+                res,
+                complete ? 200 : 207,
+                result,
+                complete
+                    ? `Vouchers issued for ${result.vouchered.length} reservation(s)`
+                    : `${result.vouchered.length} vouchered, ${result.failed.length} failed. ` +
+                      `An unvouchered booking is cancelled at its deadline — issue these manually: ` +
+                      result.failed.map((f) => f.bookingReference ?? 'unknown').join(', '),
+            );
+        } catch (error) {
+            // Either kind of error can surface here: the review gate's, or the
+            // booking flow's.
+            if (error instanceof GroupReviewError) return forwardReviewError(error, next);
+            return forwardGroupError(error, next);
+        }
+    }
+
+    /**
      * GET /api/v1/booking-groups/:id/review
      *
      * Everything the group handler has to check, in one sheet. Items the system
