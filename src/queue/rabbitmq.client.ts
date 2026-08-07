@@ -217,6 +217,34 @@ export function getConnectionStatus(): {
     };
 }
 
+/**
+ * How many messages are sitting in the probe queue, and how many consumers are
+ * attached to it broker-side.
+ *
+ * Returns null when there is no channel to ask. Never throws — this is called
+ * from the health endpoint, which must answer even when RabbitMQ is unwell.
+ *
+ * `consumerCount` comes from the broker rather than from our own process, so it
+ * also catches the case where this process thinks it subscribed but the broker
+ * disagrees. On 6 August there was no way to see either number without shell
+ * access to the broker, which the person debugging did not have.
+ */
+export async function getQueueDepth(): Promise<{
+    messageCount: number;
+    consumerCount: number;
+} | null> {
+    if (!channel) return null;
+    try {
+        const q = await channel.checkQueue(HOTEL_PROBE_QUEUE);
+        return { messageCount: q.messageCount, consumerCount: q.consumerCount };
+    } catch {
+        // checkQueue closes the channel on a missing queue, and can fail on a
+        // channel that is already closing. Either way the drop handlers above
+        // take care of recovery; the health check just reports "unknown".
+        return null;
+    }
+}
+
 export async function closeConnection(): Promise<void> {
     try {
         if (channel) await channel.close();

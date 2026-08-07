@@ -5,7 +5,7 @@ import requestRepository from '../repositories/request.repository';
 import hotelSearchRepository from '../repositories/hotelSearch.repository';
 import hotelProbeJobRepository from '../repositories/hotelProbeJob.repository';
 import wbeClientService from './wbe.client.service';
-import { publishHotelProbeJob } from '../queue/hotelProbe.publisher';
+import { publishHotelProbeJob, logPublishSummary } from '../queue/hotelProbe.publisher';
 import logger from '../utils/logger';
 import { normalisePricePerRoomPerNight } from '../utils/pricing';
 import { getSupplierMaxRooms, isGroupAllowed, getCappedMax, getSupplierPriority, SUPPLIER_PRIORITY_RANK } from '../config/supplierLimits';
@@ -1731,7 +1731,7 @@ export class HotelSearchService {
                 requestedRooms: totalRooms,
                 probeLimit,
             });
-            await publishHotelProbeJob({
+            const published = await publishHotelProbeJob({
                 jobId,
                 searchRequestId: requestId,
                 hotelCode: dbHotel.hotelCode,
@@ -1749,8 +1749,13 @@ export class HotelSearchService {
                 roomTypeTargets,
                 lang: params.lang,
             });
-            jobsQueued++;
+            // Counted only when the job actually reached RabbitMQ. Incrementing
+            // regardless is what made the 6 August incident invisible: the log
+            // reported 87 jobs queued while none had been dispatched.
+            if (published) jobsQueued++;
         }
+
+        logPublishSummary(requestId, jobsQueued, dbHotels.length);
 
         logger.info(
             {
@@ -1988,7 +1993,7 @@ export class HotelSearchService {
                 searchKind: 'alternative',
                 alternativeReason: reason,
             });
-            await publishHotelProbeJob({
+            const published = await publishHotelProbeJob({
                 jobId,
                 searchRequestId: requestId,
                 hotelCode: candidate.hotel.hotelCode,
@@ -2010,7 +2015,7 @@ export class HotelSearchService {
                 alternativeReason: reason,
                 lang: params.lang,
             });
-            jobsQueued++;
+            if (published) jobsQueued++;
         }
 
         await logAuditEvent({
@@ -2366,7 +2371,7 @@ export class HotelSearchService {
                 requestedRooms: totalRooms,
                 probeLimit,
             });
-            await publishHotelProbeJob({
+            const published = await publishHotelProbeJob({
                 jobId,
                 searchRequestId: requestId,
                 hotelCode: dbHotel.hotelCode,
@@ -2383,7 +2388,7 @@ export class HotelSearchService {
                 dominantRoomType,
                 roomTypeTargets,
             });
-            jobsQueued++;
+            if (published) jobsQueued++;
         }
 
         // Pagination context — total candidates at this relaxation level so the
@@ -2528,6 +2533,8 @@ export class HotelSearchService {
         // every additional batch, causing the same #522-style incident.
         const resolvedMealTypeAdditional = resolveMealType(params.mealType, request as any);
 
+        let publishedCount = 0;
+
         for (const dbHotel of freshHotels) {
             const jobId = randomUUID();
             await hotelProbeJobRepository.create({
@@ -2537,7 +2544,7 @@ export class HotelSearchService {
                 requestedRooms: totalRooms,
                 probeLimit,
             });
-            await publishHotelProbeJob({
+            const published = await publishHotelProbeJob({
                 jobId,
                 searchRequestId: requestId,
                 hotelCode: dbHotel.hotelCode,
@@ -2554,13 +2561,17 @@ export class HotelSearchService {
                 dominantRoomType,
                 roomTypeTargets,
             });
+            if (published) publishedCount++;
         }
+
+        logPublishSummary(requestId, publishedCount, freshHotels.length);
 
         const nextOffset = paginationContext.nextOffset + batch.length;
         logger.info(
             {
                 requestId,
-                queued: freshHotels.length,
+                // What actually reached the queue, not what we intended to send.
+                queued: publishedCount,
                 skippedDuplicates: batch.length - freshHotels.length,
                 offset: paginationContext.nextOffset,
                 nextOffset,

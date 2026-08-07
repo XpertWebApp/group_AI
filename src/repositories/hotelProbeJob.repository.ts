@@ -175,6 +175,45 @@ export class HotelProbeJobRepository {
         });
         return result.count;
     }
+
+    /**
+     * Fail jobs that were never picked up by a worker.
+     *
+     * The gap that caused the 6 August incident. `failStaleProbingJobs` only
+     * looks at RUNNING and PROBING — jobs a worker has already claimed. A job
+     * sitting in QUEUED means no worker ever claimed it, and nothing watched
+     * for that: 87 of them sat untouched for two hours while the orphan sweeper
+     * skipped the search (its jobs were not all terminal) and the probe
+     * watchdog ignored them (they were not PROBING).
+     *
+     * Uses a longer default than the PROBING watchdog. A queued job is waiting
+     * its turn, which is normal under load — the worker takes only
+     * WORKER_JOB_CONCURRENCY at a time, so a large search legitimately leaves
+     * jobs queued for minutes. Five minutes is past any legitimate wait.
+     *
+     * Failing rather than re-publishing is deliberate, for the same reason as
+     * the sibling method: if the consumer is genuinely absent, re-publishing
+     * loops forever. Failing lets the search settle and surfaces the problem.
+     */
+    async failStaleQueuedJobs(olderThanMs = 300_000) {
+        const cutoff = new Date(Date.now() - olderThanMs);
+        const result = await prisma.hotelProbeJob.updateMany({
+            where: {
+                status: HotelProbeJobStatus.QUEUED,
+                // createdAt, not startedAt: a queued job has never started, so
+                // startedAt is null and would match nothing.
+                createdAt: { lt: cutoff },
+            },
+            data: {
+                status: HotelProbeJobStatus.FAILED,
+                completedAt: new Date(),
+                errorMsg:
+                    `Queue watchdog: never claimed by a worker within ` +
+                    `${Math.round(olderThanMs / 1000)}s — check the worker is subscribed to RabbitMQ`,
+            },
+        });
+        return result.count;
+    }
 }
 
 export default new HotelProbeJobRepository();

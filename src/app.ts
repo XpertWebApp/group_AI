@@ -8,7 +8,8 @@ import { PrismaClient } from '@prisma/client';
 import config from './config';
 import { errorMiddleware } from './middlewares/error.middleware';
 import routes from './routes/index';
-import { getConnectionStatus } from './queue/rabbitmq.client';
+import { getConnectionStatus, getQueueDepth } from './queue/rabbitmq.client';
+import { isConsuming, getConsumerTag } from './queue/hotelProbe.worker';
 
 // Shared Prisma client instance for the /health check. Kept separate from
 // the per-repo instances so a health-check DB query never contends with
@@ -94,7 +95,48 @@ app.get('/health/deep', async (_req, res) => {
     };
     if (!rabbit.connected) overallOk = false;
 
-    // 3. Stuck-search early-warning: how many BookingRequests have been
+    // 3. The probe consumer. A live channel is not a live consumer: on
+    //    6 August the channel was up the whole time, this endpoint reported
+    //    rabbitmq OK, and 87 jobs sat unclaimed because nothing was
+    //    subscribed. Without this check the health endpoint cannot
+    //    distinguish "working" from "accepting work and dropping it".
+    //
+    //    consumerCount comes from the broker, so it also catches a process
+    //    that believes it subscribed while the broker disagrees.
+    const depth = await getQueueDepth();
+    const consuming = isConsuming();
+    checks['probe_consumer'] = {
+        ok: consuming && (depth === null || depth.consumerCount > 0),
+        detail: depth
+            ? `tag=${getConsumerTag() ?? 'none'} brokerConsumers=${depth.consumerCount} queued=${depth.messageCount}`
+            : `tag=${getConsumerTag() ?? 'none'} (queue depth unavailable — no channel)`,
+    };
+    if (!checks['probe_consumer'].ok) overallOk = false;
+
+    // 4. Probe jobs sitting in QUEUED. The queue watchdog fails these after
+    //    five minutes, so a non-zero count here that persists means jobs are
+    //    being created faster than they are claimed — or not claimed at all.
+    //    This is the number that would have named the 6 August fault in one
+    //    look ("0 of 87 checked" on screen, 87 here).
+    try {
+        const queuedRows: any = await healthPrisma.$queryRawUnsafe(`
+            SELECT COUNT(*)::int AS queued
+            FROM app.hotel_probe_jobs
+            WHERE status = 'QUEUED'
+              AND created_at < NOW() - INTERVAL '2 minutes'
+        `);
+        const queuedCount = queuedRows?.[0]?.queued ?? 0;
+        checks['queued_probe_jobs'] = { ok: queuedCount === 0, detail: queuedCount };
+        if (queuedCount > 0) overallOk = false;
+    } catch (err) {
+        // Diagnostic only — a failing count must not mask the checks above.
+        checks['queued_probe_jobs'] = {
+            ok: false,
+            detail: `check failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
+    }
+
+    // 5. Stuck-search early-warning: how many BookingRequests have been
     //    stuck in 'in_progress' for > 10 minutes? Non-zero means new
     //    searches are getting swallowed and the orphan sweeper hasn't
     //    caught them yet. Threshold at 10min so brief in-flight probes

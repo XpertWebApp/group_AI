@@ -10,6 +10,7 @@ import { startHotelProbeWorker } from './queue/hotelProbe.worker';
 import { closeConnection } from './queue/rabbitmq.client';
 import hotelSearchService from './services/hotelSearch.service';
 import hotelProbeJobRepository from './repositories/hotelProbeJob.repository';
+import searchHealthAlertService from './services/searchHealthAlert.service';
 
 const prisma = new PrismaClient();
 
@@ -95,8 +96,54 @@ const startServer = async () => {
                 });
         }, 30_000);
 
+        // Jobs that no worker ever claimed. Separate from the PROBING watchdog
+        // above, which only sees jobs already in flight — a job stuck in QUEUED
+        // was invisible to every sweeper, which is how 87 of them sat for two
+        // hours on 6 August while the search reported "0 of 87 checked".
+        //
+        // Logged at error, not warn: a queued job past this threshold means the
+        // worker is not consuming, and that affects every search, not one.
+        const QUEUE_WATCHDOG_THRESHOLD_MS = 5 * 60 * 1000;
+        setInterval(() => {
+            hotelProbeJobRepository
+                .failStaleQueuedJobs(QUEUE_WATCHDOG_THRESHOLD_MS)
+                .then((count) => {
+                    if (count > 0) {
+                        logger.error(
+                            { count, thresholdMinutes: QUEUE_WATCHDOG_THRESHOLD_MS / 60_000 },
+                            'Queue watchdog: jobs were never claimed by a worker — is it subscribed to RabbitMQ?',
+                        );
+                    }
+                })
+                .catch((err) => {
+                    logger.error({ msg: 'Queue watchdog failed', error: err?.message });
+                });
+        }, 60_000);
+
+        // Tell staff a search has stalled before a customer does. The watchdogs
+        // above settle the jobs; this is the part that was missing on 6 August,
+        // when the condition sat visible in the database for two hours and the
+        // first report came from the client.
+        setInterval(() => {
+            searchHealthAlertService.checkAndAlert().catch((err) => {
+                logger.error({ msg: 'Stalled-search alerting failed', error: err?.message });
+            });
+        }, 60_000);
+
         const server = app.listen(config.port, '0.0.0.0', () => {
-            logger.info(`Server is running on port ${config.port} in ${config.env} mode`);
+            // Port and pid as structured fields, not just interpolated text.
+            // On 6 August this line existed only as console.log, so `pm2 logs`
+            // showed it but the JSON logs did not — half an hour went into
+            // curling port 4000 while the server was listening on 3005.
+            logger.info(
+                {
+                    port: config.port,
+                    env: config.env,
+                    pid: process.pid,
+                    healthUrl: `http://127.0.0.1:${config.port}/health/deep`,
+                },
+                'Server listening',
+            );
             console.log(`Server listening on http://0.0.0.0:${config.port}`);
         });
 

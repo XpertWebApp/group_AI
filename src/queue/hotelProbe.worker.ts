@@ -23,6 +23,7 @@ import {
     PROBE_POLL_TIMEOUT_MS,
     MULTI_SUPPLIER_OVERLAP_THRESHOLD,
     OVERLAP_DISCOUNT_FACTOR,
+    WORKER_JOB_CONCURRENCY,
 } from '../config/probeConfig';
 
 // ─── Re-use filter helpers inline (avoid circular imports) ────────────────────
@@ -311,7 +312,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             const typeBatches = Math.ceil(target.probeLimit / PROBE_BATCH_SIZE);
             let typeRoomsFound = 0;
 
-            logger.info(
+            logger.debug(
                 { jobId, hotelCode, roomType: target.roomType, requested: target.requested, probeLimit: target.probeLimit, batches: typeBatches },
                 'Starting per-type probe phase',
             );
@@ -359,7 +360,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 captureWbeHotelMeta(wbeHotel);
 
                 if (!wbeHotel) {
-                    logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No hotel entry — stopping probes for this type');
+                    logger.debug({ jobId, hotelCode, roomType: target.roomType, lastProbeRange }, 'No hotel entry — stopping probes for this type');
                     break;
                 }
 
@@ -377,7 +378,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 );
 
                 if (roomTypeFiltered.length === 0) {
-                    logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, totalRaw: rawOptions.length, afterParse: batchOptions.length, afterMeal: mealFiltered.length }, 'No usable options — stopping probes for this type');
+                    logger.debug({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, totalRaw: rawOptions.length, afterParse: batchOptions.length, afterMeal: mealFiltered.length }, 'No usable options — stopping probes for this type');
                     break;
                 }
 
@@ -425,12 +426,12 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                 };
                 broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
 
-                logger.info({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, typeRoomsFound, roomsFound }, 'Probe batch complete');
+                logger.debug({ jobId, hotelCode, roomType: target.roomType, lastProbeRange, typeRoomsFound, roomsFound }, 'Probe batch complete');
 
                 if (typeRoomsFound >= target.probeLimit) break;
             }
 
-            logger.info(
+            logger.debug(
                 { jobId, hotelCode, roomType: target.roomType, typeRoomsFound, probeLimit: target.probeLimit },
                 'Per-type probe phase finished',
             );
@@ -466,7 +467,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                     substituteRatio: 2,
                 });
 
-                logger.info(
+                logger.debug(
                     { jobId, hotelCode, quadShortfall, fallbackRoomsNeeded, fallbackProbeLimit, fallbackBatches },
                     'Starting quadruple fallback probe (doubles, twin allowed)',
                 );
@@ -510,7 +511,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                     captureWbeHotelMeta(wbeHotel);
 
                     if (!wbeHotel) {
-                        logger.info({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no hotel entry — stopping');
+                        logger.debug({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no hotel entry — stopping');
                         break;
                     }
 
@@ -527,7 +528,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
                     );
 
                     if (roomTypeFiltered.length === 0) {
-                        logger.info({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no double/twin matches — stopping');
+                        logger.debug({ jobId, hotelCode, lastProbeRange }, 'Quadruple fallback: no double/twin matches — stopping');
                         break;
                     }
 
@@ -629,7 +630,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             captureWbeHotelMeta(wbeHotel);
 
             if (!wbeHotel) {
-                logger.info({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
+                logger.debug({ jobId, hotelCode, lastProbeRange }, 'No hotel entry in probe response — stopping probes');
                 break;
             }
 
@@ -645,7 +646,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             );
 
             if (roomTypeFiltered.length === 0) {
-                logger.info({ jobId, hotelCode, lastProbeRange }, 'No usable options in probe — stopping probes');
+                logger.debug({ jobId, hotelCode, lastProbeRange }, 'No usable options in probe — stopping probes');
                 break;
             }
 
@@ -673,7 +674,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             };
             broadcast(searchRequestId, 'hotelProbeProgress', progressEvent);
 
-            logger.info({ jobId, hotelCode, lastProbeRange, roomsFound }, 'Probe batch complete');
+            logger.debug({ jobId, hotelCode, lastProbeRange, roomsFound }, 'Probe batch complete');
 
             if (roomsFound >= probeLimit) break;
         }
@@ -995,7 +996,7 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
             const nonRefundable = field<boolean>(cxlPolicy, 'NonRefundable', 'nonRefundable') ?? false;
             if (nonRefundable) {
                 console.log(`[Step 3.4] ❌ ${entry.supplierCode}: NonRefundable=true — removing from split`);
-                logger.info({ jobId, hotelCode, supplierCode: entry.supplierCode, tid: entry.tid }, 'Step 3.4: Option is non-refundable — removed');
+                logger.debug({ jobId, hotelCode, supplierCode: entry.supplierCode, tid: entry.tid }, 'Step 3.4: Option is non-refundable — removed');
                 continue;
             }
 
@@ -1402,6 +1403,26 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
 // ─── Worker startup ───────────────────────────────────────────────────────────
 
+/**
+ * The tag RabbitMQ gave our consumer, or null if we are not subscribed.
+ *
+ * Tracked so /health/deep can answer the question that mattered on 6 August and
+ * could not be answered then: is anything actually consuming? A live channel is
+ * not the same as a live consumer — the channel was up the whole time while 87
+ * jobs sat unclaimed, and the health check reported OK.
+ */
+let activeConsumerTag: string | null = null;
+
+/** Whether this process is currently subscribed to the probe queue. */
+export function isConsuming(): boolean {
+    return activeConsumerTag !== null;
+}
+
+/** Consumer tag for diagnostics, or null when not subscribed. */
+export function getConsumerTag(): string | null {
+    return activeConsumerTag;
+}
+
 export async function startHotelProbeWorker(): Promise<void> {
     // Register the consumer setup as a reconnect callback FIRST so any
     // future channel drop triggers auto-recovery. The callback is a
@@ -1426,13 +1447,32 @@ async function registerConsumer(): Promise<void> {
     const ch = await getChannel();
 
     if (!ch) {
+        activeConsumerTag = null;
         logger.warn('Hotel probe worker skipped — RabbitMQ not available (will retry on reconnect)');
         return;
     }
 
-    logger.info('Hotel probe worker started — waiting for jobs');
+    // A dropped channel takes its consumers with it. Clearing the tag here
+    // keeps /health/deep honest during the gap between the drop and the
+    // reconnect callback re-subscribing.
+    ch.on('close', () => {
+        activeConsumerTag = null;
+    });
 
-    ch.consume(
+    // Report what is already waiting before consuming. A non-zero depth here
+    // means the previous consumer died with work outstanding — the single most
+    // useful number when a search is reported stuck, and one we had no way to
+    // see during the 6 August incident.
+    let waiting = 0;
+    try {
+        const q = await ch.checkQueue(HOTEL_PROBE_QUEUE);
+        waiting = q.messageCount;
+    } catch {
+        // checkQueue can fail on a channel that is closing; not worth failing
+        // startup over, and the consumer below still registers.
+    }
+
+    const consumer = await ch.consume(
         HOTEL_PROBE_QUEUE,
         async (msg) => {
             if (!msg) return;
@@ -1465,5 +1505,22 @@ async function registerConsumer(): Promise<void> {
             }
         },
         { noAck: false },
+    );
+
+    activeConsumerTag = consumer.consumerTag;
+
+    // Logged AFTER consume() resolves, and carrying the consumer tag, so the
+    // line is proof that this process is subscribed rather than merely that it
+    // reached the startup code. The old message was emitted before consume()
+    // and appeared even when no consumer was attached — during the 6 August
+    // incident it read as healthy while 87 jobs sat unclaimed.
+    logger.info(
+        {
+            queue: HOTEL_PROBE_QUEUE,
+            consumerTag: consumer.consumerTag,
+            messagesWaiting: waiting,
+            concurrency: WORKER_JOB_CONCURRENCY,
+        },
+        'Hotel probe worker subscribed — consuming jobs',
     );
 }
