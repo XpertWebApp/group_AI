@@ -319,11 +319,28 @@ export const AddProposalHotelSchema = z.object({
 });
 
 export const AdjustHotelPricingSchema = z.object({
+    // Per-room-type patch. Every field is optional so the FE can send a
+    // minimal partial update (e.g. `{ qty: 3 }` from the qty stepper) and
+    // the repo merge preserves whatever isn't in the patch.
+    //
+    // `maxQty` and `supplierBreakdown` are ALSO accepted so an FE echoing
+    // the full rooms map on save doesn't silently lose those fields
+    // (Zod strips unknown keys by default). Persisted values still
+    // originate from the search response at add-hotel time — the FE
+    // should not normally alter them on edit. Explicit accept here just
+    // means the round-trip is honest instead of silently-dropped.
     rooms: z.record(z.string(), z.object({
         net: z.number().nonnegative().optional(),
         sell: z.number().nonnegative().optional(),
         qty: z.number().int().nonnegative().optional(),
         nights: z.number().int().nonnegative().optional(),
+        maxQty: z.number().int().nonnegative().optional(),
+        supplierBreakdown: z
+            .array(z.object({
+                supplierCode: z.string().min(1).max(50),
+                rooms: z.number().int().nonnegative(),
+            }))
+            .optional(),
     })).optional(),
     totalPrice: z.number().nonnegative().optional(),
     currency: z.string().min(2).max(10).optional(),

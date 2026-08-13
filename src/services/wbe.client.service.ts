@@ -74,6 +74,34 @@ const axiosNonCritical = {
         execute(() => originalAxios.post(...args), { bypassCircuitBreaker: true, label: 'non-critical' }),
 };
 
+/**
+ * Cutover safety guard.
+ *
+ * When `WBE_STATIC_ONLY_MODE=true` in env, the WBE client blocks every call
+ * that would mutate a booking against the connected WBE environment
+ * (search, book, voucher, cancel) and permits only read-only static-data
+ * calls (destinations, hotels, images, currencies, nationalities, languages,
+ * hotel details).
+ *
+ * Used during the LIVE cutover so LIVE credentials can be pointed at a local
+ * dev DB for the sole purpose of a fresh static-data sync — with zero risk
+ * of a real search or booking landing in the LIVE WBE ledger.
+ *
+ * Default: OFF. Setting is env-only; requires a server restart to change.
+ */
+const WBE_STATIC_ONLY_MODE = String(process.env.WBE_STATIC_ONLY_MODE || '').toLowerCase() === 'true';
+
+function assertMutationsAllowed(operation: string): void {
+    if (WBE_STATIC_ONLY_MODE) {
+        const err = new Error(
+            `WBE_STATIC_ONLY_MODE is on — operation "${operation}" is blocked. ` +
+            `Only static-data sync calls are permitted. Unset WBE_STATIC_ONLY_MODE and restart the server to enable mutations.`
+        );
+        logger.error({ msg: 'WBE mutation blocked by WBE_STATIC_ONLY_MODE guard', operation });
+        throw err;
+    }
+}
+
 export class WbeClientService {
     private readonly apiKey: string;
     private readonly baseUrl: string;
@@ -88,6 +116,13 @@ export class WbeClientService {
         this.searchUrl = (config.wbe as any).searchUrl || this.baseUrl;
         this.contentUrl = (config.wbe as any).contentUrl || 'https://uatcontent.wbeapi.com';
         this.acceptLanguage = (config.wbe as any).acceptLanguage || 'en';
+
+        if (WBE_STATIC_ONLY_MODE) {
+            logger.warn({
+                msg: 'WBE client running in STATIC-ONLY mode — searches, bookings, vouchers and cancellations are blocked',
+                searchUrl: this.searchUrl,
+            });
+        }
     }
 
     private getAuth() {
@@ -345,6 +380,10 @@ export class WbeClientService {
      * wbeBooking.service, which owns the once-only guard.
      */
     async optionDetailsV2(body: any) {
+        // Prebook=true reserves the option on WBE's side — treat as a mutation.
+        if (body?.Prebook === true) {
+            assertMutationsAllowed('optionDetailsV2(Prebook=true)');
+        }
         try {
             const response = await axios.post(
                 `${this.searchUrl}/hotel/optionDetailsV2`,
@@ -431,6 +470,7 @@ export class WbeClientService {
      * NOT retried on failure — see the note above.
      */
     async bookV2(body: any) {
+        assertMutationsAllowed('bookV2');
         try {
             const response = await axios.post(
                 `${this.searchUrl}/hotel/bookV2`,
@@ -513,6 +553,7 @@ export class WbeClientService {
      * Empty body. Valid only for a Confirmed booking; result is Vouchered.
      */
     async issueVoucher(bookingReference: string) {
+        assertMutationsAllowed('issueVoucher');
         try {
             // `{}` rather than null for the same reason as cancelBookingV2:
             // axios omits Content-Type on a null body and WBE returns 415.
@@ -546,6 +587,7 @@ export class WbeClientService {
      * A failed cancellation also lands in PNDC rather than staying booked.
      */
     async cancelBookingV2(bookingReference: string) {
+        assertMutationsAllowed('cancelBookingV2');
         try {
             // An empty object, not null: axios sends no Content-Type for a null
             // body and WBE answers 415. The endpoint takes its arguments from

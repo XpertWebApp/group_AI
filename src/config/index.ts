@@ -6,7 +6,10 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: true });
 const config = {
     env: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '4000', 10),
-    corsOrigin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000',
+    corsOrigin: (process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
     jwt: {
         secret: process.env.JWT_SECRET,
         refreshSecret: process.env.JWT_REFRESH_SECRET,

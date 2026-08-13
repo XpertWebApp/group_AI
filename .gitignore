@@ -28,9 +28,10 @@ coverage/
 # Database dumps
 *.sql.gz
 *.dump
-# Ignore SQL files except Prisma migrations
+# Ignore SQL files except Prisma migrations and operational cutover scripts
 *.sql
 !prisma/migrations/**/*.sql
+!scripts/uat-cutover/*.sql
 
 # IDE and OS
 .vscode/
@@ -58,3 +59,4 @@ docs
 # Certification run artifacts — regenerated on every run. Once live runs start
 # these hold real WBE booking references, which do not belong in version control.
 scripts/output/
+backups
