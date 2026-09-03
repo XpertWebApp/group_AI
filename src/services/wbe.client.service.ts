@@ -229,8 +229,16 @@ export class WbeClientService {
 
     async getHotelDetails(url: string) {
         try {
+            // WBE security update (2026-08): Hotel Details endpoint now requires the
+            // same authentication as other XMLOut API calls — apiKey query param +
+            // Basic Auth. Previously this was a public CDN endpoint with no auth.
+            // Old (public) URLs return 404; a fresh Get Hotel List sync is required
+            // to obtain the new authenticated HotelDetailsUrl values.
+            //
             // Use non-critical wrapper — details calls must NEVER affect in-progress searches
             const response = await axiosNonCritical.get(url, {
+                params: { apiKey: this.apiKey },
+                auth: this.getAuth(),
                 headers: this.getDefaultHeaders(),
             });
             return response.data;
