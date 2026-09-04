@@ -73,8 +73,22 @@ function matchesRoomType(roomDescriptions: string[], requestedType: string | nul
  * probe did when the price was quoted. Re-deriving the split independently
  * would let the two drift, and the customer would be booked against an
  * allocation different from the one they were priced on.
+ *
+ * @param allocatedSoFar - Optional Map of supplierCode → rooms already
+ *   allocated to that supplier in earlier calls (e.g. earlier room types
+ *   in the same hotel). The supplier's remaining cap is reduced by the
+ *   amount already spent, so `max_rooms` acts as a cumulative ceiling
+ *   across all room types for the same booking — matching Oliver's original
+ *   intent that "DOTW = 9 rooms" means 9 rooms total, not 9 per room type.
+ *   Pass an empty Map (or omit) for standalone calls. The Map is mutated:
+ *   on return it reflects the additional allocations made by this call.
  */
-export function buildSupplierSplit(options: any[], targetRooms: number, totalRoomsNeeded: number) {
+export function buildSupplierSplit(
+    options: any[],
+    targetRooms: number,
+    totalRoomsNeeded: number,
+    allocatedSoFar?: Map<string, number>,
+) {
     // Priority-first, cheapest-first tie-break.
     //
     // Client rule (Oliver, 2026-07-XX): allocate from higher-priority
@@ -97,7 +111,17 @@ export function buildSupplierSplit(options: any[], targetRooms: number, totalRoo
     let remaining = targetRooms;
     for (const opt of sorted) {
         if (remaining <= 0) break;
-        const cap = getCappedMax(opt.supplierCode, totalRoomsNeeded);
+        const rawCap = getCappedMax(opt.supplierCode, totalRoomsNeeded);
+        // Cumulative-cap fix (2026-09-04, client bug report): reduce the
+        // supplier's cap by how many rooms this supplier has already been
+        // allocated for the same hotel in earlier room-type iterations.
+        // Without this, an outer loop over room types could hand a supplier
+        // its full `max_rooms` allowance separately for singles, doubles
+        // AND twins, over-allocating by a factor of the number of room
+        // types. Example bug: DOTW max=9, group wants 2 sgl + 10 dbl +
+        // 10 twn — pre-fix allocated 20+ DOTW rooms; post-fix caps at 9.
+        const alreadyAllocated = allocatedSoFar?.get(opt.supplierCode) ?? 0;
+        const cap = Math.max(0, rawCap - alreadyAllocated);
         const allocate = Math.min(cap, remaining);
         if (allocate <= 0) continue;
         split.push({
@@ -108,6 +132,9 @@ export function buildSupplierSplit(options: any[], targetRooms: number, totalRoo
             currency: opt.currency,
         });
         remaining -= allocate;
+        if (allocatedSoFar) {
+            allocatedSoFar.set(opt.supplierCode, alreadyAllocated + allocate);
+        }
     }
     return split;
 }
@@ -815,6 +842,13 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
         console.log(`[Step 3.2] DB totalRooms unknown for ${hotelCode} — using probed capacity only`);
     }
 
+    // Cumulative-cap tracker (2026-09-04 client bug fix). Each supplier's
+    // max_rooms is a ceiling for the WHOLE hotel booking, not per room
+    // type. As we allocate rooms in the outer loop below, this map records
+    // how many rooms each supplier has taken so far so buildSupplierSplit
+    // can reduce their remaining cap in subsequent room-type iterations.
+    const supplierAllocatedInHotel = new Map<string, number>();
+
     for (const [roomType, typeOptions] of optionsByType) {
         const target = roomTypeTargets?.find((t) => t.roomType === roomType);
         const typeRequested = target?.requested ?? typeOptions.length;
@@ -836,23 +870,33 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
         console.log(`[EC3:${roomType}] Mid-range: ${optionsForSplit.length} options, highestMidPrice=${highestMid}`);
 
-        // Step 3.1 — Capacity check per type
+        // Helper: supplier's remaining cap after subtracting rooms already
+        // allocated to it in earlier room-type iterations for THIS hotel.
+        // Mirrors the same subtraction buildSupplierSplit does internally,
+        // so capacity-check and allocation stay consistent.
+        const remainingCapFor = (supplierCode: string): number => {
+            const raw = getCappedMax(supplierCode, requestedRooms);
+            const used = supplierAllocatedInHotel.get(supplierCode) ?? 0;
+            return Math.max(0, raw - used);
+        };
+
+        // Step 3.1 — Capacity check per type (uses REMAINING cap after earlier types)
         const typeMaxPossible = optionsForSplit.reduce(
-            (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms), 0,
+            (sum, opt) => sum + remainingCapFor(opt.supplierCode), 0,
         );
         const typeContribution = Math.min(typeMaxPossible, typeRequested);
         console.log(`[Step 3.1:${roomType}] maxPossible=${typeMaxPossible}, contribution=${typeContribution}, suppliers=${optionsForSplit.length}`);
 
         if (typeContribution === 0) {
-            console.log(`[Step 3.1:${roomType}] SKIP — no capacity for this room type`);
+            console.log(`[Step 3.1:${roomType}] SKIP — no capacity for this room type (all suppliers exhausted their max_rooms in earlier room types)`);
             continue;
         }
 
-        // Step 3.2 — Multi-supplier overlap heuristic
+        // Step 3.2 — Multi-supplier overlap heuristic (uses REMAINING cap)
         const typeProbed = typeProgressMap.get(roomType)?.roomsFound ?? roomsFound;
         const supplierCount = optionsForSplit.length; // already deduped by supplier
         const typeSupplierClaim = optionsForSplit.reduce(
-            (sum, opt) => sum + getCappedMax(opt.supplierCode, requestedRooms), 0,
+            (sum, opt) => sum + remainingCapFor(opt.supplierCode), 0,
         );
 
         let typeEffective: number;
@@ -888,8 +932,17 @@ async function processJob(payload: HotelProbeJobPayload): Promise<void> {
 
         const typeEffectiveContribution = Math.min(typeEffective, typeRequested);
 
-        // Step 3.3 — Build supplier split for this room type
-        const typeSplit = buildSupplierSplit(optionsForSplit, typeEffectiveContribution, requestedRooms);
+        // Step 3.3 — Build supplier split for this room type. Pass
+        // supplierAllocatedInHotel so the function can subtract rooms
+        // already committed to a supplier in earlier types (cumulative-cap
+        // fix). The map is mutated in place — after this call it reflects
+        // the running total including this room type.
+        const typeSplit = buildSupplierSplit(
+            optionsForSplit,
+            typeEffectiveContribution,
+            requestedRooms,
+            supplierAllocatedInHotel,
+        );
         const typeAllocated = typeSplit.reduce((s, e) => s + e.rooms, 0);
 
         // Tag each split entry with roomType

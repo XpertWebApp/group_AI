@@ -657,19 +657,26 @@ function determineStatus(
  * Allocates rooms to suppliers cheapest-first up to each supplier's getCappedMax.
  * HPG is capped at 40% of totalRoomsNeeded (Oliver's rule EC5).
  *
- * @param midBandOptions    - Mid-band options after all filters (price band, dedup)
- * @param targetContribution - Rooms to fill for this hotel (from contribution check)
- * @param totalRoomsNeeded  - Total group rooms needed (for HPG 40% cap)
+ * @param midBandOptions      - Mid-band options after all filters (price band, dedup)
+ * @param targetContribution  - Rooms to fill for this hotel (from contribution check)
+ * @param totalRoomsNeeded    - Total group rooms needed (for HPG 40% cap)
+ * @param allocatedSoFar      - Optional Map of supplierCode → rooms already allocated
+ *   to that supplier in earlier calls (e.g. earlier room types in the same hotel).
+ *   Supplier's effective cap is reduced by the amount already spent, so `max_rooms`
+ *   acts as a CUMULATIVE ceiling across all room types for the same booking —
+ *   matching Oliver's intent. Pass an empty Map (or omit) for standalone calls.
+ *   The Map is mutated: on return it reflects allocations made by this call.
  */
 function buildSupplierSplit(
     midBandOptions: ProcessedOption[],
     targetContribution: number,
     totalRoomsNeeded: number,
+    allocatedSoFar?: Map<string, number>,
 ): SupplierSplit[] {
     // Priority-first, cheapest-first tie-break — see hotelProbe.worker.ts
     // buildSupplierSplit for the full rationale. Must stay in sync with
     // that copy: the two functions differ in call-site details but share
-    // the same allocation rule.
+    // the same allocation rule (including the cumulative-cap tracker).
     const sorted = [...midBandOptions].sort((a, b) => {
         const rankA = SUPPLIER_PRIORITY_RANK[getSupplierPriority(a.supplierCode)];
         const rankB = SUPPLIER_PRIORITY_RANK[getSupplierPriority(b.supplierCode)];
@@ -681,7 +688,13 @@ function buildSupplierSplit(
 
     for (const opt of sorted) {
         if (remaining <= 0) break;
-        const cap = getCappedMax(opt.supplierCode, totalRoomsNeeded);
+        const rawCap = getCappedMax(opt.supplierCode, totalRoomsNeeded);
+        // Cumulative-cap fix (2026-09-04, client bug report): a supplier's
+        // max_rooms is a whole-booking ceiling, not per-room-type. Reduce
+        // the effective cap by rooms already given to this supplier in
+        // earlier types.
+        const alreadyAllocated = allocatedSoFar?.get(opt.supplierCode) ?? 0;
+        const cap = Math.max(0, rawCap - alreadyAllocated);
         const allocate = Math.min(cap, remaining);
         if (allocate <= 0) continue;
 
@@ -693,6 +706,9 @@ function buildSupplierSplit(
             currency: opt.currency,
         });
         remaining -= allocate;
+        if (allocatedSoFar) {
+            allocatedSoFar.set(opt.supplierCode, alreadyAllocated + allocate);
+        }
     }
 
     return split;
