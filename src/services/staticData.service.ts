@@ -5,6 +5,18 @@ import pLimit from 'p-limit';
 import wbeClientService from './wbe.client.service';
 import giataSyncService from './giataSync.service';
 import { NATIONALITIES } from '../data/nationalities';
+import { normaliseCountryCode } from '../utils/countryCode';
+
+/**
+ * Hotel details sync stops when more than this share of recent hotels fail.
+ * A run that fails broadly (bad data, WBE down, schema mismatch) otherwise keeps
+ * going for hours, filling the database log with one error per hotel.
+ */
+const DETAILS_MAX_FAILURE_RATE = Number(process.env['HOTEL_DETAILS_MAX_FAILURE_RATE'] ?? 0.05);
+/** Failure rate is judged over this many most recent hotels... */
+const DETAILS_FAILURE_WINDOW = 500;
+/** ...and only once at least this many have been attempted, so a few early errors do not stop the run. */
+const DETAILS_FAILURE_MIN_SAMPLE = 200;
 
 export class StaticDataService {
     constructor() {
@@ -364,7 +376,43 @@ export class StaticDataService {
             let processedInCurrentRun = 0;
             let consecutive403 = 0; // 403 Stop Mechanism (Fix 2)
 
+            // address_country must be an ISO code (varchar 10); the hotel's
+            // destination carries one, so load them once for the whole run.
+            const destinationCountries = await staticDataRepository.getDestinationCountryCodes();
+
+            // Failure-rate guard: once set, every queued hotel is skipped and
+            // the job is marked FAILED after the in-flight ones finish.
+            let abortReason: string | null = null;
+            const recentOutcomes: boolean[] = []; // true = failed
+            let recentFailures = 0;
+            let attempted = 0;
+            let failedTotal = 0;
+
+            const recordOutcome = (failed: boolean) => {
+                attempted++;
+                if (failed) failedTotal++;
+                recentOutcomes.push(failed);
+                if (failed) recentFailures++;
+                if (recentOutcomes.length > DETAILS_FAILURE_WINDOW) {
+                    if (recentOutcomes.shift()) recentFailures--;
+                }
+
+                if (
+                    !abortReason &&
+                    recentOutcomes.length >= DETAILS_FAILURE_MIN_SAMPLE &&
+                    recentFailures / recentOutcomes.length > DETAILS_MAX_FAILURE_RATE
+                ) {
+                    const rate = ((recentFailures / recentOutcomes.length) * 100).toFixed(1);
+                    abortReason =
+                        `Hotel details sync stopped: ${recentFailures} of the last ${recentOutcomes.length} hotels failed ` +
+                        `(${rate}%, limit ${(DETAILS_MAX_FAILURE_RATE * 100).toFixed(1)}%). ` +
+                        `${failedTotal} failed of ${attempted} attempted in this run.`;
+                    logger.error({ msg: abortReason, jobId: job.id });
+                }
+            };
+
             const processHotel = async (h: any, index: number) => {
+                if (abortReason) return;
                 if (!h.hotelDetailsUrl) return;
 
                 try {
@@ -382,7 +430,10 @@ export class StaticDataService {
                         name: details.Name || details.name,
                         address: details.Address || details.address,
                         addressCity: details.AddressCity || details.addressCity,
-                        addressCountry: details.AddressCountry || details.addressCountry,
+                        addressCountry: normaliseCountryCode(
+                            details.AddressCountry ?? details.addressCountry,
+                            h.destinationId != null ? destinationCountries.get(h.destinationId) : null,
+                        ),
                         latitude: details.Latitude || details.latitude,
                         longitude: details.Longitude || details.longitude,
                         ...(totalRoomsFromDetails !== null && { totalRooms: totalRoomsFromDetails }),
@@ -470,6 +521,7 @@ export class StaticDataService {
                         await staticDataRepository.createHotelFacilityGroups(groupsToCreate);
                     }
 
+                    recordOutcome(false);
                     processedInCurrentRun++;
                     const absoluteProcessed = startIndex + processedInCurrentRun;
 
@@ -495,15 +547,25 @@ export class StaticDataService {
                 } catch (error: any) {
                     if (error.response?.status === 403) {
                         consecutive403++;
-                        if (consecutive403 > 20) {
-                            throw new Error('Too many 403 errors – stopping sync to avoid IP ban');
+                        if (consecutive403 > 20 && !abortReason) {
+                            // Stop through the same flag so queued hotels are
+                            // skipped too (a throw here only rejected Promise.all
+                            // while the rest of the queue kept running).
+                            abortReason = 'Too many 403 errors – stopping sync to avoid IP ban';
+                            logger.error({ msg: abortReason, jobId: job.id });
                         }
                     }
                     logger.error({ msg: 'Error syncing hotel details', hotelCode: h.hotelCode, error: error.message });
+                    recordOutcome(true);
                 }
             };
 
             await Promise.all(hotelsToProcess.map((h, idx) => limit(() => processHotel(h, idx))));
+
+            if (abortReason) {
+                // Caught below: job marked FAILED with this reason, then rethrown.
+                throw new Error(abortReason);
+            }
 
             // Mark job as completed
             await staticDataRepository.updateJob(job.id, {

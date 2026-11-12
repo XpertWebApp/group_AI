@@ -92,8 +92,17 @@ export class StaticDataRepository {
                     },
                 ],
             },
-            select: { hotelCode: true, hotelDetailsUrl: true },
+            select: { hotelCode: true, hotelDetailsUrl: true, destinationId: true },
         });
+    }
+
+    /** destinationId → ISO country code, for normalising hotel address_country. */
+    async getDestinationCountryCodes(): Promise<Map<number, string>> {
+        const rows = await prisma.destination.findMany({
+            where: { countryCode: { not: null } },
+            select: { id: true, countryCode: true },
+        });
+        return new Map(rows.map((r) => [r.id, r.countryCode as string]));
     }
 
     async clearHotelFacilityGroups(hotelCode: string, groupType?: string) {
