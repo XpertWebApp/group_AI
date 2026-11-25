@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,15 +5,44 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["auth", "master", "app", "cache", "audit"]
+  schemas  = ["app", "audit", "auth", "cache", "master"]
 }
 
-// --- AUTH SCHEMA ---
+model SyncJob {
+  id               String    @id @default(uuid()) @db.Uuid
+  type             String
+  status           JobStatus
+  totalRecords     Int?
+  processedRecords Int       @default(0)
+  lastProcessedKey String?
+  errorMessage     String?
+  startedAt        DateTime  @default(now()) @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+
+  @@map("sync_jobs")
+  @@schema("audit")
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  action    String
+  entity    String?
+  entityId  String?
+  details   Json?
+  ipAddress String?  @map("ip_address") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entityId])
+  @@index([entity, entityId, createdAt])
+  @@map("audit_events")
+  @@schema("audit")
+}
 
 model UserRole {
   id          String   @id @default(uuid()) @db.Uuid
   name        String   @unique @db.VarChar(50)
-  description String?  @db.Text
+  description String?
   createdAt   DateTime @default(now()) @map("created_at")
   users       User[]
 
@@ -27,7 +53,7 @@ model UserRole {
 model User {
   id           String    @id @default(uuid()) @db.Uuid
   email        String    @unique @db.VarChar(255)
-  password     String    @db.Text
+  password     String
   firstName    String?   @map("first_name") @db.VarChar(100)
   lastName     String?   @map("last_name") @db.VarChar(100)
   roleId       String    @map("role_id") @db.Uuid
@@ -35,15 +61,25 @@ model User {
   lastLoginAt  DateTime? @map("last_login_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime? @updatedAt @map("updated_at")
-  refreshToken String?   @map("refresh_token") @db.Text
-  role         UserRole  @relation(fields: [roleId], references: [id])
+  refreshToken       String?   @map("refresh_token")
+  // DEPRECATED: Google OAuth columns. Email sending now uses Brevo SMTP only.
+  // Kept as nullable columns to avoid a destructive migration; no code reads them.
+  // Drop in a future migration once we're confident no rollback needs them.
+  googleAccessToken  String?   @map("google_access_token")
+  googleRefreshToken String?   @map("google_refresh_token")
+  googleTokenExpiry  DateTime? @map("google_token_expiry")
+  googleEmail        String?   @map("google_email") @db.VarChar(255)
+  role               UserRole  @relation(fields: [roleId], references: [id])
+  assignedRequests   BookingRequest[] @relation("BookingRequestAssignee")
+  createdBookings    Booking[]        @relation("BookingCreatedBy")
+  createdBookingGroups  BookingGroup[] @relation("BookingGroupCreatedBy")
+  reviewedBookingGroups BookingGroup[] @relation("BookingGroupReviewedBy")
+  optionSelections     OptionSelection[] @relation("OptionSelectedBy")
 
   @@index([roleId])
   @@map("users")
   @@schema("auth")
 }
-
-// --- MASTER SCHEMA ---
 
 model Destination {
   id           Int           @id
@@ -52,7 +88,7 @@ model Destination {
   region       String?       @db.VarChar(255)
   createdAt    DateTime      @default(now()) @map("created_at")
   lastSyncedAt DateTime?     @map("last_synced_at")
-  metadata     Json?         @db.JsonB
+  metadata     Json?
   parentId     Int?          @map("parent_id")
   parent       Destination?  @relation("DestinationHierarchy", fields: [parentId], references: [id])
   children     Destination[] @relation("DestinationHierarchy")
@@ -94,23 +130,28 @@ model Hotel {
   hotelCode        String    @id @map("hotel_code") @db.VarChar(255)
   name             String    @db.VarChar(255)
   masterHotelId    Int?      @map("master_hotel_id")
-  hotelDetailsUrl  String?   @map("hotel_details_url") @db.Text
+  hotelDetailsUrl  String?   @map("hotel_details_url")
   destinationId    Int?      @map("destination_id")
   starRating       Decimal?  @map("star_rating") @db.Decimal(2, 1)
+  /** Physical room count from WBE static data. Used for Step 3.2 inventory overlap check. NULL = unknown. */
+  totalRooms       Int?      @map("total_rooms")
   category         String?   @db.VarChar(50)
   giataCode        String?   @map("giata_code") @db.VarChar(50)
-  address          String?   @db.Text
+  address          String?
   addressCity      String?   @map("address_city") @db.VarChar(255)
   addressCountry   String?   @map("address_country") @db.VarChar(10)
   latitude         Decimal?  @db.Decimal(10, 7)
   longitude        Decimal?  @db.Decimal(10, 7)
   propertyType     Int?      @map("property_type")
   supplierCode     String?   @map("supplier_code") @db.VarChar(50)
-  metadata         Json?     @db.JsonB
+  metadata         Json?
   createdAt        DateTime  @default(now()) @map("created_at")
   lastSyncedAt     DateTime? @map("last_synced_at")
   detailsFetchedAt DateTime? @map("details_fetched_at")
+  giataSyncedAt    DateTime? @map("giata_synced_at")
+  giataStatus      String?   @map("giata_status") @db.VarChar(20)
 
+  @@index([destinationId, name])
   @@index([destinationId])
   @@index([supplierCode])
   @@index([name])
@@ -144,9 +185,9 @@ model HotelFacility {
 model HotelImage {
   id           String   @id @default(uuid()) @db.Uuid
   hotelCode    String   @map("hotel_code") @db.VarChar(64)
-  imageKey     String   @map("image_key") @db.Text
+  imageKey     String   @map("image_key")
   displayOrder Int      @default(0) @map("display_order")
-  caption      String?  @db.Text
+  caption      String?
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([hotelCode])
@@ -160,7 +201,7 @@ model HotelFacilityGroup {
   hotelCode  String   @map("hotel_code") @db.VarChar(64)
   groupType  String   @map("group_type") @db.VarChar(20)
   category   String?  @db.VarChar(255)
-  facilities Json?    @db.JsonB
+  facilities Json?
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([hotelCode])
@@ -169,82 +210,409 @@ model HotelFacilityGroup {
   @@schema("master")
 }
 
-// --- APP SCHEMA ---
+// ─── GIATA MHG: Multilingual hotel text sections ─────────────────────────────
+model HotelGiataText {
+  id          String    @id @default(uuid()) @db.Uuid
+  hotelCode   String    @map("hotel_code") @db.VarChar(255)
+  giataId     String    @map("giata_id") @db.VarChar(50)
+  lang        String    @db.VarChar(10)
+  sectionType String    @map("section_type") @db.VarChar(20)
+  title       String    @db.VarChar(255)
+  content     String    @db.Text
+  lastUpdate  DateTime? @map("last_update")
+  syncedAt    DateTime  @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, lang, sectionType])
+  @@index([hotelCode])
+  @@index([giataId])
+  @@map("hotel_giata_texts")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Structured fact sheet data ───────────────────────────────────
+model HotelGiataFact {
+  id          String   @id @default(uuid()) @db.Uuid
+  hotelCode   String   @map("hotel_code") @db.VarChar(255)
+  giataId     String   @map("giata_id") @db.VarChar(50)
+  sectionType String   @map("section_type") @db.VarChar(20)
+  sectionName String   @map("section_name") @db.VarChar(100)
+  factId      Int      @map("fact_id")
+  factName    String   @map("fact_name") @db.VarChar(100)
+  typeHint    String   @map("type_hint") @db.VarChar(20)
+  value       String   @db.VarChar(500)
+  unit        String?  @db.VarChar(20)
+  fee         Boolean? @default(false)
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, factId])
+  @@index([hotelCode])
+  @@index([sectionType])
+  @@map("hotel_giata_facts")
+  @@schema("master")
+}
+
+// ─── GIATA MHG: Hotel image URLs ─────────────────────────────────────────────
+model HotelGiataImage {
+  id           String    @id @default(uuid()) @db.Uuid
+  hotelCode    String    @map("hotel_code") @db.VarChar(255)
+  giataId      String    @map("giata_id") @db.VarChar(50)
+  imageType    String    @map("image_type") @db.VarChar(5)
+  displayOrder Int       @default(0) @map("display_order")
+  urlSmall     String?   @map("url_small")
+  urlMedium    String?   @map("url_medium")
+  urlLarge     String?   @map("url_large")
+  /// Full HD variant (maxwidth=1920, typically 1624×1080). Populated on re-sync.
+  urlFullHd    String?   @map("url_full_hd")
+  /// Original / 4K variant (maxwidth=3840, typically 3248×2160). Populated on re-sync.
+  urlOriginal  String?   @map("url_original")
+  lastUpdate   DateTime? @map("last_update")
+  syncedAt     DateTime  @default(now()) @map("synced_at")
+
+  @@index([hotelCode])
+  @@index([hotelCode, displayOrder])
+  @@map("hotel_giata_images")
+  @@schema("master")
+}
+
+// ─── GIATA Multicodes: Supplier/GDS mapping codes ────────────────────────────
+model HotelGiataMapping {
+  id           String   @id @default(uuid()) @db.Uuid
+  hotelCode    String   @map("hotel_code") @db.VarChar(255)
+  giataId      String   @map("giata_id") @db.VarChar(50)
+  providerCode String   @map("provider_code") @db.VarChar(50)
+  providerType String   @map("provider_type") @db.VarChar(20)
+  codeValue    String   @map("code_value") @db.VarChar(255)
+  syncedAt     DateTime @default(now()) @map("synced_at")
+
+  @@unique([hotelCode, providerCode, codeValue])
+  @@index([hotelCode])
+  @@index([giataId])
+  @@index([providerCode])
+  @@map("hotel_giata_mappings")
+  @@schema("master")
+}
 
 model BookingRequest {
-  id                  String     @id @default(uuid()) @db.Uuid
-  rawPayload          Json       @map("raw_payload") @db.JsonB
-  externalRequestId   String?    @map("external_request_id") @db.VarChar(255)
-  source              String?    @db.VarChar(100)
-  sourceIp            String?    @map("source_ip") @db.VarChar(50)
-  budget              Decimal?   @db.Decimal(12, 2)
-  companyName         String?    @map("company_name") @db.VarChar(255)
-  contactName         String?    @map("contact_name") @db.VarChar(255)
-  contactEmail        String?    @map("contact_email") @db.VarChar(255)
-  contactPhone        String?    @map("contact_phone") @db.VarChar(50)
-  currencyCode        String?    @map("currency_code") @db.VarChar(10)
-  destinationName     String?    @map("destination_name") @db.VarChar(255)
-  destinationId       Int        @map("destination_id")
-  checkinDate         DateTime   @map("checkin_date") @db.Date
-  nights              Int
-  rooms               Json?      @db.JsonB
-  nationalityCode     String     @map("nationality_code") @db.VarChar(10)
-  processed           Boolean    @default(false)
-  processedAt         DateTime?  @map("processed_at")
-  specialRequirements String?    @map("special_requirements") @db.Text
-  status              String     @default("pending") @db.VarChar(50)
-  createdAt           DateTime   @default(now()) @map("created_at")
-  updatedAt           DateTime?  @updatedAt @map("updated_at")
-  proposals           Proposal[]
+  id                     String                     @id @default(uuid()) @db.Uuid
+  rawPayload             Json                       @map("raw_payload")
+  externalRequestId      String?                    @map("external_request_id") @db.VarChar(255)
+  source                 String?                    @db.VarChar(100)
+  sourceIp               String?                    @map("source_ip") @db.VarChar(50)
+  budget                 Decimal?                   @db.Decimal(12, 2)
+  companyName            String?                    @map("company_name") @db.VarChar(255)
+  contactName            String?                    @map("contact_name") @db.VarChar(255)
+  contactEmail           String?                    @map("contact_email") @db.VarChar(255)
+  contactPhone           String?                    @map("contact_phone") @db.VarChar(50)
+  contactPhoneCountryCode String?                   @map("contact_phone_country_code") @db.VarChar(8)
+  currencyCode           String?                    @map("currency_code") @db.VarChar(10)
+  destinationName        String?                    @map("destination_name") @db.VarChar(255)
+  destinationId          Int                        @map("destination_id")
+  checkinDate            DateTime                   @map("checkin_date") @db.Date
+  nights                 Int
+  rooms                  Json?
+  nationalityCode        String?                    @map("nationality_code") @db.VarChar(10)
+  processed              Boolean                    @default(false)
+  processedAt            DateTime?                  @map("processed_at")
+  specialRequirements    String?                    @map("special_requirements")
+  createdAt              DateTime                   @default(now()) @map("created_at")
+  updatedAt              DateTime?                  @updatedAt @map("updated_at")
+  status                 BookingRequestStatus       @default(pending)
+  referenceNumber        Int                        @unique @default(autoincrement()) @map("reference_number")
+  checkoutDate           DateTime?                  @map("checkout_date") @db.Date
+  /// Legacy single-value star rating. Kept for back-compat so historic
+  /// requests and the Wix webhook (which sends one value) still work.
+  /// New requests should populate `starRatings` instead; the search
+  /// pipeline reads `starRatings` first and falls back to `[starRating]`.
+  starRating             Decimal?                   @map("star_rating") @db.Decimal(2, 1)
+  /// Multi-select star categories — one entry per ticked box on the
+  /// Create Request form. Example: a user picking 3★ + 4★ stores
+  /// `[3.0, 4.0]` here. The search pipeline ORs the half-star ranges
+  /// of each entry together (e.g. 2.5-3.5 OR 3.5-4.5), then the ±1
+  /// relaxation ladder widens that union further.
+  starRatings            Decimal[]                  @map("star_ratings") @db.Decimal(2, 1)
+  budgetRange            String?                    @map("budget_range") @db.VarChar(100)
+  groupType              String?                    @map("group_type") @db.VarChar(100)
+  groupSize              Int?                       @map("group_size")
+  averageAge             Int?                       @map("average_age")
+  breakfastPreference    String?                    @map("breakfast_preference") @db.VarChar(10)
+  hotelLocation          String?                    @map("hotel_location") @db.VarChar(50)
+  firstName              String?                    @map("first_name") @db.VarChar(100)
+  lastName               String?                    @map("last_name") @db.VarChar(100)
+  guestListFileKey       String?                    @map("guest_list_file_key")
+  customerNotes          String?                    @map("customer_notes")
+  termsAndConditions     String?                    @map("terms_and_conditions")
+  cancellationConditions String?                    @map("cancellation_conditions")
+  /// German (HTML) auto-translation of the per-offer policy overrides, produced
+  /// via the free translator at save time and refreshed when the base field
+  /// changes. NULL = not translated yet; FE/PDF fall back to the base field.
+  termsAndConditionsDe     String?                  @map("terms_and_conditions_de")
+  cancellationConditionsDe String?                  @map("cancellation_conditions_de")
+  assignedUserId         String?                    @map("assigned_user_id") @db.Uuid
+  assignedUser           User?                      @relation("BookingRequestAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  /// Terminal-detection signal for the polling frontend.
+  /// Values: 'in_progress' | 'settled' | 'exhausted'. NULL = no search has run yet
+  /// (frontend treats NULL as 'in_progress' for safety).
+  searchPhase            String?                    @map("search_phase") @db.VarChar(20)
+  /// Last-known pagination cursor for the manual hotel-search flow. Holds
+  /// { usedDestinationId, starRatings, totalCandidates, nextOffset } — the
+  /// watcher persists this just before broadcasting searchSettled so that
+  /// a subsequent "Search More" click can resume pagination exactly where
+  /// it left off. NULL when no cursor is available (search exhausted, or
+  /// pre-feature row).
+  searchPaginationCursor Json?                      @map("search_pagination_cursor")
+  /// Odoo CRM link. NULL = request not yet linked to an Odoo company.
+  /// For requests created on/after ODOO_GATE_ACTIVE_SINCE this must be
+  /// populated before the offer can be sent (see proposals.service).
+  /// Pre-cutover rows are grandfathered (the gate checks createdAt).
+  odooContactId          Int?                       @map("odoo_contact_id")
+  attachments            BookingRequestAttachment[]
+  proposals              Proposal[]
+  bookings               Booking[]
+  bookingGroups          BookingGroup[]
 
   @@index([destinationId])
+  @@index([assignedUserId])
   @@index([status])
   @@index([nationalityCode])
   @@index([createdAt])
+  @@index([referenceNumber])
+  @@index([companyName])
+  @@index([odooContactId])
   @@map("booking_requests")
+  @@schema("app")
+}
+
+model BookingRequestAttachment {
+  id               String         @id @default(uuid()) @db.Uuid
+  bookingRequestId String         @map("booking_request_id") @db.Uuid
+  fileKey          String         @map("file_key")
+  originalName     String         @map("original_name") @db.VarChar(500)
+  mimeType         String?        @map("mime_type") @db.VarChar(100)
+  size             Int?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  bookingRequest   BookingRequest @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+
+  @@index([bookingRequestId])
+  @@map("booking_request_attachments")
   @@schema("app")
 }
 
 model Proposal {
   id             String            @id @default(uuid()) @db.Uuid
   requestId      String?           @map("request_id") @db.Uuid
-  status         String            @default("draft") @db.VarChar(50)
-  offerItems     Json?             @map("offer_items") @db.JsonB
   totalBuy       Decimal?          @map("total_buy") @db.Decimal(12, 2)
   totalSell      Decimal?          @map("total_sell") @db.Decimal(12, 2)
-  markupSettings Json?             @map("markup_settings") @db.JsonB
-  notes          String?           @db.Text
+  markupSettings Json?             @map("markup_settings")
+  notes          String?
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime?         @updatedAt @map("updated_at")
-  bookingRequest BookingRequest?   @relation(fields: [requestId], references: [id])
-  hotels         ProposalHotel[]
-  services       ProposalService[]
+  lockedAt       DateTime?         @map("locked_at")
+  lockedBy       String?           @map("locked_by") @db.Uuid
+  /// Credential in the customer's selection link.
+  ///
+  /// Belongs to the proposal rather than to a selection, because the link is
+  /// sent before anything has been chosen — a token created alongside the
+  /// choice could never be used to make it. Issued when the offer is sent and
+  /// stable afterwards, so a customer returning to an old email still lands on
+  /// their offer.
+  selectionToken   String?           @unique @map("selection_token") @db.VarChar(64)
+
+  sentAt           DateTime?         @map("sent_at")
+  sentBy           String?           @map("sent_by") @db.Uuid
+  sentToEmail      String?           @map("sent_to_email") @db.VarChar(255)
+  status           ProposalStatus    @default(draft)
+  approvedAt       DateTime?         @map("approved_at")
+  approvedBy       String?           @map("approved_by") @db.Uuid
+  rejectedAt       DateTime?         @map("rejected_at")
+  rejectedBy       String?           @map("rejected_by") @db.Uuid
+  rejectionReason  String?           @map("rejection_reason")
+  pdfUrl           String?           @map("pdf_url") @db.Text
+  /// Customer payment deadline. Staff-set on the proposal — no automatic
+  /// default. The Send Offer flow refuses to send while this is null.
+  /// Application-layer guard enforces that this date must be earlier
+  /// than the earliest effective cancellation deadline across all hotels
+  /// on the proposal (so the customer pays before any cancellation
+  /// window closes).
+  paymentDeadline      DateTime? @map("payment_deadline") @db.Timestamptz(6)
+  /// UUID of the staff user who set the most recent paymentDeadline.
+  /// Null when paymentDeadline is null.
+  paymentDeadlineSetBy String?   @map("payment_deadline_set_by") @db.Uuid
+  /// Timestamp of the most recent paymentDeadline change (set or cleared).
+  /// Used for audit display.
+  paymentDeadlineSetAt DateTime? @map("payment_deadline_set_at") @db.Timestamptz(6)
+  hotels           ProposalHotel[]
+  services         ProposalService[]
+  offers           ProposalOffer[]
+  bookingGroups    BookingGroup[]
+  optionSelections OptionSelection[]
+  bookingRequest   BookingRequest?   @relation(fields: [requestId], references: [id])
 
   @@index([requestId])
   @@index([status])
+  @@index([sentAt])
+  @@index([lockedAt])
   @@map("proposals")
   @@schema("app")
 }
 
+model ProposalOffer {
+  id              String    @id @default(uuid()) @db.Uuid
+  proposalId      String    @map("proposal_id") @db.Uuid
+  offerNumber     Int       @map("offer_number")
+  type            String    @db.VarChar(20)
+  pdfKey          String    @map("pdf_key") @db.Text
+  pdfUrl          String    @map("pdf_url") @db.Text
+  sentAt          DateTime  @default(now()) @map("sent_at")
+  sentBy          String    @map("sent_by") @db.Uuid
+  sentToEmails    String[]  @map("sent_to_emails")
+  hotelSnapshot   Json?     @map("hotel_snapshot")
+  serviceSnapshot Json?     @map("service_snapshot")
+  totalPrice      Decimal?  @map("total_price") @db.Decimal(12, 2)
+  currency        String?   @db.VarChar(10)
+  method          String?   @db.VarChar(20)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  proposal        Proposal  @relation(fields: [proposalId], references: [id])
+
+  selections OptionSelection[]
+
+  @@unique([proposalId, offerNumber])
+  @@index([proposalId])
+  @@index([sentAt])
+  @@map("proposal_offers")
+  @@schema("app")
+}
+
+/// The customer choosing one hotel option from an offer.
+///
+/// This is the moment the booking process starts. Until a row exists here the
+/// offer is a quotation; once it does, SETT reserves rooms and takes on the
+/// supplier's cancellation terms.
+///
+/// The client's requirement is that the choice cannot be made informally — a
+/// customer replying "yes, option B" is not enough. What they accept has to be
+/// recorded explicitly: the hotel, the room arrangement, the buying and selling
+/// conditions, the cancellation terms, the payment terms, and whether the rate
+/// is refundable. For a non-refundable rate that record is what stands behind
+/// SETT's financial exposure, so the accepted terms are stored verbatim rather
+/// than referenced — a later edit to the proposal must not change what the
+/// customer is held to.
+model OptionSelection {
+  id String @id @default(uuid()) @db.Uuid
+
+  proposalId String   @map("proposal_id") @db.Uuid
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  /// The offer the customer was looking at. An offer may be re-sent with
+  /// different pricing, and the selection belongs to one specific version.
+  offerId String?        @map("offer_id") @db.Uuid
+  offer   ProposalOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  // ── What was chosen ──────────────────────────────────────────────────────
+  hotelCode String  @map("hotel_code") @db.VarChar(255)
+  hotelName String? @map("hotel_name") @db.VarChar(255)
+
+  /// Price the customer accepted. The figure SETT is held to even if the
+  /// supplier moves afterwards, which is why it is stored on the selection and
+  /// not read back from the proposal at booking time.
+  acceptedTotal Decimal? @map("accepted_total") @db.Decimal(12, 2)
+  currency      String?  @db.VarChar(10)
+
+  /// Whether the accepted rate can be cancelled. Drives whether explicit legal
+  /// acceptance is required before anything is booked.
+  nonRefundable Boolean @default(false) @map("non_refundable")
+
+  /// The terms as shown to the customer at the moment they accepted: room
+  /// arrangement, cancellation policy, payment conditions, rate conditions.
+  /// A snapshot, so amending the proposal later cannot rewrite history.
+  acceptedTerms Json? @map("accepted_terms")
+
+  // ── How the acceptance was given ─────────────────────────────────────────
+  /// Set only when the customer ticked the explicit acceptance for a
+  /// non-refundable rate. Null on a refundable booking, where the selection
+  /// itself is sufficient.
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
+
+  /// Recorded for evidential value: an acceptance that is later disputed is
+  /// defended with the address and agent it came from, not with a boolean.
+  acceptedFromIp String? @map("accepted_from_ip") @db.VarChar(64)
+  acceptedUserAgent String? @map("accepted_user_agent") @db.Text
+
+  /// Who made the choice — the travel agent's email, or a staff member acting
+  /// on a phone confirmation.
+  selectedByEmail String? @map("selected_by_email") @db.VarChar(255)
+  selectedById    String? @map("selected_by_id") @db.Uuid
+  selectedBy      User?   @relation("OptionSelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
+
+  // ── Price lock ───────────────────────────────────────────────────────────
+  /// How long the accepted price is held. Supplier rates move, so a selection
+  /// acted on after this point is re-checked against live pricing rather than
+  /// booked at a figure that no longer exists.
+  lockedUntil DateTime? @map("locked_until")
+
+  selectedAt DateTime  @default(now()) @map("selected_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime? @updatedAt @map("updated_at")
+
+  @@index([proposalId])
+  @@index([offerId])
+  @@index([selectedAt])
+  @@map("option_selections")
+  @@schema("app")
+}
+
 model ProposalHotel {
-  id               String    @id @default(uuid()) @db.Uuid
-  proposalId       String    @map("proposal_id") @db.Uuid
-  hotelCode        String    @map("hotel_code") @db.VarChar(255)
-  tid              String    @db.VarChar(255)
-  totalPrice       Decimal   @map("total_price") @db.Decimal(12, 2)
-  currency         String    @db.VarChar(10)
-  freeCancellation Boolean?  @map("free_cancellation")
-  cancelDeadline   DateTime? @map("cancel_deadline") @db.Timestamptz
-  supplierCode     String?   @map("supplier_code") @db.VarChar(50)
-  rooms            Json?     @db.JsonB
-  optionDetailsId  String?   @map("option_details_id") @db.Uuid
-  createdAt        DateTime  @default(now()) @map("created_at")
-  proposal         Proposal  @relation(fields: [proposalId], references: [id])
+  id                   String    @id @default(uuid()) @db.Uuid
+  proposalId           String    @map("proposal_id") @db.Uuid
+  hotelCode            String    @map("hotel_code") @db.VarChar(255)
+  hotelName            String?   @map("hotel_name") @db.VarChar(500)
+  tid                  String?   @db.VarChar(255)
+  totalPrice           Decimal   @map("total_price") @db.Decimal(12, 2)
+  currency             String    @db.VarChar(10)
+  freeCancellation     Boolean?  @map("free_cancellation")
+  /// Supplier's cancellation deadline as returned by WBE's optionDetailsV2
+  /// (CxlPolicy.OptionDate). Authoritative — never overwritten so we keep
+  /// an audit trail of what the supplier actually committed to.
+  cancelDeadline       DateTime? @map("cancel_deadline") @db.Timestamptz(6)
+  /// Optional staff-set override of the cancellation deadline. When present,
+  /// this date is used in the customer-facing PDF and FE display INSTEAD of
+  /// `cancelDeadline`. Application-layer guard enforces that overrides must
+  /// be EARLIER than the supplier's `cancelDeadline` (can't overpromise).
+  cancelDeadlineOverride       DateTime? @map("cancel_deadline_override") @db.Timestamptz(6)
+  /// UUID of the staff user who set the most recent override. Null when no
+  /// override is set. Reset to null when override is cleared.
+  cancelDeadlineOverriddenBy   String?   @map("cancel_deadline_overridden_by") @db.Uuid
+  /// Timestamp of the most recent override action (set or cleared). Used for
+  /// audit display ("Set by Vincent on 12 Jun 2026").
+  cancelDeadlineOverriddenAt   DateTime? @map("cancel_deadline_overridden_at") @db.Timestamptz(6)
+  supplierCode         String?   @map("supplier_code") @db.VarChar(50)
+  rooms                Json?
+  latitude             Decimal?  @db.Decimal(10, 7)
+  longitude            Decimal?  @db.Decimal(10, 7)
+  starRating           Int?      @map("star_rating")
+  address              String?
+  addressCity          String?   @map("address_city") @db.VarChar(255)
+  addressCountry       String?   @map("address_country") @db.VarChar(10)
+  hotelRef             String?   @map("hotel_ref") @db.VarChar(32)
+  /// Public SETTHub hotel-detail URL (e.g. https://booking.s-e-t-t.com/Availability/Hotel/Details/<b64>).
+  /// Persisted on add-hotel so the dashboard's Request Summary page can
+  /// render the hotel name as a clickable deep-link into SETTHub. Null
+  /// for rows added before the column existed and for hotels whose
+  /// `masterHotelId` isn't synced yet — the FE renders a plain heading
+  /// in that case.
+  sethubDetailsUrl     String?   @map("sethub_details_url") @db.Text
+  optionDetailsId      String?   @map("option_details_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at")
+  deletedAt            DateTime? @map("deleted_at")
+  optionDetailsFetched Boolean   @default(false) @map("option_details_fetched")
+  includedInTotal      Boolean   @default(true) @map("included_in_total")
+  proposal             Proposal  @relation(fields: [proposalId], references: [id])
 
   @@index([proposalId])
   @@index([hotelCode])
   @@index([tid])
   @@index([optionDetailsId])
+  @@index([proposalId, deletedAt])
+  @@unique([proposalId, hotelRef], map: "proposal_hotels_proposal_id_hotel_ref_key")
   @@map("proposal_hotels")
   @@schema("app")
 }
@@ -257,10 +625,12 @@ model ProposalService {
   dateTo      DateTime? @map("date_to") @db.Date
   buyPrice    Decimal?  @map("buy_price") @db.Decimal(12, 2)
   sellPrice   Decimal?  @map("sell_price") @db.Decimal(12, 2)
+  currency    String?   @map("currency") @db.VarChar(10)
   quantity    Int?
   days        Int?
-  notes       String?   @db.Text
+  notes       String?
   createdAt   DateTime  @default(now()) @map("created_at")
+  includedInTotal Boolean @default(true) @map("included_in_total")
   proposal    Proposal  @relation(fields: [proposalId], references: [id])
 
   @@index([proposalId])
@@ -268,21 +638,35 @@ model ProposalService {
   @@schema("app")
 }
 
-// --- CACHE SCHEMA ---
+model Notification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type       String   @db.VarChar(100)
+  title      String   @db.VarChar(255)
+  message    String
+  entityId   String?  @map("entity_id") @db.Uuid
+  entityType String?  @map("entity_type") @db.VarChar(100)
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityId])
+  @@index([read, createdAt], map: "notifications_read_created_idx")
+  @@map("notifications")
+  @@schema("app")
+}
 
 model HotelOptionDetail {
   id                 String    @id @default(uuid()) @db.Uuid
   tid                String    @unique @db.VarChar(255)
   hotelCode          String?   @map("hotel_code") @db.VarChar(255)
-  data               Json      @db.JsonB
+  data               Json
   fetchedAt          DateTime  @default(now()) @map("fetched_at")
   expiresAt          DateTime? @map("expires_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   nonRefundable      Boolean?  @map("non_refundable")
   cxlOptionDate      DateTime? @map("cxl_option_date")
-  cxlConditions      Json?     @map("cxl_conditions") @db.JsonB
-  cxlComment         String?   @map("cxl_comment") @db.Text
-  cxlRemarks         Json?     @map("cxl_remarks") @db.JsonB
+  cxlConditions      Json?     @map("cxl_conditions")
+  cxlComment         String?   @map("cxl_comment")
+  cxlRemarks         Json?     @map("cxl_remarks")
   daypricesTotal     Decimal?  @map("dayprices_total") @db.Decimal(12, 2)
   daypricesCurrency  String?   @map("dayprices_currency") @db.VarChar(10)
   mealType           String?   @map("meal_type") @db.VarChar(10)
@@ -290,12 +674,12 @@ model HotelOptionDetail {
   providerPrice      Decimal?  @map("provider_price") @db.Decimal(12, 2)
   providerCurrency   String?   @map("provider_currency") @db.VarChar(10)
   supplierCode       String?   @map("supplier_code") @db.VarChar(50)
-  essentialInfo      String?   @map("essential_info") @db.Text
-  priceComment       String?   @map("price_comment") @db.Text
-  supplements        Json?     @db.JsonB
-  optionalExtras     Json?     @map("optional_extras") @db.JsonB
-  specialOffers      Json?     @map("special_offers") @db.JsonB
-  rooms              Json?     @db.JsonB
+  essentialInfo      String?   @map("essential_info")
+  priceComment       String?   @map("price_comment")
+  supplements        Json?
+  optionalExtras     Json?     @map("optional_extras")
+  specialOffers      Json?     @map("special_offers")
+  rooms              Json?
   success            Boolean?
   versionDescription String?   @map("version_description") @db.VarChar(100)
 
@@ -305,4 +689,557 @@ model HotelOptionDetail {
   @@index([daypricesTotal])
   @@map("hotel_option_details")
   @@schema("cache")
+}
+
+enum JobStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+
+  @@schema("audit")
+}
+
+enum BookingRequestStatus {
+  pending
+  draft
+  processing
+  completed
+  cancelled
+  ai_generated
+  sent
+  declined
+  /// Auto-search exhausted all relaxation levels and destination fallbacks
+  /// without finding hotels. Staff must handle this request manually.
+  needs_manual_handling
+
+  @@schema("app")
+}
+
+enum ProposalStatus {
+  draft
+  pending_admin_approval
+  sent
+  approved
+  declined
+
+  @@schema("app")
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+model Setting {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  SettingCategory
+  key       String           @db.VarChar(100)
+  value     String?
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("settings")
+  @@schema("app")
+}
+
+enum SettingCategory {
+  general
+  email
+  company
+  policies
+
+  @@schema("app")
+}
+
+enum HotelProbeJobStatus {
+  QUEUED
+  RUNNING
+  PROBING
+  COMPLETED
+  SKIPPED_INSUFFICIENT
+  FAILED
+
+  @@schema("app")
+}
+
+/// Priority tier for supplier selection during hotel search allocation.
+/// Higher tiers are allocated first; within the same tier, cheapest-first
+/// is the tie-breaker.
+///
+/// Mapping to Oliver's own words (2026-07-XX):
+///   HIGH   = "push"     — HyperGuest, Roibos (unlimited rooms)
+///   MEDIUM = "preferred" — Expedia (PKG + SA), SNH, DOTW
+///   LOW    = "careful"   — HBA, GG, RMXML, ABR, TBO (max 5-6 rooms)
+///   AVOID  = "avoid"     — TLE, TBX, POW (only used if nothing else can fulfil)
+///
+/// Notes:
+///   - AVOID is NOT the same as groupsAllowed=false. AVOID suppliers are
+///     still eligible if no higher-priority supplier can fulfil the room;
+///     groupsAllowed=false excludes them entirely.
+///   - New / unknown suppliers default to MEDIUM (see refreshSupplierLimitsCache).
+enum SupplierPriority {
+  HIGH
+  MEDIUM
+  LOW
+  AVOID
+
+  @@schema("app")
+}
+
+model HotelProbeJob {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  searchRequestId String              @map("search_request_id") @db.Uuid
+  hotelCode       String              @map("hotel_code") @db.VarChar(255)
+  requestedRooms  Int                 @map("requested_rooms")
+  probeLimit      Int                 @map("probe_limit")
+  roomsFound      Int                 @default(0) @map("rooms_found")
+  status          HotelProbeJobStatus @default(QUEUED)
+  lastProbeRange  String?             @map("last_probe_range") @db.VarChar(20)
+  attempts        Int                 @default(0)
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz(6)
+  resultJson      Json?               @map("result_json")
+  optionsSnapshot Json?               @map("options_snapshot")
+  errorMsg        String?             @map("error_msg")
+  /// 'main' = exact-criteria search; 'alternative' = relaxed-criteria search.
+  searchKind        String  @default("main") @map("search_kind") @db.VarChar(20)
+  /// Short label for why this is an alternative (e.g. 'Wider star rating').
+  /// Null when searchKind = 'main'.
+  alternativeReason String? @map("alternative_reason") @db.VarChar(80)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([searchRequestId])
+  @@index([status])
+  @@index([searchRequestId, status])
+  @@map("hotel_probe_jobs")
+  @@schema("app")
+}
+
+model SupplierLimit {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  supplierCode  String   @map("supplier_code") @db.VarChar(50)
+  providerName  String   @map("provider_name") @db.VarChar(255)
+  accCode       String?  @map("acc_code") @db.VarChar(50)
+  maxRooms      Int      @default(9) @map("max_rooms")
+  groupsAllowed Boolean  @default(true) @map("groups_allowed")
+  /// Priority tier for allocation sorting during hotel search.
+  /// HIGH suppliers are picked first, cheapest-first within the same tier.
+  /// AVOID is a last-resort tier — used only when no other supplier can fulfil
+  /// a hotel's room-type demand. Default is MEDIUM for new/unknown suppliers.
+  priority      SupplierPriority @default(MEDIUM)
+  notes         String?
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([supplierCode])
+  @@map("supplier_limits")
+  @@schema("app")
+}
+
+/// Dead-letter queue for outbound emails that exhausted all retry attempts.
+/// One row per failed email; staff are alerted via in-app notification on insertion.
+/// Phase 1 has no admin UI — rows here exist for audit/debug + future manual replay.
+model FailedEmail {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(64)
+  recipient     String    @db.VarChar(255)
+  subject       String    @db.VarChar(500)
+  body          String
+  replyTo       String?   @map("reply_to") @db.VarChar(255)
+  requestId     String?   @map("request_id") @db.Uuid
+  proposalId    String?   @map("proposal_id") @db.Uuid
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  resolvedAt    DateTime? @map("resolved_at")
+
+  @@index([eventType])
+  @@index([requestId])
+  @@index([proposalId])
+  @@index([resolvedAt])
+  @@map("failed_emails")
+  @@schema("app")
+}
+
+// ── WBE Hotel Booking (XMLOUT) ──────────────────────────────────────────────
+// Models backing the WBE booking lifecycle:
+//   Search → OptionDetailsV2(Prebook=false) → OptionDetailsV2(Prebook=true)
+//   → BookV2 → BookingDetails / IssueVoucher / CancelBookingV2
+//
+// A Booking row is created BEFORE the BookV2 call is dispatched, so that a
+// network failure mid-call cannot orphan a reservation that exists on WBE's
+// side but is unknown to us. `agencyReference` is generated up front and is
+// the idempotency key used to recover such bookings via
+// `bookingDetails?agencyReference=`.
+
+/// One customer-facing reservation, which WBE almost never lets us make as a
+/// single booking.
+///
+/// A group of 15 rooms is split across suppliers because each supplier caps how
+/// many rooms it will sell at once (see config/supplierLimits.ts). Each slice of
+/// that split is its own BookV2 call and its own `Booking` row, so a request the
+/// customer thinks of as "the Hilton, 15 rooms" is several reservations that
+/// must be tracked, reported and cancelled together.
+///
+/// This model is that grouping. It exists mainly to make partial outcomes
+/// visible: when three of four slices succeed, the customer has rooms but not
+/// all of them, and someone has to be told exactly how many are short.
+model BookingGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Human-facing reference for the whole group, shown in SETT Hub and quoted
+  /// to the customer. The per-supplier `Booking.agencyReference` values stay
+  /// internal — a customer should never be handed four references for one stay.
+  groupReference String @unique @map("group_reference") @db.VarChar(64)
+
+  /// Aggregate state, derived from the child bookings rather than set directly.
+  /// `partial` is the state that matters: it means some rooms are confirmed and
+  /// some are not, and the shortfall needs a human.
+  status BookingGroupStatus @default(pending) @map("status")
+
+  /// The group request this fulfils. Unlike `Booking.requestId` this is
+  /// required: a group booking with no request behind it has nothing to fulfil.
+  requestId String         @map("request_id") @db.Uuid
+  request   BookingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  /// The proposal the customer accepted, when the booking came from one. Null
+  /// for a booking a staff member assembled directly.
+  proposalId String?   @map("proposal_id") @db.Uuid
+  proposal   Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  // ── What was promised ────────────────────────────────────────────────────
+  hotelCode String  @map("hotel_code") @db.VarChar(255)
+  hotelName String? @map("hotel_name") @db.VarChar(255)
+
+  checkInDate  DateTime @map("check_in_date") @db.Date
+  checkOutDate DateTime @map("check_out_date") @db.Date
+  nights       Int
+
+  /// Rooms the customer asked for. Compared against `roomsConfirmed` to derive
+  /// the shortfall, so it is stored rather than recomputed from the children —
+  /// a slice that never dispatched leaves no row to count.
+  roomsRequested Int @map("rooms_requested")
+
+  /// Rooms actually confirmed by WBE across all child bookings.
+  roomsConfirmed Int @default(0) @map("rooms_confirmed")
+
+  /// Price quoted to the customer, from the accepted proposal. Kept separate
+  /// from `totalBooked` so drift between quote and supplier price is visible
+  /// after the fact, not just at booking time.
+  quotedTotal Decimal? @map("quoted_total") @db.Decimal(12, 2)
+
+  /// Sum of the child bookings' confirmed prices.
+  totalBooked Decimal? @map("total_booked") @db.Decimal(12, 2)
+
+  currency String? @db.VarChar(10)
+
+  /// Set when a slice failed and the group was left part-booked. Written for
+  /// the operator, not the customer: it says which supplier refused and why, so
+  /// the remaining rooms can be sourced by hand.
+  shortfallNote String? @map("shortfall_note")
+
+  // ── Odoo sales order ─────────────────────────────────────────────────────
+  // The commercial record this booking belongs to. Held here because the
+  // reference is otherwise lost the moment the booking response is returned:
+  // nothing else records which order a group was raised against, so a later
+  // status update or a support query has no way back to it.
+
+  /// Numeric id of the sale.order in Odoo. Null when the order could not be
+  /// raised — the booking still happened and the gap is reported.
+  odooOrderId Int? @map("odoo_order_id")
+
+  /// Human-facing order number ("S00336"), which is what staff quote to each
+  /// other and search for in Odoo. Stored alongside the id rather than looked
+  /// up, so a support query needs no round trip.
+  odooOrderName String? @map("odoo_order_name") @db.VarChar(64)
+
+  /// Last stage this group was pushed to in Odoo's pipeline. Recorded so a
+  /// repeated sync does not rewrite a stage a human has since moved on.
+  odooStage String? @map("odoo_stage") @db.VarChar(64)
+
+  odooSyncedAt DateTime? @map("odoo_synced_at")
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation("BookingGroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  // ── Group handler review ─────────────────────────────────────────────────
+  // The client requires a person to check a completed booking before the
+  // customer-facing offer goes out: "The customer-facing offer must not be sent
+  // before this review is completed." Everything below exists to make that gate
+  // enforceable rather than a convention.
+
+  /// Set when the group handler has checked the booking and the sales order.
+  /// Null means the offer must not be sent.
+  reviewedAt DateTime? @map("reviewed_at")
+
+  /// Who performed the review. A named person rather than a flag, because the
+  /// review is an accountable act — it is the last check before a customer is
+  /// committed to a price.
+  reviewedById String? @map("reviewed_by_id") @db.Uuid
+  reviewedBy   User?   @relation("BookingGroupReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  /// The reviewer's own notes, and any correction they made before approving.
+  reviewNotes String? @map("review_notes")
+
+  /// Recorded when a handler rejects the booking rather than approving it —
+  /// a wrong hotel, a margin that does not hold, an incomplete order. Distinct
+  /// from an unreviewed group: this one has been looked at and refused.
+  reviewRejectedAt     DateTime? @map("review_rejected_at")
+  reviewRejectionReason String?  @map("review_rejection_reason")
+
+  completedAt DateTime? @map("completed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  bookings Booking[]
+
+  @@index([requestId])
+  @@index([proposalId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("booking_groups")
+  @@schema("app")
+}
+
+/// Aggregate state of a BookingGroup. Derived from its child bookings.
+enum BookingGroupStatus {
+  /// Rows created, nothing dispatched to WBE yet.
+  pending
+  /// At least one slice is mid-flight.
+  booking
+  /// Every slice confirmed; roomsConfirmed == roomsRequested.
+  confirmed
+  /// Some slices confirmed, some did not. Rooms are held but the group is
+  /// short — the state that needs an operator.
+  partial
+  /// No slice confirmed.
+  failed
+  /// Every confirmed slice has been cancelled.
+  cancelled
+
+  @@schema("app")
+}
+
+model Booking {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Our own unique reference sent to WBE as `AgencyReference`. WBE mandates
+  /// this be unique per booking; the DB unique constraint is the enforcement
+  /// point. Also used to recover a booking whose BookV2 response was lost.
+  agencyReference String @unique @map("agency_reference") @db.VarChar(64)
+
+  /// Reference returned by WBE. NULL until BookV2 succeeds — its absence is
+  /// how we detect a booking that failed or was never dispatched.
+  bookingReference String? @unique @map("booking_reference") @db.VarChar(64)
+
+  /// The supplier's own reference, surfaced by BookingDetails.
+  providerReference String? @map("provider_reference") @db.VarChar(64)
+
+  /// Internal lifecycle state. Distinct from `wbeStatus`: this tracks OUR
+  /// progress through the flow (including pre-dispatch states WBE never sees),
+  /// while `wbeStatus` mirrors whatever WBE last told us.
+  status BookingFlowStatus @default(draft)
+
+  /// Raw WBE booking status: PNDN | CNF | VCHR | CLX | PNDC | RJ.
+  /// Stored verbatim rather than mapped to an enum so an unexpected value
+  /// from WBE is never silently coerced.
+  wbeStatus String? @map("wbe_status") @db.VarChar(10)
+
+  // ── WBE session binding ──────────────────────────────────────────────────
+  // BookV2 requires the SessionID/TID/HotelCode triplet from the originating
+  // search. Sessions expire on WBE's side, so these are persisted the moment
+  // an option is selected rather than being held in memory.
+  sessionId String @map("session_id") @db.VarChar(255)
+  tid       String @map("tid") @db.VarChar(255)
+  hotelCode String @map("hotel_code") @db.VarChar(255)
+
+  hotelName       String? @map("hotel_name") @db.VarChar(255)
+  destinationId   Int?    @map("destination_id")
+  destinationName String? @map("destination_name") @db.VarChar(255)
+
+  checkInDate  DateTime @map("check_in_date") @db.Date
+  checkOutDate DateTime @map("check_out_date") @db.Date
+  nights       Int
+
+  // ── Prebook guard ────────────────────────────────────────────────────────
+  // WBE: "Once OptionDetailsV2 has been called with Prebook = true, it cannot
+  // be called again with Prebook = true for the same booking flow." This
+  // timestamp is the guard — a non-NULL value blocks a second prebook.
+  prebookedAt DateTime? @map("prebooked_at")
+
+  /// Price shown to the user from OptionDetailsV2 with Prebook=false.
+  quotedPrice    Decimal? @map("quoted_price") @db.Decimal(12, 2)
+  /// Price returned by OptionDetailsV2 with Prebook=true. When this differs
+  /// from `quotedPrice`, WBE requires the user to accept the difference
+  /// before BookV2 may be called.
+  prebookPrice   Decimal? @map("prebook_price") @db.Decimal(12, 2)
+  /// Set once the user has explicitly accepted a quoted→prebook price change.
+  priceChangeAcceptedAt DateTime? @map("price_change_accepted_at")
+
+  /// Final booked amount as confirmed by WBE.
+  totalPrice Decimal? @map("total_price") @db.Decimal(12, 2)
+  currency   String?  @db.VarChar(10)
+
+  // ── Cancellation policy ──────────────────────────────────────────────────
+  nonRefundable          Boolean?  @map("non_refundable")
+  cancellationDeadline   DateTime? @map("cancellation_deadline")
+  cancellationConditions String?   @map("cancellation_conditions")
+
+  paymentOption Int     @default(1) @map("payment_option")
+  isPaid        Boolean @default(false) @map("is_paid")
+
+  hotelNotes      String? @map("hotel_notes") @db.VarChar(250)
+  carbonCopyMail  String? @map("carbon_copy_mail") @db.VarChar(255)
+  /// Whether IssueVoucher=true was sent with BookV2. Default false: vouchers
+  /// are issued via the dedicated IssueVoucher call so booking and voucher
+  /// stay independently controllable.
+  issueVoucherOnBook Boolean @default(false) @map("issue_voucher_on_book")
+
+  voucheredAt DateTime? @map("vouchered_at")
+  voucherData Json?     @map("voucher_data")
+
+  cancelledAt         DateTime? @map("cancelled_at")
+  cancellationCharge  Decimal?  @map("cancellation_charge") @db.Decimal(12, 2)
+
+  supplierCode  String? @map("supplier_code") @db.VarChar(50)
+  essentialInfo String? @map("essential_info")
+
+  /// Populated by WBE only from ~7 days before check-in; requires repeated
+  /// BookingDetails polling to appear.
+  hotelConfirmationNumber String? @map("hotel_confirmation_number") @db.VarChar(255)
+
+  /// Error surfaced by the supplier when a booking failed or is stuck in PNDN.
+  originalProviderResponse String? @map("original_provider_response")
+  /// Last error we recorded against this booking, for staff diagnostics.
+  lastError String? @map("last_error")
+
+  /// Verbatim BookV2 request/response, retained for audit and for WBE support
+  /// tickets. Never read back by application logic.
+  bookRequestPayload  Json? @map("book_request_payload")
+  bookResponsePayload Json? @map("book_response_payload")
+
+  /// Marks rows created by the XMLOUT certification runner so certification
+  /// traffic can be excluded from business reporting.
+  isCertificationTest Boolean @default(false) @map("is_certification_test")
+  /// Scenario number (1-14) from WBE's certification document.
+  certificationScenario Int? @map("certification_scenario")
+
+  /// Optional link back to the originating group request. NULL for bookings
+  /// made outside the request flow (e.g. certification runs).
+  requestId String?         @map("request_id") @db.Uuid
+  request   BookingRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  /// The group this booking is one slice of. NULL for a standalone booking —
+  /// certification runs and any single-supplier booking made directly.
+  groupId String?       @map("group_id") @db.Uuid
+  group   BookingGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  /// Rooms this slice covers. The supplier's cap is why the group was split at
+  /// all, so the number is recorded per slice rather than inferred from the
+  /// room rows — a slice that fails before its rooms are written still needs to
+  /// report what it was going to carry.
+  roomsInSlice Int? @map("rooms_in_slice")
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  bookedAt     DateTime? @map("booked_at")
+  lastSyncedAt DateTime? @map("last_synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  rooms BookingRoom[]
+
+  @@index([status])
+  @@index([wbeStatus])
+  @@index([requestId])
+  @@index([createdById])
+  @@index([checkInDate])
+  @@index([createdAt])
+  @@index([isCertificationTest])
+  @@index([cancellationDeadline])
+  @@map("bookings")
+  @@schema("app")
+}
+
+model BookingRoom {
+  id        String  @id @default(uuid()) @db.Uuid
+  bookingId String  @map("booking_id") @db.Uuid
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  /// 1-based room index as sent to WBE (`RoomId`). Must match the index used
+  /// in the originating search request.
+  roomId Int @map("room_id")
+
+  adultsNo   Int @map("adults_no")
+  childrenNo Int @map("children_no")
+
+  roomDescription String?  @map("room_description") @db.VarChar(500)
+  mealType        String?  @map("meal_type") @db.VarChar(10)
+  mealName        String?  @map("meal_name") @db.VarChar(255)
+  price           Decimal? @db.Decimal(12, 2)
+
+  /// Chosen `SupplementId` values sent as OptionalExtras for this room.
+  optionalExtras Json? @map("optional_extras")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  passengers BookingPassenger[]
+
+  @@unique([bookingId, roomId])
+  @@index([bookingId])
+  @@map("booking_rooms")
+  @@schema("app")
+}
+
+model BookingPassenger {
+  id     String      @id @default(uuid()) @db.Uuid
+  roomId String      @map("room_id") @db.Uuid
+  room   BookingRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  /// Mr | Ms | Mrs | Miss for adults, Chd for children.
+  salutation String @db.VarChar(10)
+  firstName  String @map("first_name") @db.VarChar(100)
+  lastName   String @map("last_name") @db.VarChar(100)
+  isChild    Boolean @map("is_child")
+
+  /// Required for children, and MUST be omitted (not zero) for adults when
+  /// building the BookV2 payload. Nullable here so that distinction survives
+  /// the round trip — a 0 would be sent to WBE and rejected.
+  age Int?
+
+  /// Marks the lead passenger, used for voucher `Leader` output.
+  isLeader Boolean @default(false) @map("is_leader")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([roomId])
+  @@map("booking_passengers")
+  @@schema("app")
+}
+
+/// Internal booking lifecycle. Tracks OUR position in the flow, including
+/// states that exist before WBE is ever contacted.
+enum BookingFlowStatus {
+  /// Row created, option selected, nothing sent to WBE yet.
+  draft
+  /// OptionDetailsV2 with Prebook=true succeeded; BookV2 not yet called.
+  prebooked
+  /// Prebook returned a different price; awaiting user acceptance.
+  price_changed
+  /// BookV2 dispatched but no response yet — the crash-recovery window.
+  booking
+  /// BookV2 returned a booking reference.
+  booked
+  /// Voucher issued.
+  vouchered
+  /// Cancellation completed with WBE.
+  cancelled
+  /// Cancellation requested but not yet settled (WBE status PNDC).
+  pending_cancellation
+  /// BookV2 failed, or a dispatched booking could not be recovered.
+  failed
+
+  @@schema("app")
 }

@@ -1,14 +1,11 @@
 import { z } from 'zod';
 
 export const loginSchema = z.object({
-    body: z.object({
-        email: z.string().email(),
-        password: z.string().min(1),
-    }),
+    email: z.string().email(),
+    password: z.string().min(1),
+    rememberMe: z.boolean().optional(),
 });
 
 export const refreshSchema = z.object({
-    body: z.object({
-        refreshToken: z.string().min(1),
-    }),
+    refreshToken: z.string().min(1),
 });
